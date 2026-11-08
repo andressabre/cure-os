@@ -65,7 +65,11 @@ export async function render() {
   const ini = minDe(cfg.abre), fimMin = minDe(cfg.fecha), altura = (fimMin - ini) * PX_MIN;
   const horas = []; for (let m = Math.ceil(ini / 60) * 60; m < fimMin; m += 60) horas.push(m);
   const pausas = (cfg.pausas || []).map((x) => ({ de: minDe(x.de), ate: minDe(x.ate), nome: x.nome || 'Pausa' }));
-  const naPausa = (min) => pausas.some((x) => min >= x.de && min < x.ate);
+  const pausasDoDia = (dia) => {
+    const f = (cfg.fecha_por_dia || {})[new Date(dia + 'T12:00').getDay()];
+    return f && minDe(f) < fimMin ? [...pausas.filter((x) => x.de < minDe(f)), { de: minDe(f), ate: fimMin, nome: 'Fechado' }] : pausas;
+  };
+  const naPausa = (min, dia) => pausasDoDia(dia).some((x) => min >= x.de && min < x.ate);
   const corDe = (pid) => profs.find((p) => p.id === pid)?.cor || '#F8781D';
 
   c.innerHTML = `<div class="cartao agenda-wrap"><div class="agenda" style="grid-template-columns:56px repeat(${colunas.length}, minmax(150px,1fr))">
@@ -73,7 +77,7 @@ export async function render() {
     <div class="ag-horas" style="height:${altura}px">${horas.map((m) => `<span style="top:${(m - ini) * PX_MIN}px">${String(m / 60).padStart(2, '0')}:00</span>`).join('')}</div>
     ${colunas.map((col, ci) => `<div class="ag-col" data-ci="${ci}" style="height:${altura}px">
       ${horas.map((m) => `<i style="top:${(m - ini) * PX_MIN}px"></i>`).join('')}
-      ${pausas.map((x) => `<div class="ag-pausa" style="top:${(x.de - ini) * PX_MIN}px;height:${(x.ate - x.de) * PX_MIN}px">${esc(x.nome)}</div>`).join('')}
+      ${pausasDoDia(col.dia).map((x) => `<div class="ag-pausa" style="top:${(x.de - ini) * PX_MIN}px;height:${(x.ate - x.de) * PX_MIN}px">${esc(x.nome)}</div>`).join('')}
       ${ats.filter((a) => a.profissional_id === col.prof && new Date(a.inicio).toLocaleDateString('sv') === col.dia).map((a) => {
         const s = new Date(a.inicio), e = new Date(a.fim), top = (s.getHours() * 60 + s.getMinutes() - ini) * PX_MIN;
         const h = Math.max(22, ((e - s) / 6e4) * PX_MIN - 2);
@@ -86,7 +90,7 @@ export async function render() {
     if (e.target.closest('.ag-ev') || souProf) return;
     const col = colunas[el.dataset.ci], y = e.clientY - el.getBoundingClientRect().top;
     const passo = cfg.intervalo_min || 10, min = ini + Math.floor(y / PX_MIN / passo) * passo;
-    if (naPausa(min)) return toast('Horário de pausa. Para encaixe, use + Agendamento e ajuste a hora.');
+    if (naPausa(min, col.dia)) return toast('Fora do expediente. Para encaixe, use + Agendamento e ajuste a hora.');
     editar(null, { dia: col.dia, min, prof: col.prof });
   }));
   $$('.ag-ev', c).forEach((el) => (el.onclick = () => editar(ats.find((a) => a.id === el.dataset.id))));
@@ -148,7 +152,7 @@ export async function render() {
         const { data: choque } = await sb.from('atendimentos').select('id').eq('profissional_id', f.profissional_id).neq('status', 'cancelado')
           .lt('inicio', fim.toISOString()).gt('fim', inicio.toISOString()).neq('id', a?.id || '00000000-0000-0000-0000-000000000000').limit(1);
         const mi = inicio.getHours() * 60 + inicio.getMinutes(), mf = mi + Number(f.dur);
-        if (pausas.some((x) => mi < x.ate && mf > x.de) && !(await confirmar('Esse horário invade a pausa do almoço. Agendar mesmo assim?', 'Agendar'))) return;
+        if (pausasDoDia(f.dia).some((x) => mi < x.ate && mf > x.de) && !(await confirmar('Esse horário está fora do expediente (almoço ou clínica fechada). Agendar mesmo assim?', 'Agendar'))) return;
         if (choque?.length && !(await confirmar('Este profissional já tem atendimento nesse horário. Agendar mesmo assim (encaixe)?', 'Agendar'))) return;
         const reg = { paciente_id: pacienteId, profissional_id: f.profissional_id, servico: f.servico, sala: f.sala || null, observacao: f.observacao || null,
           inicio: inicio.toISOString(), fim: fim.toISOString(), atualizado_em: new Date().toISOString() };
