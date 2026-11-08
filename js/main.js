@@ -85,19 +85,23 @@ $('#lnk-esqueci').onclick = async (e) => {
   mostrarLogin(error ? error.message : 'Enviamos um link de redefinição para o seu e-mail.', !!error);
 };
 
+function pedirNovaSenha() {
+  import('./core.js').then(({ modal }) => modal(`<h3>Nova senha</h3>
+    <label>Senha (8+ caracteres)<input type="password" id="nova" minlength="8"></label>
+    <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="salvar">Salvar</button></div>`,
+  (c, fechar) => { c.querySelector('#salvar').onclick = async () => {
+    const nova = c.querySelector('#nova').value;
+    if (nova.length < 8) return toast('Use 8 ou mais caracteres.', true);
+    const { error } = await sb.auth.updateUser({ password: nova });
+    toast(error ? error.message : 'Senha atualizada.', !!error); if (!error) fechar();
+  }; }));
+}
+$('#btn-senha').onclick = pedirNovaSenha;
+
 $('#btn-sair').onclick = async () => { await sb.auth.signOut(); location.hash = ''; location.reload(); };
 
 sb.auth.onAuthStateChange(async (ev) => {
-  if (ev === 'PASSWORD_RECOVERY') {
-    const nova = await new Promise((res) => {
-      import('./core.js').then(({ modal }) => modal(`<h3>Nova senha</h3>
-        <label>Senha (8+ caracteres)<input type="password" id="nova" minlength="8"></label>
-        <div class="linha-acoes"><button class="btn primario" id="salvar">Salvar</button></div>`,
-      (c, fechar) => { c.querySelector('#salvar').onclick = () => { res(c.querySelector('#nova').value); fechar(); }; }));
-    });
-    const { error } = await sb.auth.updateUser({ password: nova });
-    toast(error ? error.message : 'Senha atualizada.', !!error);
-  }
+  if (ev === 'PASSWORD_RECOVERY') pedirNovaSenha();
 });
 
 window.addEventListener('hashchange', rotear);
