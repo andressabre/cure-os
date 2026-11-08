@@ -9,12 +9,14 @@ import * as acessos from './modulos/acessos.js';
 import * as extrato from './modulos/extrato.js';
 import * as pacientes from './modulos/pacientes.js';
 import * as agenda from './modulos/agenda.js';
+import * as paciente from './modulos/paciente.js';
 
 // Cada módulo é independente: para mexer em um, só o arquivo dele muda.
 const ROTAS = [
   { id: 'agenda', nome: 'Agenda', mod: agenda, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'painel', nome: 'Painel', mod: painel, perfis: ['gestor', 'financeiro'] },
   { id: 'pacientes', nome: 'Pacientes', mod: pacientes, perfis: ['gestor', 'financeiro', 'recepcao'] },
+  { id: 'paciente', nome: 'Paciente', mod: paciente, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'], oculto: true },
   { id: 'retornos', nome: 'Retornos e glosas', mod: retornos, perfis: ['gestor', 'financeiro'] },
   { id: 'contratos', nome: 'Convênios e contratos', mod: contratos, perfis: ['gestor', 'financeiro'] },
   { id: 'profissionais', nome: 'Profissionais', mod: profissionais, perfis: ['gestor', 'financeiro', 'recepcao'] },
@@ -45,7 +47,7 @@ async function iniciarSessao() {
 function rotasDoPerfil() { return ROTAS.filter((r) => r.perfis.includes(estado.perfil)); }
 
 function montarMenu() {
-  $('#menu').innerHTML = rotasDoPerfil().map((r) => `<a href="#${r.id}" data-r="${r.id}">${r.nome}</a>`).join('');
+  $('#menu').innerHTML = rotasDoPerfil().filter((r) => !r.oculto).map((r) => `<a href="#${r.id}" data-r="${r.id}">${r.nome}</a>`).join('');
 }
 
 function rotear() {
@@ -53,7 +55,7 @@ function rotear() {
   const disponiveis = rotasDoPerfil();
   const [id, ...params] = (location.hash.slice(1) || disponiveis[0].id).split('-');
   const rota = disponiveis.find((r) => r.id === id) || disponiveis[0];
-  document.querySelectorAll('#menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.r === rota.id));
+  document.querySelectorAll('#menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.r === (rota.id === 'paciente' ? 'pacientes' : rota.id)));
   rota.mod.render(params.join('-')).catch((e) => falha(e, rota.nome));
 }
 

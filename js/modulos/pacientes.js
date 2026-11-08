@@ -30,7 +30,7 @@ export async function render() {
         <td>${esc(p.cpf ? p.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '—')}</td><td>${data(p.data_nascimento)}</td>
         <td>${esc(p.telefone || '—')}</td><td>${esc(p.campos_extras?.convenio_origem || '—')}</td><td>›</td></tr>`).join('')
         || '<tr><td colspan="6" class="vazio">Nenhum paciente encontrado.</td></tr>'}</tbody></table>`;
-    $$('tr[data-id]', $('#lista')).forEach((tr) => (tr.onclick = () => ficha(ps.find((p) => p.id === tr.dataset.id).id)));
+    $$('tr[data-id]', $('#lista')).forEach((tr) => (tr.onclick = () => (location.hash = 'paciente-' + tr.dataset.id)));
   };
   $('#busca').oninput = () => { clearTimeout(t); t = setTimeout(buscar, 300); };
   $('#sit').onchange = buscar;

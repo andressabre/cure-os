@@ -110,3 +110,9 @@ tr.clicavel{cursor:pointer} tr.clicavel:hover{background:var(--laranja-claro)}
 .sugestoes div:hover{background:var(--laranja-claro)}
 #acoes-tela{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .ag-pausa{position:absolute;left:0;right:0;background:repeating-linear-gradient(45deg,#f1f1ef,#f1f1ef 6px,#e7e7e4 6px,#e7e7e4 12px);color:var(--cinza-6);font-size:11px;font-weight:600;display:grid;place-items:center;pointer-events:none}
+
+/* Ficha do paciente */
+.ficha-topo .selo{margin:6px 6px 0 0}
+.abas{display:flex;gap:4px;flex-wrap:wrap;margin:-6px 0 16px;border-bottom:2px solid var(--cinza-3)}
+.abas a{padding:9px 14px;text-decoration:none;color:var(--cinza-6);font-weight:600;border-bottom:3px solid transparent;margin-bottom:-2px}
+.abas a.ativa{color:var(--preto);border-bottom-color:var(--laranja)}
