@@ -94,7 +94,7 @@ function lerTuplas(s, i) {
 
 // ---------- Mapeamento para o cadastro do Cure OS ----------
 export const CAMPOS = {
-  origem_id: ['id', 'id_cliente', 'codigo', 'cod'],
+  origem_id: ['id_origem', 'id', 'id_cliente', 'codigo', 'cod'],
   nome: ['nome', 'name', 'paciente', 'cliente'],
   sexo: ['sexo', 'genero', 'id_sexo'],
   data_nascimento: ['nascimento', 'data_nascimento', 'datanascimento', 'dt_nasc', 'data_nasc', 'nasc'],
@@ -109,7 +109,7 @@ export const CAMPOS = {
   cidade: ['cidade', 'municipio'],
   estado: ['estado', 'uf', 'id_estado'],
   convenio: ['convenio', 'id_convenio', 'plano'],
-  carteirinha: ['n_conveniado', 'numero_conveniado', 'num_convenio', 'carteirinha', 'conveniado', 'matricula'],
+  carteirinha: ['n_conveniado', 'nconveniado', 'nconvenio', 'n_convenio', 'numconvenio', 'num_conveniado', 'numero_conveniado', 'num_convenio', 'carteirinha', 'conveniado', 'matricula'],
   cid10: ['cid', 'cid10', 'cid_10'],
   medico_indicou: ['medico', 'medico_indicou', 'indicacao'],
   crm: ['crm'],
