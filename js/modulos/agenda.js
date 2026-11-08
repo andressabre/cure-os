@@ -72,7 +72,8 @@ export async function render() {
   const naPausa = (min, dia) => pausasDoDia(dia).some((x) => min >= x.de && min < x.ate);
   const corDe = (pid) => profs.find((p) => p.id === pid)?.cor || '#F8781D';
 
-  c.innerHTML = `<div class="cartao agenda-wrap"><div class="agenda" style="grid-template-columns:56px repeat(${colunas.length}, minmax(150px,1fr))">
+  import('./guia.js').then((g) => g.alertaSemSenha($('#alerta-senha'), render)).catch(() => {});
+  c.innerHTML = `<div id="alerta-senha"></div><div class="cartao agenda-wrap"><div class="agenda" style="grid-template-columns:56px repeat(${colunas.length}, minmax(150px,1fr))">
     <div></div>${colunas.map((col) => `<div class="ag-tit">${esc(col.titulo)}</div>`).join('')}
     <div class="ag-horas" style="height:${altura}px">${horas.map((m) => `<span style="top:${(m - ini) * PX_MIN}px">${String(m / 60).padStart(2, '0')}:00</span>`).join('')}</div>
     ${colunas.map((col, ci) => `<div class="ag-col" data-ci="${ci}" style="height:${altura}px">

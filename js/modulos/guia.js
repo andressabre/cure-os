@@ -12,6 +12,7 @@ export async function fecharAtendimento(a, aoConcluir) {
   let plano = op.planos.find((p) => p.principal) || op.planos[0] || null;
   let itens = [{ procedimento_id: '', quantidade: 1 }];
   const extra = { solicitante_id: '', cid: '', indicacao_clinica: '', tipo_atendimento: '03' };
+  let autAuto = false; // escolhe sozinho a autorização vigente na data do atendimento (uma vez por convênio)
 
   const marcarSemGuia = async (fechar) => {
     const { error: e } = await sb.from('atendimentos').update({ status: 'atendido', atualizado_em: new Date().toISOString() }).eq('id', a.id);
@@ -80,7 +81,7 @@ export async function fecharAtendimento(a, aoConcluir) {
           <td>${itens.length > 1 ? `<button class="btn pequeno" data-rm="${i}">×</button>` : ''}</td></tr>`).join('')}
       </tbody></table>
       <button class="btn pequeno" id="g-add">+ procedimento</button>`;
-      $('#g-plano', corpo).onchange = (e) => { plano = op.planos.find((p) => p.id === e.target.value); itens = [{ procedimento_id: '', quantidade: 1 }]; invalida(); desenhar(); };
+      $('#g-plano', corpo).onchange = (e) => { autAuto = false; plano = op.planos.find((p) => p.id === e.target.value); itens = [{ procedimento_id: '', quantidade: 1 }]; invalida(); desenhar(); };
       $('#g-aut', corpo)?.addEventListener('change', (e) => {
         const au = plano.autorizacoes.find((x) => x.id === e.target.value);
         if (au) {
@@ -112,6 +113,13 @@ export async function fecharAtendimento(a, aoConcluir) {
         };
       });
       $('#g-add', corpo).onclick = () => { lerExtra(); const aut = $('#g-aut', corpo)?.value; itens.push({ procedimento_id: '', quantidade: 1 }); invalida(); desenhar(); if (aut) $('#g-aut', corpo).value = aut; };
+      const selAut = $('#g-aut', corpo);
+      if (selAut && !autAuto) {
+        autAuto = true;
+        const dAt = new Date(a.inicio).toLocaleDateString('sv');
+        const melhor = plano.autorizacoes.find((x) => x.data <= dAt && (!x.validade || x.validade >= dAt) && Number(x.usadas) < Number(x.qtd));
+        if (melhor) { selAut.value = melhor.id; selAut.dispatchEvent(new Event('change')); }
+      }
     }
 
     const chamar = (gravar) => sb.rpc('guia_atendimento', {
@@ -146,4 +154,35 @@ export async function fecharAtendimento(a, aoConcluir) {
     };
     desenhar();
   });
+}
+
+// Alerta de guias sem senha de autorização (agenda): profissional vê só as próprias, sem valores.
+export async function alertaSemSenha(alvo, aoAtualizar) {
+  if (!alvo) return;
+  const { data: gs, error } = await sb.rpc('guias_sem_senha', { p_clinica: estado.clinica.id });
+  if (error || !gs?.length) { alvo.innerHTML = ''; return; }
+  const souProf = estado.perfil === 'profissional';
+  alvo.innerHTML = `<div class="dica" style="display:flex;align-items:center;gap:12px;border-left-color:var(--vermelho);background:var(--vermelho-claro)">
+    <span><strong>${gs.length} guia${gs.length > 1 ? 's' : ''} sem senha de autorização</strong> ${souProf ? 'suas' : ''} — não entram no lote até a senha ser informada.
+    ${gs[0].dias > 0 ? `A mais antiga é de ${data(gs[0].data_atendimento)} (${gs[0].dias} dias).` : ''}</span>
+    <button class="btn pequeno primario" id="ver-ss" style="margin-left:auto">Informar senhas</button></div>`;
+  $('#ver-ss', alvo).onclick = () => modal(`<h3>Guias sem senha</h3>
+    <p class="muted">Data da autorização deve ser igual ou anterior ao atendimento (glosa 1814) e a validade, igual ou posterior.</p>
+    <div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Atendimento</th><th>Paciente</th><th>Convênio</th>${souProf ? '' : '<th>Profissional</th>'}
+      <th>Proced.</th><th>Senha</th><th>Data da autorização</th><th>Validade</th><th></th></tr></thead><tbody>
+      ${gs.map((g) => `<tr data-g="${g.guia_id}"><td>${data(g.data_atendimento)}<br><small>guia ${esc(g.numero)}</small></td><td>${esc(g.paciente)}<br><small>${esc(g.carteirinha)}</small></td>
+        <td>${esc(g.contrato)}</td>${souProf ? '' : `<td>${esc(g.profissional)}</td>`}<td>${esc(g.procedimentos)}</td>
+        <td><input class="ss-senha" style="width:110px"></td><td><input type="date" class="ss-data" value="${g.data_atendimento}" max="${g.data_atendimento}"></td>
+        <td><input type="date" class="ss-val" min="${g.data_atendimento}"></td><td><button class="btn pequeno primario ss-ok">Salvar</button></td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="linha-acoes"><button class="btn" data-fechar>Fechar</button></div>`,
+  (m) => $$('.ss-ok', m).forEach((b) => (b.onclick = async () => {
+    const tr = b.closest('tr');
+    const { error: e } = await sb.rpc('informar_senha_guia', { p_guia: tr.dataset.g, p_senha: $('.ss-senha', tr).value,
+      p_data: $('.ss-data', tr).value || null, p_validade: $('.ss-val', tr).value || null });
+    if (e) return falha(e);
+    tr.remove(); toast('Senha vinculada à guia.');
+    if (!$('tbody tr', m)) { $('[data-fechar]', m).click(); }
+    alertaSemSenha(alvo, aoAtualizar);
+  })));
 }
