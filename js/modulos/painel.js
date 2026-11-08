@@ -3,11 +3,12 @@ import { sb, estado, esc, brl, pct, data, tela, falha } from '../core.js';
 
 export async function render() {
   const c = tela('Painel');
-  const [{ data: ls, error }, { data: motivos }, { data: rets }] = await Promise.all([
+  const [{ data: ls, error }, { data: motivos }, { data: rets }, { data: pend }] = await Promise.all([
     sb.from('retorno_linhas').select('retorno_id, numero_lote, numero_guia_prestador, valor_informado, valor_glosa, codigo_glosa')
       .eq('clinica_id', estado.clinica.id).eq('classe', 'da_clinica'),
     sb.from('motivos_glosa').select('codigo, descricao'),
     sb.from('retornos').select('id, status, data_emissao, contratos(nome)').eq('clinica_id', estado.clinica.id),
+    sb.rpc('pendencias', { p_clinica: estado.clinica.id }),
   ]);
   if (error) return falha(error);
   const desc = Object.fromEntries((motivos || []).map((m) => [m.codigo, m.descricao]));
@@ -21,7 +22,14 @@ export async function render() {
     '3292': 'Controlar sessões autorizadas × usadas', '1814': 'Exigir autorização válida na data do atendimento',
     '1705': 'Preencher valor pela tabela do contrato' };
 
+  const ordem = { alta: 0, media: 1, baixa: 2 }, rot = { alta: ['alerta', 'Alta'], media: ['pendente', 'Média'], baixa: ['outra', 'Baixa'] };
+  const ps = (pend || []).sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade]);
   c.innerHTML = `
+    <div class="cartao"><h3>Pendências ${ps.length ? `<span class="selo alerta">${ps.length}</span>` : ''}</h3>
+      ${ps.length ? `<table><tbody>${ps.map((x) => `<tr class="clicavel" onclick="location.hash='${esc(x.link)}'">
+        <td style="width:80px"><span class="selo ${rot[x.gravidade][0]}">${rot[x.gravidade][1]}</span></td>
+        <td style="width:120px" class="muted">${esc(x.area)}</td><td>${esc(x.descricao)}</td><td style="width:20px">›</td></tr>`).join('')}</tbody></table>`
+      : '<div class="vazio">Nenhuma pendência. ✓</div>'}</div>
     <div class="kpis">
       <div class="kpi"><div class="rotulo">Faturado (retornos importados)</div><div class="valor">${brl(inf)}</div></div>
       <div class="kpi alerta"><div class="rotulo">Glosado</div><div class="valor">${brl(glo)}</div></div>
