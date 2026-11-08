@@ -109,3 +109,4 @@ tr.clicavel{cursor:pointer} tr.clicavel:hover{background:var(--laranja-claro)}
 .sugestoes:empty{display:none}.sugestoes div{padding:7px 10px;cursor:pointer;font-weight:400;color:var(--preto)}
 .sugestoes div:hover{background:var(--laranja-claro)}
 #acoes-tela{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.ag-pausa{position:absolute;left:0;right:0;background:repeating-linear-gradient(45deg,#f1f1ef,#f1f1ef 6px,#e7e7e4 6px,#e7e7e4 12px);color:var(--cinza-6);font-size:11px;font-weight:600;display:grid;place-items:center;pointer-events:none}

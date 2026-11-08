@@ -24,7 +24,7 @@ export async function render() {
       <label>Nº do conselho<input name="numero_conselho" value="${esc(p.numero_conselho)}"></label>
       <label>UF<input name="uf_conselho" maxlength="2" value="${esc(p.uf_conselho)}"></label>
       <label>CBO<input name="cbo" value="${esc(p.cbo)}"></label>
-      <label>Duração padrão (min)<input type="number" name="duracao_padrao_min" min="5" step="5" value="${p.duracao_padrao_min || 50}"></label>
+      <label>Duração padrão (min)<input type="number" name="duracao_padrao_min" min="5" step="5" value="${p.duracao_padrao_min || 45}"></label>
       <label>Cor na agenda<input type="color" name="cor" value="${esc(p.cor || '#F8781D')}"></label>
       <label><span><input type="checkbox" name="notificacoes_ativas" ${p.notificacoes_ativas ? 'checked' : ''}> Recebe notificações</span></label>
       <label><span><input type="checkbox" name="ativo" ${p.ativo ? 'checked' : ''}> Ativo</span></label>
@@ -32,7 +32,7 @@ export async function render() {
   (m, fechar) => ($('#s', m).onclick = async () => {
     const fd = new FormData($('#f', m)); const f = Object.fromEntries(fd);
     f.ativo = fd.has('ativo'); f.notificacoes_ativas = fd.has('notificacoes_ativas');
-    f.uf_conselho = (f.uf_conselho || '').toUpperCase() || null; f.duracao_padrao_min = Number(f.duracao_padrao_min) || 50;
+    f.uf_conselho = (f.uf_conselho || '').toUpperCase() || null; f.duracao_padrao_min = Number(f.duracao_padrao_min) || 45;
     if (!f.nome) return toast('Informe o nome.', true);
     const q = p.id ? sb.from('profissionais').update(f).eq('id', p.id) : sb.from('profissionais').insert({ ...f, clinica_id: estado.clinica.id });
     const { error: e } = await q; if (e) return falha(e); fechar(); toast('Salvo.'); render();
