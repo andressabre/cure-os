@@ -90,3 +90,22 @@ tr.clicavel{cursor:pointer} tr.clicavel:hover{background:var(--laranja-claro)}
   #usuario-info{display:none}
   main{padding:16px}
 }
+
+/* Agenda */
+.agenda-wrap{overflow:auto;max-height:calc(100vh - 160px);padding:0}
+.agenda{display:grid;position:relative;min-width:max-content}
+.ag-tit{position:sticky;top:0;background:#fff;z-index:2;padding:10px 8px;font-weight:700;font-size:13px;border-bottom:2px solid var(--cinza-3);text-align:center}
+.ag-horas{position:relative;border-right:1px solid #eee}
+.ag-horas span{position:absolute;right:6px;transform:translateY(-50%);font-size:11px;color:var(--cinza-6)}
+.ag-col{position:relative;border-right:1px solid #eee;cursor:copy}
+.ag-col i{position:absolute;left:0;right:0;border-top:1px solid #eee}
+.ag-ev{position:absolute;left:3px;right:3px;background:var(--laranja-claro);border-left:4px solid var(--laranja);border-radius:6px;padding:3px 6px;
+  font-size:12px;overflow:hidden;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.08);display:flex;flex-direction:column;line-height:1.25}
+.ag-ev b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-ev span{color:var(--cinza-6);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-ev.st-confirmado{background:#e8f1ff}.ag-ev.st-presente{background:#fff6e0}.ag-ev.st-atendido{background:#e6f4ec}
+.ag-ev.st-faltou{background:#fdecea;text-decoration:line-through}
+.sugestoes{border:1px solid var(--cinza-3);border-radius:8px;max-height:180px;overflow:auto;background:#fff}
+.sugestoes:empty{display:none}.sugestoes div{padding:7px 10px;cursor:pointer;font-weight:400;color:var(--preto)}
+.sugestoes div:hover{background:var(--laranja-claro)}
+#acoes-tela{display:flex;gap:6px;flex-wrap:wrap;align-items:center}

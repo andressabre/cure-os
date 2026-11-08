@@ -8,9 +8,11 @@ import * as repasse from './modulos/repasse.js';
 import * as acessos from './modulos/acessos.js';
 import * as extrato from './modulos/extrato.js';
 import * as pacientes from './modulos/pacientes.js';
+import * as agenda from './modulos/agenda.js';
 
 // Cada módulo é independente: para mexer em um, só o arquivo dele muda.
 const ROTAS = [
+  { id: 'agenda', nome: 'Agenda', mod: agenda, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'painel', nome: 'Painel', mod: painel, perfis: ['gestor', 'financeiro'] },
   { id: 'pacientes', nome: 'Pacientes', mod: pacientes, perfis: ['gestor', 'financeiro', 'recepcao'] },
   { id: 'retornos', nome: 'Retornos e glosas', mod: retornos, perfis: ['gestor', 'financeiro'] },
