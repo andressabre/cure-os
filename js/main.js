@@ -7,6 +7,7 @@ import * as profissionais from './modulos/profissionais.js';
 import * as repasse from './modulos/repasse.js';
 import * as acessos from './modulos/acessos.js';
 import * as extrato from './modulos/extrato.js';
+import * as estatisticas from './modulos/estatisticas.js';
 import * as pacientes from './modulos/pacientes.js';
 import * as agenda from './modulos/agenda.js';
 import * as paciente from './modulos/paciente.js';
@@ -15,6 +16,7 @@ import * as paciente from './modulos/paciente.js';
 const ROTAS = [
   { id: 'agenda', nome: 'Agenda', mod: agenda, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'painel', nome: 'Painel', mod: painel, perfis: ['gestor', 'financeiro'] },
+  { id: 'estatisticas', nome: 'Estatísticas', mod: estatisticas, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'pacientes', nome: 'Pacientes', mod: pacientes, perfis: ['gestor', 'financeiro', 'recepcao'] },
   { id: 'paciente', nome: 'Paciente', mod: paciente, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'], oculto: true },
   { id: 'retornos', nome: 'Retornos e glosas', mod: retornos, perfis: ['gestor', 'financeiro'] },
