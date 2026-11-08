@@ -133,6 +133,10 @@ export async function render() {
         }, 250);
       };
       $$('[data-st]', m).forEach((b) => (b.onclick = async () => {
+        if (b.dataset.st === 'atendido' && a.status !== 'atendido') {
+          const { fecharAtendimento } = await import('./guia.js');
+          return fecharAtendimento(a, render);
+        }
         const { error: e } = await sb.from('atendimentos').update({ status: b.dataset.st, atualizado_em: new Date().toISOString() }).eq('id', a.id);
         if (e) return falha(e); fechar(); render();
       }));

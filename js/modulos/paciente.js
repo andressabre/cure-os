@@ -174,11 +174,12 @@ export async function render(params) {
       const desc = Object.fromEntries((mot || []).map((m) => [m.codigo, m.descricao]));
       const glosadas = (rls || []).filter((l) => Number(l.valor_glosa) > 0);
       alvo.innerHTML = `<div class="cartao"><h3>Guias emitidas pelo Cure OS</h3>
-        ${(gs || []).length ? `<table><thead><tr><th>Data</th><th>Guia</th><th>Contrato</th><th>Status</th><th class="num">Valor</th><th class="num">Glosa</th></tr></thead><tbody>
+        ${(gs || []).length ? `<table><thead><tr><th>Data</th><th>Guia</th><th>Contrato</th><th>Status</th><th class="num">Valor</th><th class="num">Glosa</th><th></th></tr></thead><tbody>
           ${gs.map((g) => `<tr><td>${data(g.data_atendimento)}</td><td>${esc(g.numero_guia_prestador)}</td><td>${esc(g.contratos?.nome)}</td><td>${esc(g.status)}</td>
             <td class="num">${brl(g.guia_itens.reduce((s, i) => s + Number(i.valor_informado), 0))}</td>
-            <td class="num">${brl(g.guia_itens.reduce((s, i) => s + Number(i.valor_glosa), 0))}</td></tr>`).join('')}</tbody></table>`
-          : '<div class="vazio">Nenhuma guia ainda — serão geradas a partir dos atendimentos (próxima etapa).</div>'}</div>
+            <td class="num">${brl(g.guia_itens.reduce((s, i) => s + Number(i.valor_glosa), 0))}</td>
+            <td>${['rascunho', 'pronta'].includes(g.status) ? `<button class="btn pequeno" data-cancg="${g.id}">Cancelar</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+          : '<div class="vazio">Nenhuma guia ainda. Elas são geradas na Agenda, ao marcar o atendimento como Atendido.</div>'}</div>
         <div class="cartao"><h3>Histórico nos retornos das operadoras</h3>
         ${(rls || []).length ? `<p class="muted">${rls.length} itens encontrados pela carteirinha · ${glosadas.length} glosados (${brl(glosadas.reduce((s, l) => s + Number(l.valor_glosa), 0))})</p>
           <table><thead><tr><th>Data</th><th>Guia</th><th>Procedimento</th><th class="num">Informado</th><th class="num">Glosa</th><th>Motivo</th></tr></thead><tbody>
@@ -186,6 +187,11 @@ export async function render(params) {
             <td class="num">${brl(l.valor_informado)}</td><td class="num">${Number(l.valor_glosa) ? `<strong>${brl(l.valor_glosa)}</strong>` : '—'}</td>
             <td>${l.codigo_glosa ? `${esc(l.codigo_glosa)} ${esc((desc[l.codigo_glosa] || '').slice(0, 50))}` : ''}</td></tr>`).join('')}</tbody></table>`
           : '<div class="vazio">Nenhum item nos retornos importados para a carteirinha deste paciente.</div>'}</div>`;
+      $$('[data-cancg]', alvo).forEach((b) => (b.onclick = async () => {
+        if (!(await confirmar('Cancelar esta guia? Ela não será enviada no lote.', 'Cancelar guia'))) return;
+        const { error: e } = await sb.rpc('cancelar_guia', { p_guia: b.dataset.cancg });
+        if (e) return falha(e); toast('Guia cancelada.'); abas.guias();
+      }));
     },
 
     prontuario() {
