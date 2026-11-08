@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cure OS — Gestão</title>
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,400;0,600;0,700;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <!-- Login -->
+  <section id="tela-login" class="login" hidden>
+    <div class="login-card">
+      <img src="logo.png" alt="Cure Saúde e Desempenho" class="login-logo">
+      <h1>Cure OS</h1>
+      <p class="muted">Gestão, faturamento e glosas</p>
+      <form id="form-login">
+        <label>E-mail<input type="email" name="email" required autocomplete="username"></label>
+        <label>Senha<input type="password" name="senha" required minlength="8" autocomplete="current-password"></label>
+        <button class="btn primario" type="submit">Entrar</button>
+        <div class="login-links">
+          <a href="#" id="lnk-primeiro">Primeiro acesso (fui convidado)</a>
+          <a href="#" id="lnk-esqueci">Esqueci a senha</a>
+        </div>
+        <p id="login-msg" class="msg"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- App -->
+  <div id="tela-app" class="app" hidden>
+    <aside class="lateral">
+      <img src="logo-branco.png" alt="Cure" class="lateral-logo">
+      <nav id="menu"></nav>
+      <div class="lateral-rodape">
+        <div id="usuario-info"></div>
+        <button class="btn fantasma" id="btn-sair">Sair</button>
+      </div>
+    </aside>
+    <main>
+      <header class="topo"><h2 id="titulo-tela"></h2><div id="acoes-tela"></div></header>
+      <div id="conteudo"></div>
+    </main>
+  </div>
+
+  <div id="modal" class="modal" hidden><div class="modal-caixa" id="modal-caixa"></div></div>
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
