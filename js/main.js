@@ -7,10 +7,12 @@ import * as profissionais from './modulos/profissionais.js';
 import * as repasse from './modulos/repasse.js';
 import * as acessos from './modulos/acessos.js';
 import * as extrato from './modulos/extrato.js';
+import * as pacientes from './modulos/pacientes.js';
 
 // Cada módulo é independente: para mexer em um, só o arquivo dele muda.
 const ROTAS = [
   { id: 'painel', nome: 'Painel', mod: painel, perfis: ['gestor', 'financeiro'] },
+  { id: 'pacientes', nome: 'Pacientes', mod: pacientes, perfis: ['gestor', 'financeiro', 'recepcao'] },
   { id: 'retornos', nome: 'Retornos e glosas', mod: retornos, perfis: ['gestor', 'financeiro'] },
   { id: 'contratos', nome: 'Convênios e contratos', mod: contratos, perfis: ['gestor', 'financeiro'] },
   { id: 'profissionais', nome: 'Profissionais', mod: profissionais, perfis: ['gestor', 'financeiro', 'recepcao'] },
