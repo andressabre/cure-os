@@ -112,7 +112,7 @@ export const CAMPOS = {
   carteirinha: ['n_conveniado', 'nconveniado', 'nconvenio', 'n_convenio', 'numconvenio', 'num_conveniado', 'numero_conveniado', 'num_convenio', 'carteirinha', 'conveniado', 'matricula'],
   cid10: ['cid', 'cid10', 'cid_10'],
   medico_indicou: ['medico', 'medico_indicou', 'indicacao'],
-  crm: ['crm'],
+  crm: ['crm', 'crm_medico'],
   bloqueado: ['bloqueado', 'inativo'],
 };
 export const ROTULOS = { origem_id: 'ID no sistema antigo', nome: 'Nome', sexo: 'Sexo', data_nascimento: 'Data de nascimento',
