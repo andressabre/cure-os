@@ -55,7 +55,7 @@ export async function render() {
   }
   if (!colunas.length) { c.innerHTML = '<div class="cartao vazio">Cadastre profissionais para usar a agenda.</div>'; return; }
 
-  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, pacientes(nome, telefone)')
+  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, paciente_plano_id, autorizacao_id, pacientes(nome, telefone)')
     .eq('clinica_id', estado.clinica.id).gte('inicio', new Date(de + 'T00:00').toISOString()).lt('inicio', new Date(somaDias(ate, 1) + 'T00:00').toISOString())
     .neq('status', 'cancelado').order('inicio');
   if (vis.prof) q = q.eq('profissional_id', vis.prof);
@@ -117,20 +117,56 @@ export async function render() {
         <label>Sala<input name="sala" value="${esc(a?.sala || '')}" ${souProf ? 'disabled' : ''}></label>
         <label style="grid-column:1/-1">Observação<input name="observacao" value="${esc(a?.observacao || '')}"></label>
       </form>
+      <div id="conv"></div>
       ${a ? `<p class="muted">${a.pacientes?.telefone ? 'Telefone: ' + esc(a.pacientes.telefone) + ' · ' : ''}<a href="#paciente-${a.paciente_id}" data-fechar>Abrir ficha do paciente →</a></p>` : ''}
       <div class="linha-acoes">${a && !souProf ? '<button class="btn escuro" id="canc">Cancelar agendamento</button>' : ''}
         <button class="btn" data-fechar>Fechar</button>${souProf && !a ? '' : '<button class="btn primario" id="s">Salvar</button>'}</div>`,
     (m, fechar) => {
       const busca = $('#pbusca', m), sug = $('#psug', m); let t;
+      // Convênio e autorização: agendar convênio exige vínculo com autorização (existente ou solicitação pendente)
+      const conv = $('#conv', m); let planos = [], planoId = a?.paciente_plano_id || '', autId = a?.autorizacao_id || '';
+      const travado = a && ['atendido', 'cancelado'].includes(a.status); let carregado = false;
+      async function carregarConv() {
+        if (!pacienteId) { conv.innerHTML = ''; return; }
+        const { data: ps, error: e } = await sb.rpc('autorizacoes_paciente', { p_paciente: pacienteId });
+        if (e) return falha(e, 'Convênios');
+        planos = ps || []; carregado = true;
+        if (!a && !planoId) planoId = '';
+        desenharConv();
+      }
+      function desenharConv() {
+        const pl = planos.find((x) => x.id === planoId);
+        const saldo = (x) => Number(x.qtd) - Number(x.usadas) - Number(x.agendadas) + (a && a.autorizacao_id === x.id ? 1 : 0);
+        conv.innerHTML = `<div class="grade-form" style="margin-top:12px">
+          <label style="grid-column:1/-1">Convênio<select id="c-plano" ${souProf || travado ? 'disabled' : ''}><option value="">Particular / sem convênio</option>
+            ${planos.map((x) => `<option value="${x.id}" ${x.id === planoId ? 'selected' : ''}>${esc(x.contrato)} · cart. ${esc(x.carteirinha)}</option>`).join('')}</select>
+            ${!planos.length ? '<small class="muted">Paciente sem convênio vinculado. Vincule na ficha do paciente.</small>' : ''}</label>
+          ${pl && pl.exige ? `<label style="grid-column:1/-1">Autorização (senha)<select id="c-aut" ${souProf || travado ? 'disabled' : ''}>
+            <option value="">Escolha…</option>
+            ${pl.autorizacoes.map((x) => `<option value="${x.id}" ${x.id === autId ? 'selected' : ''} ${saldo(x) <= 0 && x.id !== autId ? 'disabled' : ''}>
+              ${x.status === 'pendente' ? '⏳ PENDENTE' : 'senha ' + esc(x.senha)} · ${esc(x.codigo)} · ${x.usadas} feitas + ${x.agendadas} agendadas de ${x.qtd}${x.validade ? ' · val. ' + new Date(x.validade + 'T12:00').toLocaleDateString('pt-BR') : ''}</option>`).join('')}
+            <option value="nova" ${autId === 'nova' ? 'selected' : ''}>+ Nova solicitação de autorização</option></select></label>
+          ${autId === 'nova' ? `<label style="grid-column:1/-1">Procedimento<select id="c-proc">${[...pl.procedimentos].sort((x, y) => x.codigo.localeCompare(y.codigo))
+              .map((x) => `<option value="${x.id}">${esc(x.codigo)} — ${esc(x.descricao)}</option>`).join('')}</select></label>
+            <label>Sessões solicitadas<input id="c-qtd" type="number" min="1" value="10"></label>
+            <label>Senha (se já tiver)<input id="c-senha"></label>
+            <label>Data da autorização<input id="c-data" type="date"></label>
+            <label>Validade<input id="c-val" type="date"></label>
+            <p class="muted" style="grid-column:1/-1">Sem senha, a solicitação fica <strong>pendente</strong> e vira tarefa "Autorizar guia" para recepção, gestão e o profissional.</p>` : ''}`
+          : pl ? '<p class="muted" style="grid-column:1/-1">Este contrato não exige senha.</p>' : ''}</div>`;
+        $('#c-plano', conv)?.addEventListener('change', (e) => { planoId = e.target.value; autId = ''; desenharConv(); });
+        $('#c-aut', conv)?.addEventListener('change', (e) => { autId = e.target.value; desenharConv(); });
+      }
+      if (pacienteId) carregarConv();
       if (busca) busca.oninput = () => {
-        pacienteId = null; clearTimeout(t);
+        pacienteId = null; clearTimeout(t); conv.innerHTML = '';
         t = setTimeout(async () => {
           if (busca.value.trim().length < 2) return (sug.innerHTML = '');
           const { data: ps } = await sb.from('pacientes').select('id, nome, telefone').eq('clinica_id', estado.clinica.id).eq('ativo', true)
             .ilike('nome', `%${busca.value.trim()}%`).order('nome').limit(8);
           sug.innerHTML = (ps || []).map((x) => `<div data-id="${x.id}">${esc(x.nome)} <span class="muted">${esc(x.telefone || '')}</span></div>`).join('')
             || '<div class="muted">Nenhum paciente — cadastre em Pacientes.</div>';
-          $$('[data-id]', sug).forEach((d) => (d.onclick = () => { pacienteId = d.dataset.id; busca.value = ps.find((x) => x.id === d.dataset.id).nome; sug.innerHTML = ''; }));
+          $$('[data-id]', sug).forEach((d) => (d.onclick = () => { pacienteId = d.dataset.id; busca.value = ps.find((x) => x.id === d.dataset.id).nome; sug.innerHTML = ''; planoId = ''; autId = ''; carregarConv(); }));
         }, 250);
       };
       $$('[data-st]', m).forEach((b) => (b.onclick = async () => {
@@ -159,7 +195,20 @@ export async function render() {
         const mi = inicio.getHours() * 60 + inicio.getMinutes(), mf = mi + Number(f.dur);
         if (pausasDoDia(f.dia).some((x) => mi < x.ate && mf > x.de) && !(await confirmar('Esse horário está fora do expediente (almoço ou clínica fechada). Agendar mesmo assim?', 'Agendar'))) return;
         if (choque?.length && !(await confirmar('Este profissional já tem atendimento nesse horário. Agendar mesmo assim (encaixe)?', 'Agendar'))) return;
-        const reg = { paciente_id: pacienteId, profissional_id: f.profissional_id, servico: f.servico, sala: f.sala || null, observacao: f.observacao || null,
+        const pl = planos.find((x) => x.id === planoId);
+        if (pl?.exige && !autId) return toast('Convênio exige autorização: escolha uma ou crie nova solicitação.', true);
+        let autFinal = pl?.exige ? autId : null;
+        if (autId === 'nova') {
+          const senha = $('#c-senha', m).value.trim(), dAut = $('#c-data', m).value || null;
+          if (senha && !dAut) return toast('Informe a data da autorização junto com a senha.', true);
+          const qtd = Math.max(1, parseInt($('#c-qtd', m).value) || 1);
+          const { data: nv, error: e1 } = await sb.from('autorizacoes').insert({ clinica_id: estado.clinica.id, paciente_plano_id: pl.id,
+            profissional_id: f.profissional_id, procedimento_id: $('#c-proc', m).value, qtd_autorizada: qtd, qtd_solicitada: qtd,
+            status: senha ? 'autorizada' : 'pendente', senha: senha || null, data_autorizacao: dAut, validade: $('#c-val', m).value || null }).select('id').single();
+          if (e1) return falha(e1, 'Autorização');
+          autFinal = nv.id; autId = nv.id;
+        }
+        const reg = { ...(carregado && !travado ? { paciente_plano_id: planoId || null, autorizacao_id: autFinal || null } : {}), paciente_id: pacienteId, profissional_id: f.profissional_id, servico: f.servico, sala: f.sala || null, observacao: f.observacao || null,
           inicio: inicio.toISOString(), fim: fim.toISOString(), atualizado_em: new Date().toISOString() };
         const { error: e } = a ? await sb.from('atendimentos').update(reg).eq('id', a.id)
           : await sb.from('atendimentos').insert({ ...reg, clinica_id: estado.clinica.id, status: 'agendado' });

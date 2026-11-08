@@ -9,7 +9,7 @@ export async function fecharAtendimento(a, aoConcluir) {
     return toast(`Este atendimento já tem guia (nº ${op.guias.map((g) => g.numero).join(', ')}).`);
   }
   const souProf = estado.perfil === 'profissional';
-  let plano = op.planos.find((p) => p.principal) || op.planos[0] || null;
+  let plano = op.planos.find((p) => p.id === a.paciente_plano_id) || op.planos.find((p) => p.principal) || op.planos[0] || null;
   let itens = [{ procedimento_id: '', quantidade: 1 }];
   const extra = { solicitante_id: '', cid: '', indicacao_clinica: '', tipo_atendimento: '03' };
   let autAuto = false; // escolhe sozinho a autorização vigente na data do atendimento (uma vez por convênio)
@@ -117,7 +117,7 @@ export async function fecharAtendimento(a, aoConcluir) {
       if (selAut && !autAuto) {
         autAuto = true;
         const dAt = new Date(a.inicio).toLocaleDateString('sv');
-        const melhor = plano.autorizacoes.find((x) => x.data <= dAt && (!x.validade || x.validade >= dAt) && Number(x.usadas) < Number(x.qtd));
+        const melhor = plano.autorizacoes.find((x) => x.id === a.autorizacao_id) || plano.autorizacoes.find((x) => x.data <= dAt && (!x.validade || x.validade >= dAt) && Number(x.usadas) < Number(x.qtd));
         if (melhor) { selAut.value = melhor.id; selAut.dispatchEvent(new Event('change')); }
       }
     }
@@ -149,40 +149,47 @@ export async function fecharAtendimento(a, aoConcluir) {
       if (e) { ok.disabled = false; return falha(e); }
       if (!r.gravado) return mostrar(r);
       fechar();
-      toast(r.guias.length ? `Guia nº ${r.guias.map((g) => g.numero).join(', ')} gerada. Atendimento marcado como Atendido.` : 'Atendimento registrado (acordo sem guia).');
+      toast(r.guias.length ? r.guias.map((g) => g.nova ? `Guia nº ${g.numero} criada` : `Sessão acrescentada à guia nº ${g.numero}`).join('; ') + '. Atendimento marcado como Atendido.' : 'Atendimento registrado (acordo sem guia).');
       aoConcluir?.();
     };
     desenhar();
   });
 }
 
-// Alerta de guias sem senha de autorização (agenda): profissional vê só as próprias, sem valores.
+// Tarefas "Autorizar guia" (agenda): autorizações pendentes. Profissional vê só as ligadas a ele, sem valores.
 export async function alertaSemSenha(alvo, aoAtualizar) {
   if (!alvo) return;
-  const { data: gs, error } = await sb.rpc('guias_sem_senha', { p_clinica: estado.clinica.id });
-  if (error || !gs?.length) { alvo.innerHTML = ''; return; }
-  const souProf = estado.perfil === 'profissional';
+  const { data: ps, error } = await sb.rpc('autorizacoes_pendentes', { p_clinica: estado.clinica.id });
+  if (error || !ps?.length) { alvo.innerHTML = ''; return; }
+  const atendidas = ps.reduce((n, x) => n + Number(x.atendidos), 0);
   alvo.innerHTML = `<div class="dica" style="display:flex;align-items:center;gap:12px;border-left-color:var(--vermelho);background:var(--vermelho-claro)">
-    <span><strong>${gs.length} guia${gs.length > 1 ? 's' : ''} sem senha de autorização</strong> ${souProf ? 'suas' : ''} — não entram no lote até a senha ser informada.
-    ${gs[0].dias > 0 ? `A mais antiga é de ${data(gs[0].data_atendimento)} (${gs[0].dias} dias).` : ''}</span>
-    <button class="btn pequeno primario" id="ver-ss" style="margin-left:auto">Informar senhas</button></div>`;
-  $('#ver-ss', alvo).onclick = () => modal(`<h3>Guias sem senha</h3>
-    <p class="muted">Data da autorização deve ser igual ou anterior ao atendimento (glosa 1814) e a validade, igual ou posterior.</p>
-    <div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Atendimento</th><th>Paciente</th><th>Convênio</th>${souProf ? '' : '<th>Profissional</th>'}
-      <th>Proced.</th><th>Senha</th><th>Data da autorização</th><th>Validade</th><th></th></tr></thead><tbody>
-      ${gs.map((g) => `<tr data-g="${g.guia_id}"><td>${data(g.data_atendimento)}<br><small>guia ${esc(g.numero)}</small></td><td>${esc(g.paciente)}<br><small>${esc(g.carteirinha)}</small></td>
-        <td>${esc(g.contrato)}</td>${souProf ? '' : `<td>${esc(g.profissional)}</td>`}<td>${esc(g.procedimentos)}</td>
-        <td><input class="ss-senha" style="width:110px"></td><td><input type="date" class="ss-data" value="${g.data_atendimento}" max="${g.data_atendimento}"></td>
-        <td><input type="date" class="ss-val" min="${g.data_atendimento}"></td><td><button class="btn pequeno primario ss-ok">Salvar</button></td></tr>`).join('')}
+    <span><strong>Autorizar guia: ${ps.length} pendente${ps.length > 1 ? 's' : ''}</strong>${atendidas ? ` · ${atendidas} sessão(ões) já realizada(s) sem senha` : ''}
+    ${ps[0].primeira_data ? ` · próxima/primeira sessão em ${data(ps[0].primeira_data)}` : ''}</span>
+    <button class="btn pequeno primario" id="ver-ss" style="margin-left:auto">Ver tarefas</button></div>`;
+  $('#ver-ss', alvo).onclick = () => modal(`<h3>Autorizar guia</h3>
+    <p class="muted">Data da autorização deve ser igual ou anterior à 1ª sessão (glosa 1814) e a validade cobrir as sessões.</p>
+    <div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Paciente</th><th>Convênio</th><th>Procedimento</th><th>Sessões</th>
+      <th>Senha</th><th>Data aut.</th><th>Validade</th><th>Qtd aut.</th><th></th></tr></thead><tbody>
+      ${ps.map((x) => `<tr data-a="${x.autorizacao_id}"><td><strong>${esc(x.paciente)}</strong><br><small>${esc(x.carteirinha)} · ${esc(x.profissionais || '')}</small></td>
+        <td>${esc(x.contrato)}</td><td><small>${esc(x.procedimento)}</small></td>
+        <td>${x.qtd_solicitada} solic.<br><small>${x.atendidos} feitas · ${x.agendados} agendadas${x.primeira_data ? '<br>1ª ' + data(x.primeira_data) : ''}</small></td>
+        <td><input class="ss-senha" style="width:100px"></td><td><input type="date" class="ss-data" value="${x.primeira_data || ''}" ${x.primeira_data ? `max="${x.primeira_data}"` : ''}></td>
+        <td><input type="date" class="ss-val"></td><td><input type="number" class="ss-qtd" min="1" style="width:60px" value="${x.qtd_solicitada}"></td>
+        <td style="white-space:nowrap"><button class="btn pequeno primario ss-ok">Autorizada</button> <button class="btn pequeno ss-neg">Negada</button></td></tr>`).join('')}
     </tbody></table></div>
     <div class="linha-acoes"><button class="btn" data-fechar>Fechar</button></div>`,
-  (m) => $$('.ss-ok', m).forEach((b) => (b.onclick = async () => {
-    const tr = b.closest('tr');
-    const { error: e } = await sb.rpc('informar_senha_guia', { p_guia: tr.dataset.g, p_senha: $('.ss-senha', tr).value,
-      p_data: $('.ss-data', tr).value || null, p_validade: $('.ss-val', tr).value || null });
-    if (e) return falha(e);
-    tr.remove(); toast('Senha vinculada à guia.');
-    if (!$('tbody tr', m)) { $('[data-fechar]', m).click(); }
-    alertaSemSenha(alvo, aoAtualizar);
-  })));
+  (m) => {
+    const responder = async (tr, status) => {
+      const { data: r, error: e } = await sb.rpc('responder_autorizacao', { p_aut: tr.dataset.a, p_status: status,
+        p_senha: $('.ss-senha', tr).value, p_data: $('.ss-data', tr).value || null, p_validade: $('.ss-val', tr).value || null,
+        p_qtd: parseInt($('.ss-qtd', tr).value) || null });
+      if (e) return falha(e);
+      tr.remove(); toast(status === 'negada' ? 'Marcada como negada.' : 'Senha registrada.');
+      if (r?.avisos?.length) toast(r.avisos.join(' '), true);
+      if (!$('tbody tr', m)) $('[data-fechar]', m)?.click();
+      alertaSemSenha(alvo, aoAtualizar);
+    };
+    $$('.ss-ok', m).forEach((b) => (b.onclick = () => responder(b.closest('tr'), 'autorizada')));
+    $$('.ss-neg', m).forEach((b) => (b.onclick = () => { if (b.dataset.ok) return responder(b.closest('tr'), 'negada'); b.dataset.ok = 1; b.textContent = 'Confirmar negada'; }));
+  });
 }
