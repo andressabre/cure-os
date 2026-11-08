@@ -1,6 +1,6 @@
 // Módulo Pacientes: lista, busca, cadastro e importação do sistema antigo.
 import { sb, estado, $, $$, esc, data, tela, toast, falha, modal } from '../core.js';
-import { lerArquivo, sugerirMapa, sugerirTabela, dicionario, converter, ROTULOS } from './importador.js';
+import { lerArquivo, sugerirMapa, sugerirTabela, dicionario, converter, ROTULOS, formatos } from './importador.js';
 
 const ORIGEM = 'motivar_2012';
 
@@ -130,6 +130,7 @@ export async function render() {
             <div class="kpi"><div class="rotulo">Sem CPF válido</div><div class="valor">${sem('cpf')}</div><div class="sub">${dupCpf} CPFs repetidos (mantidos, marcados)</div></div>
             <div class="kpi"><div class="rotulo">Sem nascimento</div><div class="valor">${sem('data_nascimento')}</div></div>
             <div class="kpi"><div class="rotulo">Sem telefone</div><div class="valor">${sem('telefone')}</div></div></div>
+            <p class="muted"><strong>Formato no arquivo</strong> (sem dados): CPF → ${esc(formatos(tab.linhas, mp.cpf))} · Nascimento → ${esc(formatos(tab.linhas, mp.data_nascimento))}</p>
             <p class="muted">Conferência (3 primeiros): ${amostra.map((p) => `${esc(p.nome)} · ${p.sexo || '?'} · ${data(p.data_nascimento)} · ${esc(p.campos_extras.convenio_origem || '—')}`).join(' | ')}</p>`;
           $('#ir', m).disabled = !prontos.length;
         };

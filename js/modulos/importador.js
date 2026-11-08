@@ -154,7 +154,8 @@ const digitos = (v) => so(v).replace(/\D/g, '');
 
 export function dataIso(v) {
   const s = so(v); if (!s || /^0000/.test(s)) return null;
-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[1] === '0000' ? null : `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{2})(\d{2})(\d{4})$/); if (m) return dataIso(`${m[1]}/${m[2]}/${m[3]}`);
   m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
   if (m) { let a = +m[3]; if (a < 100) a += a > 30 ? 1900 : 2000; const d = `${a}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; return isNaN(Date.parse(d)) ? null : d; }
   return null;
@@ -164,7 +165,7 @@ export function converter(linha, mapa, dics) {
   const v = (campo) => (mapa[campo] == null ? '' : so(linha[mapa[campo]]));
   const sexoBruto = v('sexo').toUpperCase();
   const sexo = /^(F|FEM|3)/.test(sexoBruto) ? 'F' : /^(M|MASC|2)/.test(sexoBruto) ? 'M' : null;
-  const cpf = digitos(v('cpf'));
+  let cpf = digitos(v('cpf')); if (cpf.length >= 9 && cpf.length < 11) cpf = cpf.padStart(11, '0');
   const conv = v('convenio'), est = v('estado');
   const endereco = { rua: v('rua'), cep: digitos(v('cep')), complemento: v('complemento'), cidade: v('cidade'),
     uf: dics.estados[est] || est };
@@ -181,4 +182,16 @@ export function converter(linha, mapa, dics) {
     endereco: Object.keys(endereco).length ? endereco : null, campos_extras: extras,
     origem_id: v('origem_id') || null, ativo: !['1', 's', 'sim', 'on', 'true'].includes(bloq),
   };
+}
+
+// Formato dos valores sem expor o conteúdo: dígitos viram 9, letras viram a (ex.: 99/99/9999)
+export function formatos(linhas, i, max = 4) {
+  if (i == null) return 'coluna não ligada';
+  const c = {}; let vazios = 0;
+  for (const l of linhas) {
+    const v = so(l[i]); if (!v) { vazios++; continue; }
+    const f = v.replace(/\d/g, '9').replace(/[A-Za-zÀ-ú]+/g, 'a').slice(0, 20); c[f] = (c[f] || 0) + 1;
+  }
+  const top = Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, max).map(([f, n]) => `"${f}" ${n}×`).join(', ');
+  return `${vazios} vazios${top ? '; preenchidos: ' + top : ''}`;
 }
