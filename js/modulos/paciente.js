@@ -1,12 +1,13 @@
 // Módulo Ficha do paciente: tudo que se liga ao paciente num lugar só.
-// Abas: Resumo · Dados · Convênios · Encaminhamentos · Autorizações · Atendimentos · Guias e glosas · Prontuário
+// Abas: Resumo · Dados · Convênios · Encaminhamentos · Autorizações · Atendimentos · Guias e glosas · Prontuário · Documentos
 import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo, ACEITA } from './documentos.js';
 import { imprimirGuia } from './guia-impressa.js';
 import { abaProntuario } from './prontuario.js';
+import { abaDocumentos } from './emissao.js';
 
 const ABAS = [['resumo', 'Resumo'], ['dados', 'Dados'], ['convenios', 'Convênios'], ['encaminhamentos', 'Encaminhamentos'], ['autorizacoes', 'Autorizações'],
-  ['atendimentos', 'Atendimentos'], ['guias', 'Guias e glosas'], ['prontuario', 'Prontuário']];
+  ['atendimentos', 'Atendimentos'], ['guias', 'Guias e glosas'], ['prontuario', 'Prontuário'], ['documentos', 'Documentos']];
 const ST = { agendado: 'pendente', confirmado: 'pendente', presente: 'pendente', atendido: 'ok', faltou: 'alerta', cancelado: 'outra' };
 const AREAS = { fisioterapia: 'Fisioterapia', nutricao: 'Nutrição', psicologia: 'Psicologia', palmilha: 'Palmilha / podologia', outra: 'Outra' };
 const opcoesArea = (sel) => Object.entries(AREAS).map(([k, n]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${n}</option>`).join('');
@@ -23,7 +24,7 @@ export async function render(params) {
   const [{ data: p, error }, { data: planos }, { data: ats }, { data: auts }, { data: contratos }, { data: encs }, { data: sols }] = await Promise.all([
     sb.from('pacientes').select('*').eq('id', id).single(),
     sb.from('paciente_planos').select('*, contratos(id, nome)').eq('paciente_id', id).order('principal', { ascending: false }),
-    sb.from('atendimentos').select('id, inicio, status, servico, autorizacao_id, profissional_id, profissionais(nome)').eq('paciente_id', id).order('inicio', { ascending: false }),
+    sb.from('atendimentos').select('id, inicio, fim, status, servico, autorizacao_id, profissional_id, profissionais(nome)').eq('paciente_id', id).order('inicio', { ascending: false }),
     sb.from('autorizacoes').select('*, procedimentos(codigo, descricao), profissionais(nome), paciente_planos!inner(paciente_id, contratos(nome))')
       .eq('paciente_planos.paciente_id', id).order('data_autorizacao', { ascending: false }),
     gestao ? sb.from('contratos').select('id, nome').eq('clinica_id', cid).eq('ativo', true).order('nome') : Promise.resolve({ data: [] }),
@@ -295,6 +296,7 @@ export async function render(params) {
     },
 
     prontuario() { return abaProntuario(alvo, p, ats, abaExtra); },
+    documentos() { return abaDocumentos(alvo, p, ats); },
   };
 
   // Cadastro rápido do médico do pedido (vai na guia SP/SADT: conselho, número, UF e CBO)

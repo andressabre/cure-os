@@ -8,7 +8,7 @@ const TABELAS = ['clinicas', 'usuarios_clinica', 'cnpjs_faturamento', 'operadora
   'regras_repasse', 'profissionais', 'solicitantes', 'pacientes', 'paciente_planos', 'encaminhamentos', 'autorizacoes', 'atendimentos',
   'guias', 'guia_itens', 'guia_anexos', 'lotes', 'retornos', 'retorno_linhas', 'glosas', 'motivos_glosa', 'glosas_operadora',
   'notificacoes', 'contas_financeiras', 'categorias_financeiras', 'lancamentos', 'auditoria',
-  'prontuario_registros', 'prontuario_adendos', 'prontuario_anexos'];
+  'prontuario_registros', 'prontuario_adendos', 'prontuario_anexos', 'prontuario_versoes', 'documento_modelos', 'documentos_emitidos'];
 const DIAS_AVISO = 35;
 
 async function lerTabela(t) {

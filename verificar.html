@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verificar documento — Clínica Cure</title><link rel="icon" href="favicon.png">
+<style>body{font:15px/1.5 system-ui,Arial,sans-serif;background:#EEF0ED;color:#23272A;display:grid;place-items:center;min-height:100vh;margin:0;padding:20px}
+.c{background:#fff;border-radius:10px;padding:28px;width:min(440px,100%);border:1px solid #D9DDD8}img{height:46px}h1{font-size:20px;margin:18px 0 6px}
+input{width:100%;padding:10px;font:inherit;border:1px solid #D9DDD8;border-radius:6px;text-transform:uppercase}button{margin-top:10px;padding:10px 16px;background:#F8781D;color:#fff;border:0;border-radius:6px;font:600 15px system-ui;cursor:pointer}
+.ok{background:#E4F1E8;color:#2F7A4E;padding:12px;border-radius:6px;margin-top:14px}.no{background:#F8E5E1;color:#B5412F;padding:12px;border-radius:6px;margin-top:14px}</style></head>
+<body><div class="c"><img src="logo.png" alt="Clínica Cure"><h1>Verificar documento</h1>
+<p>Digite o código impresso no rodapé do documento.</p><form id="f"><input id="cod" maxlength="8" required><button>Verificar</button></form><div id="r"></div></div>
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+const sb = createClient('https://paipxhfhwiztznvbxawz.supabase.co', 'sb_publishable_S_s0TbvaOmGDH0y1x56WYw_4pqe5_PO');
+const r = document.getElementById('r'), cod = document.getElementById('cod');
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function verificar() {
+  const { data, error } = await sb.rpc('verificar_documento', { p_codigo: cod.value });
+  r.innerHTML = error ? `<div class="no">Não foi possível verificar agora.</div>` : data?.valido
+    ? `<div class="ok">✓ Documento autêntico<br><strong>${esc(data.tipo)}</strong> emitido em ${new Date(data.emitido_em).toLocaleString('pt-BR')}<br>
+       ${data.profissional ? `por ${esc(data.profissional)} (${esc(data.conselho)})` : 'pela recepção da Clínica Cure'} · paciente ${esc(data.paciente_iniciais)}</div>`
+    : '<div class="no">Código não encontrado. O documento pode não ser autêntico.</div>';
+}
+document.getElementById('f').onsubmit = (e) => { e.preventDefault(); verificar(); };
+const c = new URLSearchParams(location.search).get('c'); if (c) { cod.value = c; verificar(); }
+</script></body></html>
