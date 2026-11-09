@@ -1,10 +1,13 @@
 // Módulo Ficha do paciente: tudo que se liga ao paciente num lugar só.
-// Abas: Resumo · Dados · Convênios · Autorizações · Atendimentos · Guias e glosas · Prontuário
+// Abas: Resumo · Dados · Convênios · Encaminhamentos · Autorizações · Atendimentos · Guias e glosas · Prontuário
 import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir } from '../core.js';
+import { enviarArquivo, abrirArquivo, escolherArquivo, ACEITA } from './documentos.js';
 
-const ABAS = [['resumo', 'Resumo'], ['dados', 'Dados'], ['convenios', 'Convênios'], ['autorizacoes', 'Autorizações'],
+const ABAS = [['resumo', 'Resumo'], ['dados', 'Dados'], ['convenios', 'Convênios'], ['encaminhamentos', 'Encaminhamentos'], ['autorizacoes', 'Autorizações'],
   ['atendimentos', 'Atendimentos'], ['guias', 'Guias e glosas'], ['prontuario', 'Prontuário']];
 const ST = { agendado: 'pendente', confirmado: 'pendente', presente: 'pendente', atendido: 'ok', faltou: 'alerta', cancelado: 'outra' };
+const AREAS = { fisioterapia: 'Fisioterapia', nutricao: 'Nutrição', psicologia: 'Psicologia', palmilha: 'Palmilha / podologia', outra: 'Outra' };
+const opcoesArea = (sel) => Object.entries(AREAS).map(([k, n]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${n}</option>`).join('');
 const hojeIso = () => new Date().toISOString().slice(0, 10);
 const dh = (d) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -14,13 +17,15 @@ export async function render(params) {
   const gestao = podeGerir() || estado.perfil === 'recepcao';
   const cid = estado.clinica.id;
 
-  const [{ data: p, error }, { data: planos }, { data: ats }, { data: auts }, { data: contratos }] = await Promise.all([
+  const [{ data: p, error }, { data: planos }, { data: ats }, { data: auts }, { data: contratos }, { data: encs }, { data: sols }] = await Promise.all([
     sb.from('pacientes').select('*').eq('id', id).single(),
     sb.from('paciente_planos').select('*, contratos(id, nome)').eq('paciente_id', id).order('principal', { ascending: false }),
     sb.from('atendimentos').select('id, inicio, status, servico, autorizacao_id, profissionais(nome)').eq('paciente_id', id).order('inicio', { ascending: false }),
     sb.from('autorizacoes').select('*, procedimentos(codigo, descricao), profissionais(nome), paciente_planos!inner(paciente_id, contratos(nome))')
       .eq('paciente_planos.paciente_id', id).order('data_autorizacao', { ascending: false }),
     gestao ? sb.from('contratos').select('id, nome').eq('clinica_id', cid).eq('ativo', true).order('nome') : Promise.resolve({ data: [] }),
+    sb.from('encaminhamentos').select('*, solicitantes(nome, conselho, numero_conselho)').eq('paciente_id', id).order('data_pedido', { ascending: false }),
+    sb.from('solicitantes').select('id, nome, conselho, numero_conselho').eq('clinica_id', cid).eq('ativo', true).order('nome'),
   ]);
   if (error) return falha(error);
   const x = p.campos_extras || {}, e = p.endereco || {};
@@ -124,19 +129,86 @@ export async function render(params) {
       }));
     },
 
+    encaminhamentos() {
+      const vinc = {}; (auts || []).forEach((a) => a.encaminhamento_id && (vinc[a.encaminhamento_id] ||= []).push(a));
+      const usadasDe = (a) => (ats || []).filter((t) => t.autorizacao_id === a.id && t.status === 'atendido').length;
+      const linha = (en) => {
+        const venc = en.validade && en.validade < hojeIso(), lig = vinc[en.id] || [];
+        const usadas = lig.reduce((s, a) => s + usadasDe(a), 0);
+        return `<tr class="${en.status === 'cancelado' ? 'muted' : ''}"><td><span class="selo clinica">${esc(AREAS[en.area])}</span></td>
+          <td>${data(en.data_pedido)}</td><td>${en.validade ? data(en.validade) : '—'} ${venc ? '<span class="selo alerta">vencido</span>' : ''}</td>
+          <td>${esc(en.solicitantes ? `${en.solicitantes.nome} (${en.solicitantes.conselho} ${en.solicitantes.numero_conselho})` : '—')}</td>
+          <td>${esc(en.cid || '—')}</td>
+          <td class="num">${usadas}${en.qtd_sessoes ? ' / ' + en.qtd_sessoes : ''}</td>
+          <td>${lig.length ? `<span class="selo ok">✓ ${lig.length} autorização${lig.length > 1 ? 'ões' : ''}</span> <span class="muted">${lig.map((a) => esc(a.senha || 'sem senha')).join(', ')}</span>`
+            : '<span class="selo pendente">não vinculado</span>'}</td>
+          <td style="white-space:nowrap">${en.arquivo ? `<button class="btn pequeno" data-abrir="${esc(en.arquivo)}">Ver pedido</button>`
+            : `<span class="selo alerta">sem arquivo</span>${gestao ? ` <button class="btn pequeno" data-anexar="${en.id}">Anexar</button>` : ''}`}
+            ${gestao && en.status === 'ativo' && !lig.length ? ` <button class="btn pequeno" data-cancen="${en.id}">Cancelar</button>` : ''}</td></tr>`;
+      };
+      alvo.innerHTML = `<div class="cartao tabela-rolagem">
+        <p class="muted">Pedido médico de cada área. Vincule à autorização do convênio na aba Autorizações: o pedido vai como anexo obrigatório (03) das guias.</p>
+        <table><thead><tr><th>Área</th><th>Pedido em</th><th>Validade</th><th>Solicitante</th><th>CID</th><th class="num">Sessões feitas / pedidas</th>
+          <th>Vínculo</th><th></th></tr></thead><tbody>
+        ${(encs || []).map(linha).join('') || '<tr><td colspan="8" class="vazio">Nenhum encaminhamento registrado.</td></tr>'}</tbody></table>
+        ${gestao ? `<h3 style="margin-top:16px">Registrar encaminhamento</h3><form class="grade-form" id="f">
+          <label>Área<select name="area">${opcoesArea('fisioterapia')}</select></label>
+          <label>Solicitante<select name="solicitante_id"><option value="">—</option>${(sols || []).map((s) => `<option value="${s.id}">${esc(s.nome)} · ${esc(s.conselho)} ${esc(s.numero_conselho)}</option>`).join('')}</select></label>
+          <label>Data do pedido<input type="date" name="data_pedido" value="${hojeIso()}" required></label>
+          <label>Validade<input type="date" name="validade"></label>
+          <label>CID<input name="cid" placeholder="ex.: M54.5"></label>
+          <label>Sessões pedidas<input type="number" name="qtd_sessoes" min="1" placeholder="opcional"></label>
+          <label style="grid-column:1/-1">Indicação clínica<input name="indicacao_clinica"></label>
+          <label style="grid-column:1/-1">Arquivo do pedido (PDF/foto)<input type="file" name="arq" accept="${ACEITA}"></label>
+          </form>${(sols || []).length ? '' : '<div class="dica">Nenhum médico solicitante cadastrado: ele é cadastrado no fechamento do atendimento (Agenda → Atendido).</div>'}
+          <div class="linha-acoes"><button class="btn primario" id="s">Registrar</button></div>` : ''}</div>`;
+
+      $$('[data-abrir]', alvo).forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.abrir)));
+      $$('[data-anexar]', alvo).forEach((b) => (b.onclick = async () => {
+        const f = await escolherArquivo(); if (!f) return;
+        try {
+          const up = await enviarArquivo(f, `pacientes/${id}/encaminhamentos`);
+          const { error: er } = await sb.from('encaminhamentos').update(up).eq('id', b.dataset.anexar);
+          if (er) throw er; toast('Pedido anexado.'); recarregar();
+        } catch (e) { falha(e, 'Anexar'); }
+      }));
+      $$('[data-cancen]', alvo).forEach((b) => (b.onclick = async () => {
+        if (!(await confirmar('Cancelar este encaminhamento?', 'Cancelar'))) return;
+        const { error: er } = await sb.from('encaminhamentos').update({ status: 'cancelado' }).eq('id', b.dataset.cancen);
+        if (er) return falha(er); recarregar();
+      }));
+      $('#s')?.addEventListener('click', async () => {
+        const fd = new FormData($('#f')), f = Object.fromEntries(fd), arq = fd.get('arq');
+        if (!f.data_pedido) return toast('Informe a data do pedido.', true);
+        if (f.cid && !/^[A-Z][0-9]{2}(\.?[0-9A-Z]{0,2})?$/i.test(f.cid.trim())) return toast('CID em formato inválido (ex.: M54.5).', true);
+        try {
+          const up = arq && arq.size ? await enviarArquivo(arq, `pacientes/${id}/encaminhamentos`) : {};
+          const { error: er } = await sb.from('encaminhamentos').insert({ clinica_id: cid, paciente_id: id, area: f.area,
+            solicitante_id: f.solicitante_id || null, data_pedido: f.data_pedido, validade: f.validade || null,
+            cid: f.cid.trim().toUpperCase() || null, indicacao_clinica: f.indicacao_clinica || null,
+            qtd_sessoes: f.qtd_sessoes ? Number(f.qtd_sessoes) : null, ...up });
+          if (er) throw er;
+          toast(up.arquivo ? 'Encaminhamento registrado.' : 'Registrado sem arquivo: anexe o pedido antes do faturamento.'); recarregar();
+        } catch (e) { falha(e, 'Registrar'); }
+      });
+    },
+
     async autorizacoes() {
       // sessões usadas = atendimentos realizados ligados à autorização
       const usadas = {}; (ats || []).forEach((a) => a.autorizacao_id && a.status === 'atendido' && (usadas[a.autorizacao_id] = (usadas[a.autorizacao_id] || 0) + 1));
-      alvo.innerHTML = `<div class="cartao"><table><thead><tr><th>Data</th><th>Convênio</th><th>Procedimento</th><th>Senha</th><th class="num">Usadas / autorizadas</th><th>Validade</th></tr></thead><tbody>
+      alvo.innerHTML = `<div class="cartao"><table><thead><tr><th>Data</th><th>Convênio</th><th>Procedimento</th><th>Senha</th><th class="num">Usadas / autorizadas</th><th>Validade</th><th>Encaminhamento</th></tr></thead><tbody>
         ${(auts || []).map((a) => { const u = usadas[a.id] || 0, venc = a.validade && a.validade < hojeIso();
           return `<tr><td>${data(a.data_autorizacao)}</td><td>${esc(a.paciente_planos?.contratos?.nome)}</td>
           <td>${esc(a.procedimentos?.codigo)} · ${esc(a.procedimentos?.descricao)}</td><td>${esc(a.senha || '—')}</td>
           <td class="num"><strong>${u} / ${a.qtd_autorizada}</strong> ${u >= a.qtd_autorizada ? '<span class="selo alerta">esgotada</span>' : ''}</td>
-          <td>${a.validade ? data(a.validade) : '—'} ${venc ? '<span class="selo alerta">vencida</span>' : ''}</td></tr>`; }).join('')
-        || '<tr><td colspan="6" class="vazio">Nenhuma autorização registrada.</td></tr>'}</tbody></table>
+          <td>${a.validade ? data(a.validade) : '—'} ${venc ? '<span class="selo alerta">vencida</span>' : ''}</td>
+          <td>${celulaEnc(a)}</td></tr>`; }).join('')
+        || '<tr><td colspan="7" class="vazio">Nenhuma autorização registrada.</td></tr>'}</tbody></table>
         ${gestao && (planos || []).length ? `<h3 style="margin-top:16px">Registrar autorização</h3><form class="grade-form" id="f">
           <label>Convênio<select name="paciente_plano_id" id="pl">${planos.map((pl) => `<option value="${pl.id}" data-ct="${pl.contrato_id}">${esc(pl.contratos?.nome)}</option>`).join('')}</select></label>
           <label>Procedimento<select name="procedimento_id" id="proc"></select></label>
+          <label>Área<select name="area" id="area">${opcoesArea('fisioterapia')}</select></label>
+          <label>Encaminhamento<select name="encaminhamento_id" id="enc"></select></label>
           <label>Qtd. autorizada<input type="number" name="qtd" min="1" value="10"></label>
           <label>Senha<input name="senha"></label><label>Nº guia operadora<input name="guia"></label>
           <label>Data da autorização<input type="date" name="data" value="${hojeIso()}"></label><label>Validade<input type="date" name="validade"></label>
@@ -148,12 +220,34 @@ export async function render(params) {
         $('#proc').innerHTML = (itens || []).map((i) => `<option value="${i.procedimentos.id}">${esc(i.procedimentos.codigo)} · ${esc(i.procedimentos.descricao)}</option>`).join('');
       };
       if ($('#pl')) { $('#pl').onchange = carregaProcs; carregaProcs(); }
+      const carregaEnc = () => { $('#enc').innerHTML = '<option value="">— sem encaminhamento —</option>' + opcoesEnc($('#area').value); };
+      if ($('#area')) { $('#area').onchange = carregaEnc; carregaEnc(); }
+      $$('[data-vinc]', alvo).forEach((b) => (b.onclick = async () => {
+        const sel = $(`select[data-encsel="${b.dataset.vinc}"]`, alvo);
+        if (!sel.value) return toast('Escolha o encaminhamento.', true);
+        const { data: rv, error: er } = await sb.rpc('vincular_encaminhamento', { p_autorizacao: b.dataset.vinc, p_encaminhamento: sel.value });
+        if (er) return falha(er, 'Vincular');
+        (rv?.avisos || []).forEach((m) => toast(m, true)); if (!(rv?.avisos || []).length) toast('Encaminhamento vinculado.');
+        recarregar();
+      }));
+      $$('[data-desvinc]', alvo).forEach((b) => (b.onclick = async () => {
+        if (!(await confirmar('Desvincular o encaminhamento desta autorização?', 'Desvincular'))) return;
+        const { error: er } = await sb.rpc('vincular_encaminhamento', { p_autorizacao: b.dataset.desvinc, p_encaminhamento: null });
+        if (er) return falha(er); recarregar();
+      }));
       $('#s')?.addEventListener('click', async () => {
         const f = Object.fromEntries(new FormData($('#f')));
         if (!f.procedimento_id) return toast('Escolha o procedimento.', true);
-        const { error: er } = await sb.from('autorizacoes').insert({ clinica_id: cid, paciente_plano_id: f.paciente_plano_id, procedimento_id: f.procedimento_id,
-          qtd_autorizada: Number(f.qtd), senha: f.senha || null, numero_guia_operadora: f.guia || null, data_autorizacao: f.data, validade: f.validade || null });
-        if (er) return falha(er); toast('Autorização registrada.'); recarregar();
+        const { data: nova, error: er } = await sb.from('autorizacoes').insert({ clinica_id: cid, paciente_plano_id: f.paciente_plano_id, procedimento_id: f.procedimento_id,
+          area: f.area, qtd_autorizada: Number(f.qtd), senha: f.senha || null, numero_guia_operadora: f.guia || null, data_autorizacao: f.data, validade: f.validade || null })
+          .select('id').single();
+        if (er) return falha(er);
+        if (f.encaminhamento_id) {
+          const { data: rv, error: e2 } = await sb.rpc('vincular_encaminhamento', { p_autorizacao: nova.id, p_encaminhamento: f.encaminhamento_id });
+          if (e2) return falha(e2, 'Autorização salva, mas o vínculo falhou');
+          (rv?.avisos || []).forEach((m) => toast(m, true));
+        }
+        toast(f.encaminhamento_id ? 'Autorização registrada e vinculada ao encaminhamento.' : 'Autorização registrada sem encaminhamento.'); recarregar();
       });
     },
 
@@ -199,6 +293,20 @@ export async function render(params) {
         ${p.origem_id ? `(este paciente tem o ID antigo <strong>${esc(p.origem_id)}</strong>, que liga aos arquivos do sistema anterior)` : ''}.</div>`;
     },
   };
+
+  function opcoesEnc(area) {
+    return (encs || []).filter((en) => en.status === 'ativo' && (!area || en.area === area))
+      .map((en) => `<option value="${en.id}">${esc(AREAS[en.area])} · ${data(en.data_pedido)}${en.cid ? ' · ' + esc(en.cid) : ''}${en.validade && en.validade < hojeIso() ? ' (vencido)' : ''}</option>`).join('');
+  }
+  function celulaEnc(a) {
+    const en = (encs || []).find((x) => x.id === a.encaminhamento_id);
+    if (en) return `<span class="selo ok">✓ ${esc(AREAS[en.area])} · ${data(en.data_pedido)}</span>${en.arquivo ? '' : ' <span class="selo alerta">sem arquivo</span>'}
+      ${gestao ? ` <button class="btn pequeno" data-desvinc="${a.id}">Desvincular</button>` : ''}`;
+    if (!gestao) return '<span class="selo alerta">sem encaminhamento</span>';
+    const ops = opcoesEnc(a.area);
+    return ops ? `<select data-encsel="${a.id}" style="max-width:220px">${ops}</select> <button class="btn pequeno" data-vinc="${a.id}">Vincular</button>`
+      : `<span class="selo alerta">sem encaminhamento${a.area ? ' de ' + esc(AREAS[a.area]) : ''}</span>`;
+  }
 
   function listaAts(lista) {
     return lista.length ? `<table><thead><tr><th>Data</th><th>Serviço</th><th>Profissional</th><th>Status</th></tr></thead><tbody>

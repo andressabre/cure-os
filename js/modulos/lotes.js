@@ -1,6 +1,7 @@
 // Módulo Lotes TISS: guias prontas (cheias ou com senha vencida) → lote → XML 4.03.00 → envio → "a receber".
 import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar } from '../core.js';
 import { gerarXmlLote, latin1 } from './tiss-xml.js';
+import { enviarArquivo, abrirArquivo, escolherArquivo } from './documentos.js';
 
 const STATUS = { fechado: ['pendente', 'Fechado – enviar'], enviado: ['ok', 'Enviado'], protocolado: ['ok', 'Protocolado'],
   retornado: ['outra', 'Retornado'], aberto: ['pendente', 'Aberto'] };
@@ -126,6 +127,7 @@ async function detalhe(id) {
       ${fechado ? `<button class="btn primario" id="enviar">Registrar envio à operadora</button>` : ''}
       ${fechado ? `<button class="btn" id="desfazer">Desfazer lote</button>` : ''}
     </div>
+    <div id="anexos"></div>
     ${l.hash_md5 ? `<p class="muted">XML gerado em ${new Date(l.gerado_em).toLocaleString('pt-BR')} · hash ${esc(l.hash_md5)}</p>` : ''}
     <div class="cartao tabela-rolagem"><table><thead><tr><th>Guia</th><th>Senha</th><th>Carteirinha</th><th>Solicitante</th>
       <th>Data</th><th>Procedimento</th><th>Executante</th><th class="num">Valor</th></tr></thead><tbody>
@@ -135,6 +137,7 @@ async function detalhe(id) {
         <td class="num">${brl(it.valor)}</td></tr>`).join('')).join('')}
     </tbody></table></div>`;
 
+  anexosLote(id, l);
   const baixar = (bytes, nome) => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/xml' })); a.download = nome; a.click();
@@ -186,4 +189,53 @@ function anexos(l) {
     ${lista.map(esc).join(' · ')}.
     ${prazo ? (limite ? `Prazo: até <strong>${data(limite)}</strong> (${prazo} dias úteis após o envio).` : `Prazo: ${prazo} dias úteis após o envio.`) : ''}
     ${rg.cancelamento_dias_uteis ? `Cancelar faturamento: até ${rg.cancelamento_dias_uteis} dias úteis do protocolo.` : ''}</div>`;
+}
+
+// Anexos por guia: 03 = pedido médico (vem do encaminhamento vinculado à autorização), 06 = guia assinada
+async function anexosLote(id, l) {
+  const alvo = $('#anexos');
+  if (!(l.contratos?.regras?.anexos_obrigatorios || []).length) return;
+  const { data: gs, error } = await sb.rpc('anexos_lote', { p_lote: id });
+  if (error) return falha(error, 'Anexos');
+  const tem = (g, t) => g.anexos.find((a) => a.tipo === t);
+  const pedido = (g) => tem(g, '03')?.arquivo || g.encaminhamento?.arquivo;
+  const completos = gs.filter((g) => pedido(g) && tem(g, '06')).length;
+  alvo.innerHTML = `<div class="cartao tabela-rolagem" style="margin-bottom:14px"><div class="linha-acoes" style="justify-content:space-between">
+      <h3 style="margin:0">Anexos das guias</h3><span class="muted">${completos} de ${gs.length} guias com pedido e guia assinada</span></div>
+    <table><thead><tr><th>Guia</th><th>Paciente</th><th>03 · Pedido médico</th><th>06 · Guia assinada</th><th>Enviado ao portal</th></tr></thead><tbody>
+    ${gs.map((g) => {
+      const en = g.encaminhamento, ped = pedido(g), ass = tem(g, '06'), enviado = g.anexos.length && g.anexos.every((a) => a.enviado);
+      const vencido = en?.validade && g.primeira && en.validade < g.primeira;
+      return `<tr><td>${esc(g.numero)}</td><td>${esc(g.paciente)}</td>
+        <td>${ped ? `<button class="btn pequeno" data-abrir="${esc(ped)}">Ver</button>` : `<span class="selo alerta">${en ? 'encaminhamento sem arquivo' : 'sem encaminhamento'}</span>`}
+          ${vencido ? ' <span class="selo alerta">vencido antes da 1ª sessão</span>' : ''}
+          ${!ped ? ` <button class="btn pequeno" data-sobe="03" data-g="${g.guia_id}">Anexar</button>` : ''}</td>
+        <td>${ass ? `<button class="btn pequeno" data-abrir="${esc(ass.arquivo)}">Ver</button>` : '<span class="selo alerta">falta</span>'}
+          <button class="btn pequeno" data-sobe="06" data-g="${g.guia_id}">${ass ? 'Trocar' : 'Anexar'}</button></td>
+        <td>${enviado ? `<span class="selo ok">✓ ${data(g.anexos[0].enviado)}</span>`
+          : ped && ass ? `<button class="btn pequeno" data-env="${g.guia_id}">Marcar enviados</button>` : '<span class="muted">—</span>'}</td></tr>`;
+    }).join('')}</tbody></table>
+    <p class="muted">O pedido vem do encaminhamento vinculado à autorização (ficha do paciente). Depois do upload do XML, envie os anexos de cada guia no portal e marque aqui.</p></div>`;
+
+  $$('[data-abrir]', alvo).forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.abrir)));
+  $$('[data-sobe]', alvo).forEach((b) => (b.onclick = async () => {
+    const f = await escolherArquivo(); if (!f) return;
+    try {
+      const up = await enviarArquivo(f, `guias/${b.dataset.g}`);
+      if (b.dataset.sobe === '06') await sb.from('guia_anexos').delete().eq('guia_id', b.dataset.g).eq('tipo', '06');
+      const { error: e } = await sb.from('guia_anexos').insert({ clinica_id: estado.clinica.id, guia_id: b.dataset.g, tipo: b.dataset.sobe, ...up });
+      if (e) throw e; toast('Anexo salvo.'); anexosLote(id, l);
+    } catch (e) { falha(e, 'Anexar'); }
+  }));
+  $$('[data-env]', alvo).forEach((b) => (b.onclick = async () => {
+    const g = gs.find((x) => x.guia_id === b.dataset.env), hoje = new Date().toISOString().slice(0, 10);
+    // o pedido que vem do encaminhamento vira registro da guia, para guardar a data de envio
+    if (!tem(g, '03') && g.encaminhamento?.arquivo) {
+      const { error: e } = await sb.from('guia_anexos').insert({ clinica_id: estado.clinica.id, guia_id: g.guia_id, tipo: '03',
+        arquivo: g.encaminhamento.arquivo, arquivo_nome: g.encaminhamento.arquivo_nome });
+      if (e) return falha(e);
+    }
+    const { error: e } = await sb.from('guia_anexos').update({ enviado_portal_em: hoje }).eq('guia_id', g.guia_id);
+    if (e) return falha(e); anexosLote(id, l);
+  }));
 }
