@@ -1,5 +1,6 @@
 // Módulo Painel: visão rápida de faturamento e glosas confirmadas e em revisão.
-import { sb, estado, esc, brl, pct, data, tela, falha } from '../core.js';
+import { sb, estado, $, esc, brl, pct, data, tela, falha } from '../core.js';
+import { cartaoBackup } from './backup.js';
 
 export async function render() {
   const c = tela('Painel');
@@ -25,6 +26,7 @@ export async function render() {
   const ordem = { alta: 0, media: 1, baixa: 2 }, rot = { alta: ['alerta', 'Alta'], media: ['pendente', 'Média'], baixa: ['outra', 'Baixa'] };
   const ps = (pend || []).sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade]);
   c.innerHTML = `
+    <div id="backup"></div>
     <div class="cartao"><h3>Pendências ${ps.length ? `<span class="selo alerta">${ps.length}</span>` : ''}</h3>
       ${ps.length ? `<table><tbody>${ps.map((x) => `<tr class="clicavel" onclick="location.hash='${esc(x.link)}'">
         <td style="width:80px"><span class="selo ${rot[x.gravidade][0]}">${rot[x.gravidade][1]}</span></td>
@@ -48,4 +50,5 @@ export async function render() {
         <td>${data(r.data_emissao)}</td><td>${esc(r.contratos?.nome)}</td><td>${r.status === 'confirmado' ? '<span class="selo ok">Confirmado</span>' : '<span class="selo pendente">Em revisão</span>'}</td></tr>`).join('')}</tbody></table>`
       : '<div class="vazio">Nenhum retorno ainda.</div>'}
     </div>`;
+  cartaoBackup($('#backup'));
 }
