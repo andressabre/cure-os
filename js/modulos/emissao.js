@@ -181,16 +181,18 @@ export function imprimirDoc(d, prof, t, janela) {
   .faixa::after{content:"";position:absolute;right:30mm;top:0;width:46mm;height:5mm;background:#F8781D;transform:skewX(-18deg)}
   h1{font-family:"Barlow Semi Condensed",Arial,sans-serif;font-style:italic;font-weight:700;font-size:21pt;text-align:center;margin:16mm 0 10mm;letter-spacing:.01em}
   h1::after{content:"";display:block;width:22mm;height:2.2mm;background:#F8781D;transform:skewX(-18deg);margin:4mm auto 0}
+  .marca{position:absolute;left:50%;top:52%;width:150mm;transform:translate(-45%,-50%);pointer-events:none;z-index:0}
+  .topo,h1,.corpo,.local,.ass,.rodape{position:relative;z-index:1}
   .corpo{text-align:justify;flex:1} .corpo p{margin:0 0 4mm}
   .local{text-align:right;margin:10mm 0 22mm}
   .ass{text-align:center;margin:0 auto 6mm;width:95mm;border-top:1px solid #23272A;padding-top:2mm;line-height:1.35}
   .ass strong{display:block;font-weight:600} .ass span{font-size:9.5pt;color:#5E666B}
-  .rodape{position:absolute;left:22mm;right:22mm;bottom:10mm;font-size:8pt;color:#5E666B;text-align:center;border-top:1px solid #D9DDD8;padding-top:3mm;line-height:1.5}
+  .rodape{position:absolute !important;left:22mm;right:22mm;bottom:10mm;font-size:8pt;color:#5E666B;text-align:center;border-top:1px solid #D9DDD8;padding-top:3mm;line-height:1.5}
   .rodape .ver{margin-top:1.5mm;font-size:7.5pt} .rodape code{color:#23272A;font-weight:600}
   .bt{position:fixed;top:10px;right:10px;padding:8px 14px;background:#F8781D;color:#fff;border:0;border-radius:6px;font:600 13px Barlow,Arial;cursor:pointer}
   @media print{html,body{background:#fff}.bt{display:none}.folha{margin:0}}
 </style></head><body><button class="bt" onclick="print()">Imprimir / salvar PDF</button>
-<div class="folha"><div class="faixa"></div>
+<div class="folha"><div class="faixa"></div><img class="marca" src="${base}marca-dagua.png" alt="">
   <div class="topo"><img src="${base}logo.png" alt="Clínica Cure"><div class="id">${esc(t.razao_social || 'Clínica Cure')}<br>CNPJ ${esc(t.cnpj || '')}</div></div>
   <h1>${esc(d.titulo)}</h1>
   <div class="corpo">${para}</div>
