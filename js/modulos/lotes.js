@@ -120,7 +120,7 @@ async function detalhe(id) {
     <div class="linha-acoes" style="justify-content:flex-start;margin:12px 0">
       ${fechado ? `<button class="btn primario" id="gerar" ${bloqueios.length ? 'disabled title="Resolva os bloqueios acima"' : ''}>Gerar e baixar XML</button>` : ''}
       ${l.arquivo_xml ? `<button class="btn" id="baixar">Baixar XML gravado</button>` : ''}
-      ${fechado && l.arquivo_xml ? `<button class="btn primario" id="enviar">Registrar envio à operadora</button>` : ''}
+      ${fechado ? `<button class="btn primario" id="enviar">Registrar envio à operadora</button>` : ''}
       ${fechado ? `<button class="btn" id="desfazer">Desfazer lote</button>` : ''}
     </div>
     ${l.hash_md5 ? `<p class="muted">XML gerado em ${new Date(l.gerado_em).toLocaleString('pt-BR')} · hash ${esc(l.hash_md5)}</p>` : ''}
@@ -154,12 +154,14 @@ async function detalhe(id) {
   });
   $('#enviar', c)?.addEventListener('click', () => modal(`<h3>Registrar envio do lote ${esc(l.numero_lote)}</h3>
     <label>Data do envio<input type="date" id="dt" value="${new Date().toISOString().slice(0, 10)}"></label>
+    <label>Nº do lote/GRD dado pela operadora<input id="numop" placeholder="ex.: SulAmérica 261109010459 — deixe vazio se for o nosso (${esc(l.numero_lote)})"></label>
     <label>Protocolo da operadora (se já tiver)<input id="prot" placeholder="opcional"></label>
+    <p class="muted">O número do lote é o que volta no retorno de glosas. Se o portal deu outro, informe aqui para o retorno encontrar este lote.</p>
     <p class="dica">Depois do envio o lote não pode mais ser alterado. O valor entra no Financeiro como "a receber", com vencimento pelo prazo de pagamento do contrato (padrão 30 dias).</p>
     <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="ok">Registrar envio</button></div>`,
   (m, fechar) => {
     $('#ok', m).onclick = async () => {
-      const { data: venc, error: e } = await sb.rpc('registrar_envio_lote', { p_lote: id, p_data_envio: $('#dt', m).value, p_protocolo: $('#prot', m).value });
+      const { data: venc, error: e } = await sb.rpc('registrar_envio_lote', { p_lote: id, p_data_envio: $('#dt', m).value, p_protocolo: $('#prot', m).value, p_numero_operadora: $('#numop', m).value });
       if (e) return falha(e, 'Registrar envio');
       fechar(); toast(`Envio registrado. A receber previsto para ${data(venc)}.`); render(id);
     };
