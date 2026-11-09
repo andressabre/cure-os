@@ -123,6 +123,6 @@ grant execute on function verificar_documento(text) to anon, authenticated;
 -- Dados do timbrado (editáveis depois em clinicas.config.timbrado)
 update clinicas set config = config || jsonb_build_object('timbrado', jsonb_build_object(
   'razao_social', 'Cure Saúde e Desempenho Ltda', 'cnpj', '31.167.694/0001-80',
-  'endereco', 'Rua Blumenau, 178 – Centro – Joinville/SC', 'telefone', '',
+  'endereco', 'Rua Blumenau, 178 – Centro – Joinville/SC', 'telefone', '(47) 3801-2376 (WhatsApp)',
   'email', 'clinicacureadm@gmail.com', 'site', 'curesaudeedesempenho.com', 'instagram', '@clinica_cure'))
 where id = 'c0000000-0000-4000-8000-000000000001' and not (config ? 'timbrado');
