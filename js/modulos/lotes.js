@@ -5,8 +5,9 @@ import { gerarXmlLote, latin1 } from './tiss-xml.js';
 const STATUS = { fechado: ['pendente', 'Fechado – enviar'], enviado: ['ok', 'Enviado'], protocolado: ['ok', 'Protocolado'],
   retornado: ['outra', 'Retornado'], aberto: ['pendente', 'Aberto'] };
 const MOTIVO = { cheia: ['ok', 'Cheia'], senha_vencida: ['alerta', 'Senha vencida'], sem_exigencia: ['ok', 'Sem senha exigida'],
-  aguardando: ['pendente', 'Em andamento'], sem_senha: ['alerta', 'Sem senha'] };
-const PRONTA = ['cheia', 'senha_vencida', 'sem_exigencia'];
+  aguardando: ['pendente', 'Em andamento'], sem_senha: ['alerta', 'Sem senha'],
+  prazo_entrega: ['alerta', 'Prazo de entrega'] };
+const PRONTA = ['cheia', 'senha_vencida', 'sem_exigencia', 'prazo_entrega'];
 const ALERTA_DIAS = 15;
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
@@ -28,7 +29,8 @@ export async function render(id) {
 
   c.innerHTML = `
     <div class="dica">Entra no lote só a guia <strong>cheia</strong> (todas as sessões autorizadas feitas) ou com a <strong>senha vencida</strong>
-      (vai com as sessões realizadas). Guia em andamento espera o próximo fechamento.</div>
+      (vai com as sessões realizadas). Guia em andamento espera o próximo fechamento — exceto quando a 1ª sessão se aproxima
+      do prazo de entrega do contrato (SulAmérica: 90 dias), para não perder a conta.</div>
     ${alertas.length ? `<div class="cartao" style="border-left:4px solid var(--alerta,#c0392b)"><h3>Senhas perto de vencer</h3>
       <table><thead><tr><th>Guia</th><th>Paciente</th><th>Contrato</th><th class="num">Feitas</th><th>Vence</th><th></th></tr></thead><tbody>
       ${alertas.map((x) => `<tr><td>${esc(x.numero)}</td><td>${esc(x.paciente)}</td><td>${esc(x.contrato)}</td>
@@ -95,7 +97,7 @@ async function detalhe(id) {
   $('#voltar').onclick = () => (location.hash = 'lotes');
   const [{ data: d, error }, { data: l, error: e2 }] = await Promise.all([
     sb.rpc('dados_xml_lote', { p_lote: id }),
-    sb.from('lotes').select('id, numero_lote, status, data_envio, protocolo, previsto_pagamento, hash_md5, gerado_em, arquivo_xml').eq('id', id).single(),
+    sb.from('lotes').select('id, numero_lote, status, data_envio, protocolo, previsto_pagamento, hash_md5, gerado_em, arquivo_xml, contratos(regras)').eq('id', id).single(),
   ]);
   if (error || e2) return falha(error || e2, 'Lote');
   const r = gerarXmlLote(d);
@@ -115,6 +117,7 @@ async function detalhe(id) {
         <div class="sub">${l.data_envio ? 'enviado ' + data(l.data_envio) + (l.protocolo ? ' · prot. ' + esc(l.protocolo) : '') : ''}
         ${l.previsto_pagamento ? ' · pagamento previsto ' + data(l.previsto_pagamento) : ''}</div></div>
     </div>
+    ${anexos(l)}
     ${bloqueios.map((p) => `<div class="dica" style="border-left:4px solid #c0392b">⛔ ${esc(p.msg)}</div>`).join('')}
     ${avisos.map((p) => `<div class="dica">⚠️ ${esc(p.msg)}</div>`).join('')}
     <div class="linha-acoes" style="justify-content:flex-start;margin:12px 0">
@@ -166,4 +169,21 @@ async function detalhe(id) {
       fechar(); toast(`Envio registrado. A receber previsto para ${data(venc)}.`); render(id);
     };
   }));
+}
+
+// Dias úteis (seg–sex; feriados não considerados)
+function maisDiasUteis(iso, n) {
+  const d = new Date(iso + 'T12:00');
+  while (n > 0) { d.setDate(d.getDate() + 1); if (d.getDay() % 6) n--; }
+  return d.toISOString().slice(0, 10);
+}
+
+function anexos(l) {
+  const rg = l.contratos?.regras || {}, lista = rg.anexos_obrigatorios || [];
+  if (!lista.length) return '';
+  const prazo = rg.prazo_anexos_dias_uteis, limite = l.data_envio && prazo ? maisDiasUteis(l.data_envio, prazo) : null;
+  return `<div class="dica"><strong>Anexos obrigatórios por guia no portal</strong> (depois do upload do XML):
+    ${lista.map(esc).join(' · ')}.
+    ${prazo ? (limite ? `Prazo: até <strong>${data(limite)}</strong> (${prazo} dias úteis após o envio).` : `Prazo: ${prazo} dias úteis após o envio.`) : ''}
+    ${rg.cancelamento_dias_uteis ? `Cancelar faturamento: até ${rg.cancelamento_dias_uteis} dias úteis do protocolo.` : ''}</div>`;
 }
