@@ -2,6 +2,7 @@
 // Abas: Resumo · Dados · Convênios · Encaminhamentos · Autorizações · Atendimentos · Guias e glosas · Prontuário
 import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo, ACEITA } from './documentos.js';
+import { imprimirGuia } from './guia-impressa.js';
 
 const ABAS = [['resumo', 'Resumo'], ['dados', 'Dados'], ['convenios', 'Convênios'], ['encaminhamentos', 'Encaminhamentos'], ['autorizacoes', 'Autorizações'],
   ['atendimentos', 'Atendimentos'], ['guias', 'Guias e glosas'], ['prontuario', 'Prontuário']];
@@ -273,7 +274,8 @@ export async function render(params) {
           ${gs.map((g) => `<tr><td>${data(g.data_atendimento)}</td><td>${esc(g.numero_guia_prestador)}</td><td>${esc(g.contratos?.nome)}</td><td>${esc(g.status)}</td>
             <td class="num">${brl(g.guia_itens.reduce((s, i) => s + Number(i.valor_informado), 0))}</td>
             <td class="num">${brl(g.guia_itens.reduce((s, i) => s + Number(i.valor_glosa), 0))}</td>
-            <td>${['rascunho', 'pronta'].includes(g.status) ? `<button class="btn pequeno" data-cancg="${g.id}">Cancelar</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+            <td style="white-space:nowrap"><button class="btn pequeno" data-impg="${g.id}">Imprimir</button>
+              ${['rascunho', 'pronta'].includes(g.status) ? `<button class="btn pequeno" data-cancg="${g.id}">Cancelar</button>` : ''}</td></tr>`).join('')}</tbody></table>`
           : '<div class="vazio">Nenhuma guia ainda. Elas são geradas na Agenda, ao marcar o atendimento como Atendido.</div>'}</div>
         <div class="cartao"><h3>Histórico nos retornos das operadoras</h3>
         ${(rls || []).length ? `<p class="muted">${rls.length} itens encontrados pela carteirinha · ${glosadas.length} glosados (${brl(glosadas.reduce((s, l) => s + Number(l.valor_glosa), 0))})</p>
@@ -282,6 +284,7 @@ export async function render(params) {
             <td class="num">${brl(l.valor_informado)}</td><td class="num">${Number(l.valor_glosa) ? `<strong>${brl(l.valor_glosa)}</strong>` : '—'}</td>
             <td>${l.codigo_glosa ? `${esc(l.codigo_glosa)} ${esc((desc[l.codigo_glosa] || '').slice(0, 50))}` : ''}</td></tr>`).join('')}</tbody></table>`
           : '<div class="vazio">Nenhum item nos retornos importados para a carteirinha deste paciente.</div>'}</div>`;
+      $$('[data-impg]', alvo).forEach((b) => (b.onclick = () => imprimirGuia(b.dataset.impg)));
       $$('[data-cancg]', alvo).forEach((b) => (b.onclick = async () => {
         if (!(await confirmar('Cancelar esta guia? Ela não será enviada no lote.', 'Cancelar guia'))) return;
         const { error: e } = await sb.rpc('cancelar_guia', { p_guia: b.dataset.cancg });

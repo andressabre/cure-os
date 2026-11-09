@@ -1,6 +1,7 @@
 // Fechamento do atendimento: escolhe convênio, autorização e procedimentos, confere os bloqueios anti-glosa
 // (função SQL guia_atendimento) e gera a guia TISS. Particular/sem convênio só marca "Atendido".
 import { sb, estado, $, $$, esc, brl, data, toast, falha, modal } from '../core.js';
+import { imprimirGuia } from './guia-impressa.js';
 
 export async function fecharAtendimento(a, aoConcluir) {
   const { data: op, error } = await sb.rpc('opcoes_guia', { p_atendimento: a.id });
@@ -151,6 +152,13 @@ export async function fecharAtendimento(a, aoConcluir) {
       fechar();
       toast(r.guias.length ? r.guias.map((g) => g.nova ? `Guia nº ${g.numero} criada` : `Sessão acrescentada à guia nº ${g.numero}`).join('; ') + '. Atendimento marcado como Atendido.' : 'Atendimento registrado (acordo sem guia).');
       aoConcluir?.();
+      // Guia nova = folha nova para o paciente assinar (anexo 06)
+      const novas = r.guias.filter((g) => g.nova);
+      if (novas.length) modal(`<h3>Guia para assinatura</h3><p>Imprimir a guia nº ${novas.map((g) => esc(g.numero)).join(', ')} para o paciente assinar?</p>
+        <p class="muted">Depois de assinada, fotografe ou digitalize e anexe no lote (anexo 06).</p>
+        <div class="linha-acoes"><button class="btn" data-fechar>Agora não</button>
+        ${novas.map((g) => `<button class="btn primario" data-imp="${g.id}">Imprimir nº ${esc(g.numero)}</button>`).join('')}</div>`,
+        (m) => m.querySelectorAll('[data-imp]').forEach((b) => (b.onclick = () => imprimirGuia(b.dataset.imp))));
     };
     desenhar();
   });

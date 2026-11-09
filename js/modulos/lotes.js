@@ -2,6 +2,7 @@
 import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar } from '../core.js';
 import { gerarXmlLote, latin1 } from './tiss-xml.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo } from './documentos.js';
+import { imprimirGuia } from './guia-impressa.js';
 
 const STATUS = { fechado: ['pendente', 'Fechado – enviar'], enviado: ['ok', 'Enviado'], protocolado: ['ok', 'Protocolado'],
   retornado: ['outra', 'Retornado'], aberto: ['pendente', 'Aberto'] };
@@ -211,13 +212,15 @@ async function anexosLote(id, l) {
           ${vencido ? ' <span class="selo alerta">vencido antes da 1ª sessão</span>' : ''}
           ${!ped ? ` <button class="btn pequeno" data-sobe="03" data-g="${g.guia_id}">Anexar</button>` : ''}</td>
         <td>${ass ? `<button class="btn pequeno" data-abrir="${esc(ass.arquivo)}">Ver</button>` : '<span class="selo alerta">falta</span>'}
-          <button class="btn pequeno" data-sobe="06" data-g="${g.guia_id}">${ass ? 'Trocar' : 'Anexar'}</button></td>
+          <button class="btn pequeno" data-sobe="06" data-g="${g.guia_id}">${ass ? 'Trocar' : 'Anexar'}</button>
+          ${ass ? '' : `<button class="btn pequeno" data-imp="${g.guia_id}">Imprimir</button>`}</td>
         <td>${enviado ? `<span class="selo ok">✓ ${data(g.anexos[0].enviado)}</span>`
           : ped && ass ? `<button class="btn pequeno" data-env="${g.guia_id}">Marcar enviados</button>` : '<span class="muted">—</span>'}</td></tr>`;
     }).join('')}</tbody></table>
     <p class="muted">O pedido vem do encaminhamento vinculado à autorização (ficha do paciente). Depois do upload do XML, envie os anexos de cada guia no portal e marque aqui.</p></div>`;
 
   $$('[data-abrir]', alvo).forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.abrir)));
+  $$('[data-imp]', alvo).forEach((b) => (b.onclick = () => imprimirGuia(b.dataset.imp)));
   $$('[data-sobe]', alvo).forEach((b) => (b.onclick = async () => {
     const f = await escolherArquivo(); if (!f) return;
     try {
