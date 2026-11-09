@@ -5,7 +5,20 @@ import { sb, estado, toast } from '../core.js';
 const EXT = ['pdf', 'jpg', 'jpeg', 'png', 'tif', 'tiff'];
 export const ACEITA = EXT.map((e) => '.' + e).join(',');
 
-export async function enviarArquivo(arquivo, pasta) {
+// Foto de celular (3–5 MB) vira JPEG de até 2000 px, ~300 KB, ainda legível para a operadora
+async function comprimir(arquivo) {
+  if (!/^image\/(jpeg|png)$/.test(arquivo.type) || arquivo.size < 600 * 1024) return arquivo;
+  try {
+    const img = await createImageBitmap(arquivo), lado = 2000, k = Math.min(1, lado / Math.max(img.width, img.height));
+    const cv = Object.assign(document.createElement('canvas'), { width: Math.round(img.width * k), height: Math.round(img.height * k) });
+    const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.8));
+    return blob && blob.size < arquivo.size ? new File([blob], arquivo.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : arquivo;
+  } catch { return arquivo; }
+}
+
+export async function enviarArquivo(original, pasta) {
+  const arquivo = await comprimir(original);
   const ext = (arquivo.name.split('.').pop() || '').toLowerCase();
   if (!EXT.includes(ext)) throw new Error('Formato não aceito. Use PDF, JPG, PNG ou TIFF.');
   if (arquivo.size > 10 * 1024 * 1024) throw new Error('Arquivo maior que 10 MB (limite do portal da operadora).');

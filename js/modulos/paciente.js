@@ -153,17 +153,18 @@ export async function render(params) {
         ${(encs || []).map(linha).join('') || '<tr><td colspan="8" class="vazio">Nenhum encaminhamento registrado.</td></tr>'}</tbody></table>
         ${gestao ? `<h3 style="margin-top:16px">Registrar encaminhamento</h3><form class="grade-form" id="f">
           <label>Área<select name="area">${opcoesArea('fisioterapia')}</select></label>
-          <label>Solicitante<select name="solicitante_id"><option value="">—</option>${(sols || []).map((s) => `<option value="${s.id}">${esc(s.nome)} · ${esc(s.conselho)} ${esc(s.numero_conselho)}</option>`).join('')}</select></label>
+          <label>Solicitante <a href="#" id="novo-sol" style="font-weight:400">+ novo médico</a><select name="solicitante_id" id="sol"><option value="">—</option>${(sols || []).map((s) => `<option value="${s.id}">${esc(s.nome)} · ${esc(s.conselho)} ${esc(s.numero_conselho)}</option>`).join('')}</select></label>
           <label>Data do pedido<input type="date" name="data_pedido" value="${hojeIso()}" required></label>
           <label>Validade<input type="date" name="validade"></label>
           <label>CID<input name="cid" placeholder="ex.: M54.5"></label>
           <label>Sessões pedidas<input type="number" name="qtd_sessoes" min="1" placeholder="opcional"></label>
           <label style="grid-column:1/-1">Indicação clínica<input name="indicacao_clinica"></label>
           <label style="grid-column:1/-1">Arquivo do pedido (PDF/foto)<input type="file" name="arq" accept="${ACEITA}"></label>
-          </form>${(sols || []).length ? '' : '<div class="dica">Nenhum médico solicitante cadastrado: ele é cadastrado no fechamento do atendimento (Agenda → Atendido).</div>'}
+          </form>
           <div class="linha-acoes"><button class="btn primario" id="s">Registrar</button></div>` : ''}</div>`;
 
       $$('[data-abrir]', alvo).forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.abrir)));
+      $('#novo-sol')?.addEventListener('click', (ev) => { ev.preventDefault(); novoSolicitante(); });
       $$('[data-anexar]', alvo).forEach((b) => (b.onclick = async () => {
         const f = await escolherArquivo(); if (!f) return;
         try {
@@ -293,6 +294,37 @@ export async function render(params) {
         ${p.origem_id ? `(este paciente tem o ID antigo <strong>${esc(p.origem_id)}</strong>, que liga aos arquivos do sistema anterior)` : ''}.</div>`;
     },
   };
+
+  // Cadastro rápido do médico do pedido (vai na guia SP/SADT: conselho, número, UF e CBO)
+  function novoSolicitante() {
+    modal(`<h3>Novo médico solicitante</h3><form class="grade-form" id="fs">
+      <label style="grid-column:1/-1">Nome<input name="nome" required></label>
+      <label>Conselho<select name="conselho">${['CRM', 'CRO', 'CREFITO', 'CRN', 'CRP', 'COREN', 'CRFA'].map((k) => `<option>${k}</option>`).join('')}</select></label>
+      <label>Número<input name="numero_conselho" required inputmode="numeric"></label>
+      <label>UF<input name="uf_conselho" value="SC" maxlength="2" required></label>
+      <label>CBO<input name="cbo" value="225125" maxlength="6" title="225125 = médico clínico; especialistas têm CBO próprio (ex.: 225270 ortopedista)"></label>
+      </form><p class="muted">CBO 225125 = médico clínico. Ortopedista 225270, neurologista 225112, psiquiatra 225133.</p>
+      <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="ok">Salvar</button></div>`, (m, fechar) => {
+      $('#ok', m).onclick = async () => {
+        const f = Object.fromEntries(new FormData($('#fs', m)));
+        if (!f.nome.trim() || !f.numero_conselho.trim()) return toast('Informe nome e número do conselho.', true);
+        if (!/^\d{6}$/.test(f.cbo)) return toast('CBO deve ter 6 dígitos.', true);
+        const { data: ex } = await sb.from('solicitantes').select('id').eq('clinica_id', cid).eq('conselho', f.conselho)
+          .eq('numero_conselho', f.numero_conselho.trim()).eq('uf_conselho', f.uf_conselho.toUpperCase()).maybeSingle();
+        let sid = ex?.id;
+        if (!sid) {
+          const { data: novo, error: er } = await sb.from('solicitantes').insert({ clinica_id: cid, nome: f.nome.trim(), conselho: f.conselho,
+            numero_conselho: f.numero_conselho.trim(), uf_conselho: f.uf_conselho.toUpperCase(), cbo: f.cbo }).select('id, nome, conselho, numero_conselho').single();
+          if (er) return falha(er, 'Salvar médico');
+          sid = novo.id; sols.push(novo);
+        } else toast('Este médico já estava cadastrado: selecionado.');
+        const sel = $('#sol');
+        if (sel && !sel.querySelector(`option[value="${sid}"]`)) sel.insertAdjacentHTML('beforeend', `<option value="${sid}">${esc(f.nome.trim())} · ${esc(f.conselho)} ${esc(f.numero_conselho.trim())}</option>`);
+        if (sel) sel.value = sid;
+        fechar();
+      };
+    });
+  }
 
   function opcoesEnc(area) {
     return (encs || []).filter((en) => en.status === 'ativo' && (!area || en.area === area))
