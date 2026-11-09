@@ -31,7 +31,7 @@ export function falha(error, contexto = '') {
 
 export function modal(html, aoMontar) {
   const m = $('#modal'), c = $('#modal-caixa');
-  c.innerHTML = html; m.hidden = false;
+  c.className = 'modal-caixa'; c.innerHTML = html; m.hidden = false;
   const fechar = () => { m.hidden = true; c.innerHTML = ''; };
   m.onclick = (e) => { if (e.target === m) fechar(); };
   $$('[data-fechar]', c).forEach((b) => (b.onclick = fechar));

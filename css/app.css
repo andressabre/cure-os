@@ -178,3 +178,11 @@ p.ok{color:var(--verde);font-weight:600} p.aviso{background:var(--amarelo-claro)
 .g-col .g-dica{bottom:auto;top:-6px}
 .g-tabela{margin-top:30px;font-size:13px;color:var(--texto-2)} .g-tabela summary{cursor:pointer;width:max-content}
 .g-tabela table{max-width:260px;margin-top:6px}
+
+/* ---------- Prontuário ---------- */
+.modal-caixa.largo{width:min(880px,100%)}
+.pr-form .pr-area{display:grid;gap:4px;margin-top:12px}
+.pr-form textarea{width:100%;resize:vertical}
+.pr-campo{margin:8px 0}
+.pr-rot{font-size:12.5px;font-weight:600;color:var(--texto-2);text-transform:uppercase;letter-spacing:.03em}
+.pr-txt{white-space:pre-wrap}

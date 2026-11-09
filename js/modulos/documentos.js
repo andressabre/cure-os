@@ -17,20 +17,20 @@ async function comprimir(arquivo) {
   } catch { return arquivo; }
 }
 
-export async function enviarArquivo(original, pasta) {
+export async function enviarArquivo(original, pasta, bucket = 'documentos') {
   const arquivo = await comprimir(original);
   const ext = (arquivo.name.split('.').pop() || '').toLowerCase();
   if (!EXT.includes(ext)) throw new Error('Formato não aceito. Use PDF, JPG, PNG ou TIFF.');
   if (arquivo.size > 10 * 1024 * 1024) throw new Error('Arquivo maior que 10 MB (limite do portal da operadora).');
   const caminho = `${estado.clinica.id}/${pasta}/${crypto.randomUUID()}.${ext}`;
-  const { error } = await sb.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || undefined });
+  const { error } = await sb.storage.from(bucket).upload(caminho, arquivo, { contentType: arquivo.type || undefined });
   if (error) throw error;
   return { arquivo: caminho, arquivo_nome: arquivo.name };
 }
 
-export async function abrirArquivo(caminho) {
+export async function abrirArquivo(caminho, bucket = 'documentos') {
   const janela = window.open('', '_blank');   // abre já no clique (bloqueador de pop-up)
-  const { data, error } = await sb.storage.from('documentos').createSignedUrl(caminho, 300);
+  const { data, error } = await sb.storage.from(bucket).createSignedUrl(caminho, 300);
   if (error) { janela?.close(); return toast('Não foi possível abrir o arquivo: ' + error.message, true); }
   if (janela) janela.location = data.signedUrl; else location.href = data.signedUrl;
 }

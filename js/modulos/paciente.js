@@ -3,6 +3,7 @@
 import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo, ACEITA } from './documentos.js';
 import { imprimirGuia } from './guia-impressa.js';
+import { abaProntuario } from './prontuario.js';
 
 const ABAS = [['resumo', 'Resumo'], ['dados', 'Dados'], ['convenios', 'Convênios'], ['encaminhamentos', 'Encaminhamentos'], ['autorizacoes', 'Autorizações'],
   ['atendimentos', 'Atendimentos'], ['guias', 'Guias e glosas'], ['prontuario', 'Prontuário']];
@@ -13,7 +14,8 @@ const hojeIso = () => new Date().toISOString().slice(0, 10);
 const dh = (d) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 export async function render(params) {
-  const [id, abaUrl] = [params.slice(0, 36), params.slice(37) || 'resumo'];
+  const [id, abaHash] = [params.slice(0, 36), params.slice(37) || 'resumo'];
+  const [abaUrl, abaExtra] = abaHash.split(':');
   const c = tela('Paciente', '<a class="btn" href="#pacientes">← Pacientes</a>');
   const gestao = podeGerir() || estado.perfil === 'recepcao';
   const cid = estado.clinica.id;
@@ -21,7 +23,7 @@ export async function render(params) {
   const [{ data: p, error }, { data: planos }, { data: ats }, { data: auts }, { data: contratos }, { data: encs }, { data: sols }] = await Promise.all([
     sb.from('pacientes').select('*').eq('id', id).single(),
     sb.from('paciente_planos').select('*, contratos(id, nome)').eq('paciente_id', id).order('principal', { ascending: false }),
-    sb.from('atendimentos').select('id, inicio, status, servico, autorizacao_id, profissionais(nome)').eq('paciente_id', id).order('inicio', { ascending: false }),
+    sb.from('atendimentos').select('id, inicio, status, servico, autorizacao_id, profissional_id, profissionais(nome)').eq('paciente_id', id).order('inicio', { ascending: false }),
     sb.from('autorizacoes').select('*, procedimentos(codigo, descricao), profissionais(nome), paciente_planos!inner(paciente_id, contratos(nome))')
       .eq('paciente_planos.paciente_id', id).order('data_autorizacao', { ascending: false }),
     gestao ? sb.from('contratos').select('id, nome').eq('clinica_id', cid).eq('ativo', true).order('nome') : Promise.resolve({ data: [] }),
@@ -292,10 +294,7 @@ export async function render(params) {
       }));
     },
 
-    prontuario() {
-      alvo.innerHTML = `<div class="cartao vazio">O prontuário entra na próxima fase, junto com a importação dos prontuários antigos
-        ${p.origem_id ? `(este paciente tem o ID antigo <strong>${esc(p.origem_id)}</strong>, que liga aos arquivos do sistema anterior)` : ''}.</div>`;
-    },
+    prontuario() { return abaProntuario(alvo, p, ats, abaExtra); },
   };
 
   // Cadastro rápido do médico do pedido (vai na guia SP/SADT: conselho, número, UF e CBO)

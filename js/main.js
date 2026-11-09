@@ -13,12 +13,14 @@ import * as agenda from './modulos/agenda.js';
 import * as paciente from './modulos/paciente.js';
 import * as financeiro from './modulos/financeiro.js';
 import * as lotes from './modulos/lotes.js';
+import * as prontuarios from './modulos/prontuario.js';
 
 // Cada módulo é independente: para mexer em um, só o arquivo dele muda.
 const ROTAS = [
   { id: 'agenda', nome: 'Agenda', mod: agenda, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'painel', nome: 'Painel', mod: painel, perfis: ['gestor', 'financeiro'] },
   { id: 'estatisticas', nome: 'Estatísticas', mod: estatisticas, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
+  { id: 'prontuarios', nome: 'Meus prontuários', mod: prontuarios, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'], precisaProf: true },
   { id: 'pacientes', nome: 'Pacientes', mod: pacientes, perfis: ['gestor', 'financeiro', 'recepcao'] },
   { id: 'paciente', nome: 'Paciente', mod: paciente, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'], oculto: true },
   { id: 'financeiro', nome: 'Financeiro', mod: financeiro, perfis: ['gestor', 'financeiro'] },
@@ -50,7 +52,7 @@ async function iniciarSessao() {
   montarMenu(); rotear();
 }
 
-function rotasDoPerfil() { return ROTAS.filter((r) => r.perfis.includes(estado.perfil)); }
+function rotasDoPerfil() { return ROTAS.filter((r) => r.perfis.includes(estado.perfil) && (!r.precisaProf || estado.profissionalId)); }
 
 function montarMenu() {
   $('#menu').innerHTML = rotasDoPerfil().filter((r) => !r.oculto).map((r) => `<a href="#${r.id}" data-r="${r.id}">${r.nome}</a>`).join('');
@@ -61,7 +63,7 @@ function rotear() {
   const disponiveis = rotasDoPerfil();
   const [id, ...params] = (location.hash.slice(1) || disponiveis[0].id).split('-');
   const rota = disponiveis.find((r) => r.id === id) || disponiveis[0];
-  document.querySelectorAll('#menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.r === (rota.id === 'paciente' ? 'pacientes' : rota.id)));
+  document.querySelectorAll('#menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.r === (rota.id === 'paciente' ? (location.hash.includes('-prontuario') && estado.profissionalId ? 'prontuarios' : 'pacientes') : rota.id)));
   rota.mod.render(params.join('-')).catch((e) => falha(e, rota.nome));
 }
 
