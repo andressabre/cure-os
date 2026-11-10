@@ -33,7 +33,9 @@ export async function render(id) {
   c.innerHTML = `
     <div class="dica">Entra no lote só a guia <strong>cheia</strong> (todas as sessões autorizadas feitas) ou com a <strong>senha vencida</strong>
       (vai com as sessões realizadas). Guia em andamento espera o próximo fechamento — exceto quando a 1ª sessão se aproxima
-      do prazo de entrega do contrato (SulAmérica: 90 dias), para não perder a conta.</div>
+      do prazo de entrega do contrato (SulAmérica: 90 dias), para não perder a conta.
+      A gestão pode <strong>Liberar agora</strong> uma guia em andamento (fatura só as sessões feitas) ou <strong>Segurar</strong> uma guia
+      que não deve ir neste fechamento. Ao registrar o envio do lote, as guias passam para <strong>Faturado</strong>.</div>
     ${alertas.length ? `<div class="cartao" style="border-left:4px solid var(--alerta,#c0392b)"><h3>Senhas perto de vencer</h3>
       <table><thead><tr><th>Guia</th><th>Paciente</th><th>Contrato</th><th class="num">Feitas</th><th>Vence</th><th></th></tr></thead><tbody>
       ${alertas.map((x) => `<tr><td>${esc(x.numero)}</td><td>${esc(x.paciente)}</td><td>${esc(x.contrato)}</td>
