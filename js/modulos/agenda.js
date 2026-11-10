@@ -261,7 +261,9 @@ export async function render() {
           qtd: Math.max(1, parseInt($('#c-qtd', m).value) || 1), proc: $('#c-proc', m).value, val: $('#c-val', m).value || null } : null;
         if (nova?.senha && !nova.dAut) return toast('Informe a data da autorização junto com a senha.', true);
         let aviso = '';
-        if (pl?.exige && !a) {
+        const porSessao = !!pl?.senha_por_sessao;   // Amil: 1 senha por atendimento
+        if (nova && porSessao) nova.qtd = 1;
+        if (pl?.exige && !a && !porSessao) {
           const x = pl.autorizacoes.find((y) => y.id === autId);
           const saldo = nova ? nova.qtd : x ? Number(x.qtd) - Number(x.usadas) - Number(x.agendadas) : nSessoes;
           if (nSessoes > saldo) { aviso = `A senha tem saldo de ${saldo} sessão(ões): a série foi limitada a ${saldo}. `; nSessoes = saldo; }
@@ -295,6 +297,7 @@ export async function render() {
           if (!ok.length) return toast('Nenhuma data livre na série. Revise horário, dias ou sala.', true);
           const fmt = (o) => o.ini.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
           if (!(await confirmar(`${aviso}Serão criados ${ok.length} agendamentos às ${f.hora}: ${ok.map(fmt).join(', ')}.`
+            + (porSessao && pl?.exige && ok.length > 1 ? ` Este convênio exige 1 senha por sessão: as outras ${ok.length - 1} sessões ficam com pedido de senha pendente (tarefa "Autorizar guia").` : '')
             + (pul.length ? ` Pulados (${pul.length}): ${pul.map((o) => `${fmt(o)} — ${o.motivos.join(', ')}`).join('; ')}. Encaixe esses individualmente se quiser.` : ''),
             `Criar ${ok.length}`))) return;
           criar = ok;
@@ -309,9 +312,23 @@ export async function render() {
         }
         const base = { ...(carregado && !travado ? { paciente_plano_id: planoId || null, autorizacao_id: autFinal || null } : {}), paciente_id: pacienteId,
           profissional_id: f.profissional_id, servico: f.servico, sala, observacao: f.observacao || null, atualizado_em: new Date().toISOString() };
+        // 1 senha por sessão: a 1ª ocorrência usa a autorização escolhida; as demais ganham solicitação pendente própria
+        let autDe = criar.map(() => autFinal || null);
+        if (serie && porSessao && pl?.exige && criar.length > 1) {
+          const x = pl.autorizacoes.find((y) => y.id === autId);
+          const modelo = { procedimento_id: x?.procedimento_id || nova?.proc, solicitante_id: x?.solicitante_id || null,
+            encaminhamento_id: x?.encaminhamento_id || null, area: x?.area || null };
+          if (!modelo.procedimento_id) return toast('Não achei o procedimento da autorização para repetir nas sessões.', true);
+          const { data: nvs, error: e2 } = await sb.from('autorizacoes').insert(criar.slice(1).map(() => ({ clinica_id: estado.clinica.id,
+            paciente_plano_id: pl.id, profissional_id: f.profissional_id, ...modelo, qtd_autorizada: 1, qtd_solicitada: 1, status: 'pendente',
+            observacao: '1 senha por sessão — pedir no portal no dia' }))).select('id');
+          if (e2) return falha(e2, 'Autorizações da série');
+          autDe = [autFinal, ...nvs.map((z) => z.id)];
+        }
         const serieId = serie ? crypto.randomUUID() : null;
         const { error: e } = a ? await sb.from('atendimentos').update({ ...base, inicio: ocorr[0].ini.toISOString(), fim: ocorr[0].fim.toISOString() }).eq('id', a.id)
-          : await sb.from('atendimentos').insert(criar.map((o) => ({ ...base, clinica_id: estado.clinica.id, status: 'agendado', serie_id: serieId,
+          : await sb.from('atendimentos').insert(criar.map((o, i) => ({ ...base, ...(serie && porSessao && pl?.exige ? { autorizacao_id: autDe[i] } : {}),
+            clinica_id: estado.clinica.id, status: 'agendado', serie_id: serieId,
             inicio: o.ini.toISOString(), fim: o.fim.toISOString() })));
         if (e) return falha(e); fechar(); toast(serie ? `${criar.length} agendamentos criados.` : 'Agendamento salvo.'); vis.dia = f.dia; render();
       });

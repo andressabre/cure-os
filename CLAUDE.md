@@ -37,6 +37,7 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   vencida, procedimento sem valor; avisa dados faltando. **1 guia por senha** (SP/SADT com N datas); contratos com `regras.guia_por_sessao`
   abrem 1 guia por atendimento; `regras.sem_tiss` só registra o atendimento.
 - **Autorização na agenda:** agendar convênio exige autorização (existente com saldo ou solicitação pendente → tarefa "Autorizar guia").
+  `regras.senha_por_sessao` (db/029): 1 senha por atendimento — série cria 1 solicitação pendente por sessão; usar junto com `guia_por_sessao`.
 - **Lote TISS:** guia vai ao lote só cheia, com senha vencida ou no limite de prazo de entrega; máx. 100 guias/lote; XML ISO-8859-1 com hash MD5;
   envio gera lançamento "a receber". Guia HONORARIO ainda bloqueia (schema 4.03 de honorários é de internação).
 - **Encaminhamentos** por área com validade, vinculados à autorização sem misturar áreas; anexos ANS por guia; Storage privado `documentos`.

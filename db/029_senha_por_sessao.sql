@@ -1,0 +1,5 @@
+-- 029 — regras.senha_por_sessao (ex.: Amil fisioterapia): 1 autorização por atendimento.
+-- autorizacoes_paciente passou a devolver, por plano, 'senha_por_sessao' e, por autorização,
+-- procedimento_id, encaminhamento_id, solicitante_id e area (aplicado por substituição de trecho na função).
+-- A agenda, numa série, usa a autorização escolhida na 1ª sessão e cria solicitação pendente (qtd 1) para cada uma das demais.
+-- Combine com regras.guia_por_sessao = true (cada atendimento abre a própria guia).
