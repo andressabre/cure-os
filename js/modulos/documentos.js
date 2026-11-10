@@ -35,6 +35,13 @@ export async function abrirArquivo(caminho, bucket = 'documentos') {
   if (janela) janela.location = data.signedUrl; else location.href = data.signedUrl;
 }
 
+// Apaga do Storage (definitivo; a cópia semanal do OneDrive guarda o que já existia antes)
+export async function removerArquivo(caminho, bucket = 'documentos') {
+  if (!caminho) return;
+  const { error } = await sb.storage.from(bucket).remove([caminho]);
+  if (error) throw error;
+}
+
 // Pede um arquivo ao usuário (input invisível) e devolve o File escolhido
 export function escolherArquivo() {
   return new Promise((res) => {

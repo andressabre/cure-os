@@ -1,7 +1,7 @@
 // Módulo Ficha do paciente: tudo que se liga ao paciente num lugar só.
 // Abas: Resumo · Dados · Convênios · Encaminhamentos · Autorizações · Atendimentos · Guias e glosas · Prontuário · Documentos
 import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir } from '../core.js';
-import { enviarArquivo, abrirArquivo, escolherArquivo, ACEITA } from './documentos.js';
+import { enviarArquivo, abrirArquivo, escolherArquivo, removerArquivo, ACEITA } from './documentos.js';
 import { imprimirGuia } from './guia-impressa.js';
 import { abaProntuario } from './prontuario.js';
 import { abaDocumentos } from './emissao.js';
@@ -146,9 +146,11 @@ export async function render(params) {
           <td class="num">${usadas}${en.qtd_sessoes ? ' / ' + en.qtd_sessoes : ''}</td>
           <td>${lig.length ? `<span class="selo ok">✓ ${lig.length} autorização${lig.length > 1 ? 'ões' : ''}</span> <span class="muted">${lig.map((a) => esc(a.senha || 'sem senha')).join(', ')}</span>`
             : '<span class="selo pendente">não vinculado</span>'}</td>
-          <td style="white-space:nowrap">${en.arquivo ? `<button class="btn pequeno" data-abrir="${esc(en.arquivo)}">Ver pedido</button>`
+          <td style="white-space:nowrap">${en.arquivo ? `<button class="btn pequeno" data-abrir="${esc(en.arquivo)}">Ver pedido</button>${gestao
+              ? ` <button class="btn pequeno" data-anexar="${en.id}" title="Substituir pelo arquivo certo">Trocar</button> <button class="btn pequeno" data-rmarq="${en.id}">Remover arquivo</button>` : ''}`
             : `<span class="selo alerta">sem arquivo</span>${gestao ? ` <button class="btn pequeno" data-anexar="${en.id}">Anexar</button>` : ''}`}
-            ${gestao && en.status === 'ativo' && !lig.length ? ` <button class="btn pequeno" data-cancen="${en.id}">Cancelar</button>` : ''}</td></tr>`;
+            ${gestao && en.status === 'ativo' && !lig.length ? ` <button class="btn pequeno" data-cancen="${en.id}">Cancelar</button>` : ''}
+            ${gestao && !lig.length ? ` <button class="btn pequeno escuro" data-excen="${en.id}" title="Para registro feito por engano">Excluir</button>` : ''}</td></tr>`;
       };
       alvo.innerHTML = `<div class="cartao tabela-rolagem">
         <p class="muted">Pedido médico de cada área. Vincule à autorização do convênio na aba Autorizações: o pedido vai como anexo obrigatório (03) das guias.</p>
@@ -171,11 +173,33 @@ export async function render(params) {
       $('#novo-sol')?.addEventListener('click', (ev) => { ev.preventDefault(); novoSolicitante(); });
       $$('[data-anexar]', alvo).forEach((b) => (b.onclick = async () => {
         const f = await escolherArquivo(); if (!f) return;
+        const antigo = (encs || []).find((x) => x.id === b.dataset.anexar)?.arquivo;
         try {
           const up = await enviarArquivo(f, `pacientes/${id}/encaminhamentos`);
           const { error: er } = await sb.from('encaminhamentos').update(up).eq('id', b.dataset.anexar);
-          if (er) throw er; toast('Pedido anexado.'); recarregar();
+          if (er) throw er;
+          if (antigo) await removerArquivo(antigo).catch(() => {});   // o antigo sai só depois do novo gravado
+          toast(antigo ? 'Pedido substituído.' : 'Pedido anexado.'); recarregar();
         } catch (e) { falha(e, 'Anexar'); }
+      }));
+      $$('[data-rmarq]', alvo).forEach((b) => (b.onclick = async () => {
+        const en = (encs || []).find((x) => x.id === b.dataset.rmarq);
+        if (!(await confirmar('Remover o arquivo deste encaminhamento? O arquivo é apagado do sistema (a cópia do backup semanal continua). O registro do encaminhamento fica.', 'Remover arquivo'))) return;
+        try {
+          const { error: er } = await sb.from('encaminhamentos').update({ arquivo: null, arquivo_nome: null }).eq('id', en.id);
+          if (er) throw er;
+          await removerArquivo(en.arquivo); toast('Arquivo removido.'); recarregar();
+        } catch (e) { falha(e, 'Remover arquivo'); }
+      }));
+      $$('[data-excen]', alvo).forEach((b) => (b.onclick = async () => {
+        const en = (encs || []).find((x) => x.id === b.dataset.excen);
+        if (!(await confirmar('Excluir este encaminhamento e o arquivo dele? Use só para registro feito por engano — para pedido que perdeu a validade, prefira Cancelar.', 'Excluir'))) return;
+        try {
+          const { error: er } = await sb.from('encaminhamentos').delete().eq('id', en.id);
+          if (er) throw er;
+          if (en.arquivo) await removerArquivo(en.arquivo).catch(() => {});
+          toast('Encaminhamento excluído.'); recarregar();
+        } catch (e) { falha(e, 'Excluir'); }
       }));
       $$('[data-cancen]', alvo).forEach((b) => (b.onclick = async () => {
         if (!(await confirmar('Cancelar este encaminhamento?', 'Cancelar'))) return;
