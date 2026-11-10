@@ -5,6 +5,7 @@ import { enviarArquivo, abrirArquivo, escolherArquivo, removerArquivo, ACEITA } 
 import { imprimirGuia } from './guia-impressa.js';
 import { abaProntuario } from './prontuario.js';
 import { abaDocumentos } from './emissao.js';
+import { registrarPagamento, seloPagamento } from './particular.js';
 
 const ABAS = [['resumo', 'Resumo'], ['cadastro', 'Cadastro e convênios'], ['encaminhamentos', 'Encaminhamentos'],
   ['autorizacoes', 'Autorizações e agendamentos'], ['guias', 'Guias e glosas'], ['prontuario', 'Prontuário'], ['documentos', 'Documentos']];
@@ -95,7 +96,8 @@ export async function render(params) {
         <label>E-mail<input name="email" value="${esc(p.email)}"></label>
         <label>Rua<input name="rua" value="${esc(e.rua)}"></label><label>CEP<input name="cep" value="${esc(e.cep)}"></label>
         <label>Cidade<input name="cidade" value="${esc(e.cidade)}"></label><label>UF<input name="uf" maxlength="2" value="${esc(e.uf)}"></label>
-        <label><span><input type="checkbox" name="consentimento_comunicacao" ${p.consentimento_comunicacao ? 'checked' : ''}> Aceita lembretes (LGPD)</span></label>
+        <label><span><input type="checkbox" name="consentimento_comunicacao" ${p.consentimento_comunicacao ? 'checked' : ''}> Recebe mensagens de relacionamento (aniversário, reavaliação)</span>
+          ${p.comunicacao_optout_em ? `<small class="muted">pediu para sair em ${data(p.comunicacao_optout_em.slice(0, 10))}</small>` : ''}</label>
         <label><span><input type="checkbox" name="ativo" ${p.ativo ? 'checked' : ''}> Ativo</span></label>
       </form>${gestao ? '<div class="linha-acoes"><button class="btn primario" id="sdados">Salvar dados</button></div>' : ''}</div>`;
       $('#sdados')?.addEventListener('click', async () => {
@@ -104,6 +106,7 @@ export async function render(params) {
         const { error: er } = await sb.from('pacientes').update({ nome: f.nome.trim(), nome_social: f.nome_social || null, cpf: f.cpf.replace(/\D/g, '') || null,
           data_nascimento: f.data_nascimento || null, sexo: f.sexo || null, nome_mae: f.nome_mae || null, cns: f.cns || null, telefone: f.telefone || null,
           email: f.email || null, consentimento_comunicacao: fd.has('consentimento_comunicacao'), ativo: fd.has('ativo'),
+          comunicacao_optout_em: fd.has('consentimento_comunicacao') ? null : (p.comunicacao_optout_em || new Date().toISOString()),
           endereco: { ...e, rua: f.rua, cep: f.cep, cidade: f.cidade, uf: f.uf.toUpperCase() } }).eq('id', id);
         if (er) return falha(er, er.code === '23505' ? 'CPF já cadastrado em outro paciente' : 'Salvar'); toast('Salvo.'); recarregar();
       });
@@ -241,11 +244,18 @@ export async function render(params) {
         const { data: its } = await sb.from('guia_itens').select('atendimento_id, guias(status)').in('atendimento_id', ats.map((a) => a.id));
         (its || []).forEach((g) => g.atendimento_id && g.guias && (fin[g.atendimento_id] = g.guias.status));
       }
+      const { data: recs } = await sb.from('recebimentos').select('*').eq('paciente_id', id);
+      const recDe = {}; (recs || []).forEach((r) => r.atendimento_id && (recDe[r.atendimento_id] = r));
       const linhaAt = (a) => { const f = FIN[fin[a.id]];
+        if (!a.paciente_plano_id) {   // particular: pagamento + NF no lugar do faturamento do convênio
+          const r = recDe[a.id], pode = a.status !== 'cancelado' && (gestao || a.profissional_id === estado.profissionalId);
+          return `<tr><td>${dh(a.inicio)}</td><td>${esc(a.servico || '—')}</td><td>${esc(a.profissionais?.nome || '')}</td><td>${esc(a.sala || '—')}</td>
+            <td><span class="selo ${ST[a.status]}">${esc(a.status === 'atendido' ? 'realizado' : a.status)}</span></td>
+            <td>${a.status === 'cancelado' ? '—' : seloPagamento(r)} ${pode ? `<button class="btn pequeno" data-pgto="${a.id}">${r ? 'Editar' : 'Registrar'}</button>` : ''}</td></tr>`; }
         return `<tr><td>${dh(a.inicio)}</td><td>${esc(a.servico || '—')}</td><td>${esc(a.profissionais?.nome || '')}</td><td>${esc(a.sala || '—')}</td>
           <td><span class="selo ${ST[a.status]}">${esc(a.status === 'atendido' ? 'realizado' : a.status)}</span></td>
-          ${verFin ? `<td>${f ? `<span class="selo ${f[1]}">${f[0]}</span>` : a.status === 'atendido' && a.autorizacao_id ? '<span class="selo pendente">sem guia</span>' : '—'}</td>` : ''}</tr>`; };
-      const tabAts = (lista, vazio) => lista.length ? `<table class="sub-ats"><thead><tr><th>Data</th><th>Serviço</th><th>Profissional</th><th>Sala</th><th>Atendimento</th>${verFin ? '<th>Faturamento</th>' : ''}</tr></thead>
+          <td>${verFin ? (f ? `<span class="selo ${f[1]}">${f[0]}</span>` : a.status === 'atendido' && a.autorizacao_id ? '<span class="selo pendente">sem guia</span>' : '—') : ''}</td></tr>`; };
+      const tabAts = (lista, vazio) => lista.length ? `<table class="sub-ats"><thead><tr><th>Data</th><th>Serviço</th><th>Profissional</th><th>Sala</th><th>Atendimento</th><th>${verFin ? 'Faturamento / pagamento' : 'Pagamento'}</th></tr></thead>
         <tbody>${lista.map(linhaAt).join('')}</tbody></table>` : `<p class="muted">${vazio}</p>`;
       const atsDe = (aid) => (ats || []).filter((a) => a.autorizacao_id === aid).sort((x, y) => x.inicio.localeCompare(y.inicio));
       const semAut = (ats || []).filter((a) => !a.autorizacao_id).sort((x, y) => y.inicio.localeCompare(x.inicio));
@@ -282,6 +292,10 @@ export async function render(params) {
       if ($('#pl')) { $('#pl').onchange = carregaProcs; carregaProcs(); }
       const carregaEnc = () => { $('#enc').innerHTML = '<option value="">— sem encaminhamento —</option>' + opcoesEnc($('#area').value); };
       if ($('#area')) { $('#area').onchange = carregaEnc; carregaEnc(); }
+      $$('[data-pgto]', alvo).forEach((b) => (b.onclick = () => {
+        const a = ats.find((x) => x.id === b.dataset.pgto);
+        registrarPagamento({ ...a, paciente_id: id }, recarregar, recDe[a.id] || null);
+      }));
       $$('[data-excaut]', alvo).forEach((b) => (b.onclick = async () => {
         const lig = atsDe(b.dataset.excaut).filter((x) => x.status !== 'cancelado');
         if (!(await confirmar(`Excluir esta autorização?${lig.length ? ` Os ${lig.length} agendamento(s) ligados continuam na agenda, mas ficam SEM autorização (convênio vai pedir de novo).` : ''}`, 'Excluir'))) return;

@@ -43,7 +43,7 @@ export async function render() {
     <button class="btn" id="hoje">Hoje</button>
     <select id="modo"><option value="dia">Dia</option><option value="semana">Semana</option></select>
     ${souProf ? '' : '<select id="prof"><option value="">Todos os profissionais</option></select>'}
-    ${souProf ? '<button class="btn" id="cal">Ligar ao Google/Outlook</button>' : '<button class="btn" id="lemb">📲 Lembretes</button><button class="btn primario" id="novo">+ Agendamento</button>'}`);
+    ${souProf ? '<button class="btn" id="cal">Ligar ao Google/Outlook</button>' : '<button class="btn" id="lemb">📲 Lembretes</button><button class="btn" id="relac">💬 Relacionamento</button><button class="btn primario" id="novo">+ Agendamento</button>'}`);
   if (souProf) vis.prof = estado.profissionalId;
 
   const cfg = estado.clinica.config || (await sb.from('clinicas').select('config').eq('id', estado.clinica.id).single()).data?.config
@@ -63,6 +63,7 @@ export async function render() {
   $('#novo')?.addEventListener('click', () => editar(null, { dia: vis.dia, min: minDe(cfg.abre), prof: vis.prof }));
   $('#cal')?.addEventListener('click', () => mostrarCalendario(profs.find((p) => p.id === estado.profissionalId)));
   $('#lemb')?.addEventListener('click', () => lembretes(cfg, profs, render));
+  $('#relac')?.addEventListener('click', () => import('./relacionamento.js').then((r) => r.abrir()));
   const SALAS = cfg.salas?.length ? cfg.salas : [];
 
   // Colunas
@@ -155,6 +156,8 @@ export async function render() {
       ${a && !souProf && ['agendado', 'confirmado'].includes(a.status) ? (() => { const l = linkWhats(cfg, a, profs.find((x) => x.id === a.profissional_id)?.nome);
         return `<p>${l ? `<a class="btn pequeno" id="wpp" href="${esc(l)}" target="_blank" rel="noopener">📲 Enviar lembrete no WhatsApp</a>` : '<span class="muted">Sem celular válido com DDD para lembrete.</span>'}
           ${a.lembrete_enviado_em ? ` <span class="selo ok">lembrete enviado ${new Date(a.lembrete_enviado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''}</p>`; })() : ''}
+      ${a && !a.paciente_plano_id && a.status !== 'cancelado' && (!souProf || a.profissional_id === estado.profissionalId)
+        ? '<p><button class="btn pequeno" id="pgto">💲 Pagamento (particular)</button> <span id="pgto-st"></span></p>' : ''}
       ${a ? `<p class="muted">${a.pacientes?.telefone ? 'Telefone: ' + esc(a.pacientes.telefone) + ' · ' : ''}<a href="#paciente-${a.paciente_id}" data-fechar>Abrir ficha do paciente →</a>${a.profissional_id === estado.profissionalId ? ` · <a href="#paciente-${a.paciente_id}-prontuario:${a.id}" data-fechar>Evoluir no prontuário →</a>` : ''}</p>` : ''}
       <div class="linha-acoes">${a && !souProf ? '<button class="btn escuro" id="canc">Cancelar agendamento</button>' : ''}${a?.serie_id && !souProf && !travado0(a) ? '<button class="btn escuro" id="canc-serie">Cancelar esta e as próximas da série</button>' : ''}
         <button class="btn" data-fechar>Fechar</button>${souProf && !a ? '' : '<button class="btn primario" id="s">Salvar</button>'}</div>`,
@@ -174,6 +177,13 @@ export async function render() {
       }
       if (!a) { salaPadrao(); selProf?.addEventListener('change', salaPadrao); }
       $('#rep', m)?.addEventListener('change', (e) => ($('#rep-op', m).hidden = !e.target.checked));
+      if ($('#pgto', m)) (async () => {
+        const P = await import('./particular.js');
+        const { data: rs } = await sb.from('recebimentos').select('*').eq('atendimento_id', a.id).order('criado_em').limit(1);
+        const rec = rs?.[0] || null;
+        $('#pgto-st', m).innerHTML = P.seloPagamento(rec);
+        $('#pgto', m).onclick = () => P.registrarPagamento(a, render, rec);
+      })();
       $('#wpp', m)?.addEventListener('click', async () => {
         await sb.from('atendimentos').update({ lembrete_enviado_em: new Date().toISOString() }).eq('id', a.id);
       });
