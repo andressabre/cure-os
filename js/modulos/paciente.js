@@ -250,7 +250,8 @@ export async function render(params) {
       const atsDe = (aid) => (ats || []).filter((a) => a.autorizacao_id === aid).sort((x, y) => x.inicio.localeCompare(y.inicio));
       const semAut = (ats || []).filter((a) => !a.autorizacao_id).sort((x, y) => y.inicio.localeCompare(x.inicio));
       alvo.innerHTML = `<div class="cartao"><p class="muted">Cada autorização (senha) com os agendamentos ligados a ela. "Faturamento" vem da guia: a faturar → faturado (lote enviado) → pago ou glosado.</p>
-        ${(auts || []).map((a) => { const u = usadas[a.id] || 0, venc = a.validade && a.validade < hojeIso(), lig = atsDe(a.id);
+        ${[...(auts || [])].sort((x, y) => (atsDe(x.id)[0]?.inicio || x.data_autorizacao || '').localeCompare(atsDe(y.id)[0]?.inicio || y.data_autorizacao || ''))
+          .map((a) => { const u = usadas[a.id] || 0, venc = a.validade && a.validade < hojeIso(), lig = atsDe(a.id);
           const travada = lig.some((x) => x.status === 'atendido');
           return `<div class="aut-bloco" style="border:1px solid var(--borda,#ddd);border-radius:8px;padding:10px 12px;margin:10px 0">
             <div class="linha-acoes" style="justify-content:space-between;margin:0;flex-wrap:wrap">
