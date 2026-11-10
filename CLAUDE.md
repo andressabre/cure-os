@@ -20,7 +20,8 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 - `js/modulos/` — `agenda`, `pacientes` (+ `importador`), `paciente` (ficha, rota `#paciente-<id>-<aba>`), `guia` (fechar atendimento),
   `lotes` + `tiss-xml` (lote e XML TISS 4.03.00), `retornos` + `tiss` (Demonstrativo de Análise de Conta), `contratos`, `profissionais`,
   `repasse`, `extrato`, `painel`, `estatisticas`, `financeiro`, `backup`, `documentos` (Storage), `guia-impressa`, `prontuario`, `emissao`, `acessos`.
-- `db/` — migrações versionadas a partir da 007 (002–006 e 008 foram aplicadas direto no Supabase; exportar o esquema para o repo é pendência).
+- `db/` — `000_esquema_base.sql` = esquema completo extraído da produção em 10/11/2026 (antes da 034); banco novo = 000 + 034 em diante.
+  As 001–033 ficam como histórico (002–006 e 008 nunca foram versionadas, mas estão contidas no 000).
 - `ferramentas/` — exportação do sistema antigo e validação do XML contra os XSD da ANS.
 
 ## Regras de negócio (genéricas)
@@ -61,10 +62,11 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).
 - Políticas sempre `TO authenticated`. Após toda migração: `get_advisors` (security) + `ferramentas/auditoria-rls.sql` devem voltar vazios
   (alertas esperados: RPCs `authenticated` com checagem interna de perfil, `verificar_documento` anônima, senha vazada — painel).
+- db/036: sem TRUNCATE/TRIGGER/REFERENCES para anon/authenticated (inclusive em tabelas futuras).
 - db/034: EXECUTE fechado também em funções comuns; `alter default privileges` revoga EXECUTE de `public` para funções novas.
 - **Auditoria (db/035):** `auditar()` em 14 tabelas de negócio (só colunas alteradas; ignora `atualizado_em`, `arquivo_xml`, valores > 2000 chars);
   `registrar_leitura_prontuario` (só o autor; sem texto clínico; 1×/sessão por registro); tela `#auditoria` só gestor. Sem limpeza automática (tabela cresce).
 
 ## Pendências técnicas (laudo 10/11/2026)
 Backup institucional com todos os prontuários; piloto ponta a ponta com 1 convênio; retorno em PDF/planilha; mesclar pacientes duplicados;
-exportar esquema (migrações 002–006, 008) e criar testes SQL de regressão das regras de guia.
+criar testes SQL de regressão das regras de guia.
