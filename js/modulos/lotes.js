@@ -1,15 +1,16 @@
-// Módulo Lotes TISS: guias prontas (cheias ou com senha vencida) → lote → XML 4.03.00 → envio → "a receber".
+// Módulo Lotes TISS: guias liberadas p/ faturamento (automática: cheia, senha vencida, prazo; ou manual — db/037) → lote → XML 4.03.00
+// → envio (guia "enviada" = Faturada) → "a receber". Gestão pode liberar antes ou segurar a guia.
 import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar } from '../core.js';
 import { gerarXmlLote, latin1 } from './tiss-xml.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo } from './documentos.js';
 import { imprimirGuia } from './guia-impressa.js';
 
-const STATUS = { fechado: ['pendente', 'Fechado – enviar'], enviado: ['ok', 'Enviado'], protocolado: ['ok', 'Protocolado'],
+const STATUS = { fechado: ['pendente', 'Fechado – enviar'], enviado: ['ok', 'Faturado (enviado)'], protocolado: ['ok', 'Protocolado'],
   retornado: ['outra', 'Retornado'], aberto: ['pendente', 'Aberto'] };
 const MOTIVO = { cheia: ['ok', 'Cheia'], senha_vencida: ['alerta', 'Senha vencida'], sem_exigencia: ['ok', 'Sem senha exigida'],
   aguardando: ['pendente', 'Em andamento'], sem_senha: ['alerta', 'Sem senha'],
-  prazo_entrega: ['alerta', 'Prazo de entrega'] };
-const PRONTA = ['cheia', 'senha_vencida', 'sem_exigencia', 'prazo_entrega'];
+  prazo_entrega: ['alerta', 'Prazo de entrega'], liberada_manual: ['ok', 'Liberada à mão'], segurada: ['alerta', 'Segurada'] };
+const PRONTA = ['cheia', 'senha_vencida', 'sem_exigencia', 'prazo_entrega', 'liberada_manual'];
 const ALERTA_DIAS = 15;
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
@@ -53,8 +54,32 @@ export async function render(id) {
 
   $$('tr[data-lote]', c).forEach((tr) => (tr.onclick = () => (location.hash = 'lotes-' + tr.dataset.lote)));
   $$('[data-criar]', c).forEach((b) => (b.onclick = () => criar(grupos.find((g) => g.contrato_id === b.dataset.criar))));
+  $$('[data-lib]', c).forEach((b) => (b.onclick = () => acaoGuia(b)));
   $$('[data-todas]', c).forEach((b) => (b.onchange = () =>
     $$(`input.g[data-k="${b.dataset.todas}"]:not(:disabled)`, c).forEach((x) => (x.checked = b.checked))));
+}
+
+function acoesGuia(id, m) {
+  if (m === 'segurada') return `<button class="btn pequeno" data-lib="soltar" data-g="${id}">Soltar</button>`;
+  const b = [];
+  if (m === 'aguardando') b.push(`<button class="btn pequeno" data-lib="liberar" data-g="${id}" title="Faturar já com as sessões realizadas">Liberar agora</button>`);
+  if (m === 'liberada_manual') b.push(`<button class="btn pequeno" data-lib="desfazer" data-g="${id}">Desfazer</button>`);
+  if (m !== 'sem_senha') b.push(`<button class="btn pequeno" data-lib="segurar" data-g="${id}" title="Não faturar por enquanto">Segurar</button>`);
+  return b.join(' ');
+}
+
+async function acaoGuia(btn) {
+  const acao = btn.dataset.lib, id = btn.dataset.g;
+  let motivo = null;
+  if (acao === 'segurar') {
+    motivo = prompt('Motivo para segurar a guia (aparece para a gestão):');
+    if (!motivo || !motivo.trim()) return;
+  }
+  if (acao === 'liberar' && !(await confirmar('A guia vai para o faturamento com as sessões já realizadas. As sessões que faltam da senha não poderão entrar nela depois.', 'Liberar'))) return;
+  const { error } = await sb.rpc('liberar_guia', { p_guia: id, p_acao: acao, p_motivo: motivo });
+  if (error) return falha(error, 'Guia');
+  toast({ liberar: 'Guia liberada para faturamento.', desfazer: 'Liberação desfeita.', segurar: 'Guia segurada.', soltar: 'Guia solta.' }[acao]);
+  render();
 }
 
 function blocoContrato(g) {
@@ -64,20 +89,21 @@ function blocoContrato(g) {
     return `<tr><td><input type="checkbox" class="g" data-k="${g.contrato_id}" value="${x.id}" ${ok ? 'checked' : 'disabled'}></td>
       <td>${esc(x.numero)}</td><td>${esc(x.paciente)}</td><td>${esc(x.profissional)}</td><td>${esc(x.senha || '—')}</td>
       <td class="num">${s.realizadas}/${s.autorizadas ?? '—'}</td><td>${data(x.primeira)}${x.ultima !== x.primeira ? ' a ' + data(x.ultima) : ''}</td>
-      <td>${s.validade ? data(s.validade) : '—'}</td><td class="num">${brl(x.valor)}</td><td><span class="selo ${cls}">${rot}</span></td></tr>`;
+      <td>${s.validade ? data(s.validade) : '—'}</td><td class="num">${brl(x.valor)}</td><td><span class="selo ${cls}" title="${esc(s.segurada_motivo || '')}">${rot}</span></td>
+      <td style="white-space:nowrap">${acoesGuia(x.id, s.motivo)}</td></tr>`;
   };
   return `<div class="cartao tabela-rolagem" style="margin-bottom:14px">
     <div class="linha-acoes" style="justify-content:space-between"><h3 style="margin:0">${esc(g.contrato)}</h3>
-      <span class="muted">${prontas.length} de ${g.guias.length} guias prontas · ${brl(prontas.reduce((s, x) => s + Number(x.valor), 0))}</span>
+      <span class="muted">${prontas.length} de ${g.guias.length} guias liberadas para faturamento · ${brl(prontas.reduce((s, x) => s + Number(x.valor), 0))}</span>
       <button class="btn primario" data-criar="${g.contrato_id}" ${prontas.length ? '' : 'disabled'}>Criar lote</button></div>
     <table><thead><tr><th><input type="checkbox" data-todas="${g.contrato_id}" checked></th><th>Guia</th><th>Paciente</th><th>Profissional</th>
-      <th>Senha</th><th class="num">Sessões</th><th>Atendimentos</th><th>Validade</th><th class="num">Valor</th><th>Situação</th></tr></thead>
+      <th>Senha</th><th class="num">Sessões</th><th>Atendimentos</th><th>Validade</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
       <tbody>${g.guias.map(linha).join('')}</tbody></table></div>`;
 }
 
 async function criar(g) {
   const ids = $$(`input.g[data-k="${g.contrato_id}"]:checked`).map((x) => x.value);
-  if (!ids.length) return toast('Marque ao menos uma guia pronta.', true);
+  if (!ids.length) return toast('Marque ao menos uma guia liberada.', true);
   const tipos = new Set(g.guias.filter((x) => ids.includes(x.id)).map((x) => x.tipo));
   if (tipos.size > 1) return toast('Separe em lotes diferentes: um lote só pode ter um tipo de guia.', true);
   if (ids.length > 100) return toast('Máximo de 100 guias por lote (padrão TISS).', true);

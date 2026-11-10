@@ -41,6 +41,11 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   `regras.senha_por_sessao` (db/029): 1 senha por atendimento — série cria 1 solicitação pendente por sessão; usar junto com `guia_por_sessao`.
 - **Lote TISS:** guia vai ao lote só cheia, com senha vencida ou no limite de prazo de entrega; máx. 100 guias/lote; XML ISO-8859-1 com hash MD5;
   envio gera lançamento "a receber". Guia HONORARIO ainda bloqueia (schema 4.03 de honorários é de internação).
+- **Liberação p/ faturamento (db/037):** automática (motivos acima) **ou** manual via `liberar_guia(guia, acao, motivo)` — `liberar` (motivo
+  `liberada_manual`; "sem senha" continua bloqueando), `desfazer`, `segurar` (motivo obrigatório; precede tudo), `soltar`; só gestor/financeiro.
+  Painel: `guias_liberadas_resumo` → aviso "N guias liberadas" e "N seguradas" em `pendencias`. Nomes na tela: Em aberto → Liberada → No lote → Faturado (lote enviado) → Pago/Glosa.
+  Só SP/SADT (nutri, psico e fisio não usam Guia de Consulta — decidido 10/11/2026).
+- **Guia impressa no modelo da operadora (db/038):** `operadoras.logo` (data URL ≤ ~60 KB, editado em Contratos → Operadoras) + Registro ANS no campo 1.
 - **Encaminhamentos** por área com validade, vinculados à autorização sem misturar áreas; anexos ANS por guia; Storage privado `documentos`.
 - **Prontuário:** registros por modelo de área; RLS só pelo autor; **assinado é imutável** (db/025) — correção só por adendo;
   `prontuario_versoes` guarda o histórico das edições do período em que foi liberado (09–10/11/2026). Importador dos .txt antigos.

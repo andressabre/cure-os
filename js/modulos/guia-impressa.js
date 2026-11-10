@@ -18,6 +18,16 @@ export async function imprimirGuia(guiaId) {
   if (error) { janela?.close(); return falha(error, 'Imprimir guia'); }
   if (!janela) return falha('Permita pop-ups deste site para imprimir a guia.');
 
+  // Logo/nome/registro da operadora pelo contrato da guia (o RPC não traz o logo). Falha aqui não impede a impressão.
+  let op = {};
+  try {
+    const { data } = await sb.from('guias').select('contratos(operadoras(nome, registro_ans, logo))').eq('id', guiaId).maybeSingle();
+    op = data?.contratos?.operadoras || {};
+  } catch { /* guia sai sem logo */ }
+  const logo = typeof op.logo === 'string' && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(op.logo) ? op.logo : '';
+  const regAns = g.registro_ans || op.registro_ans || '';
+  const nomeOp = g.operadora || op.nome || '';
+
   const s = g.solicitante || {}, so = g.solicitado || {}, itens = g.itens || [];
   const execs = [...new Map(itens.map((i) => [i.profissional?.nome, i.profissional])).values()].filter(Boolean);
   const linhas = Math.min(Math.max(g.series || 1, itens.length, 1), 20);
@@ -29,6 +39,7 @@ export async function imprimirGuia(guiaId) {
   @page { size: A4 landscape; margin: 8mm; }
   * { box-sizing: border-box; } body { font: 9px/1.25 Arial, sans-serif; color: #000; margin: 0; }
   .topo { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #000; padding-bottom: 3px; margin-bottom: 4px; }
+  .op { display: flex; align-items: center; gap: 6px; } .op img { max-height: 14mm; max-width: 45mm; object-fit: contain; } .op b { font-size: 11px; }
   .topo h1 { font-size: 12px; margin: 0; } .nguia { font-size: 11px; font-weight: bold; }
   .sec { background: #ddd; font-weight: bold; padding: 2px 4px; margin-top: 4px; border: 1px solid #000; border-bottom: 0; }
   .l { display: flex; } .c { border: 1px solid #000; margin: -1px 0 0 -1px; padding: 1px 3px; min-height: 22px; }
@@ -42,9 +53,9 @@ export async function imprimirGuia(guiaId) {
   @media print { .bt { display: none; } }
 </style></head><body>
 <button class="bt" onclick="print()">Imprimir</button>
-<div class="topo"><h1>GUIA DE SERVIÇO PROFISSIONAL / SERVIÇO AUXILIAR DE DIAGNÓSTICO E TERAPIA — SP/SADT</h1>
+<div class="topo">${logo ? `<div class="op"><img src="${esc(logo)}" alt="${esc(nomeOp)}"><b>${esc(nomeOp)}</b></div>` : ''}<h1>GUIA DE SERVIÇO PROFISSIONAL / SERVIÇO AUXILIAR DE DIAGNÓSTICO E TERAPIA — SP/SADT</h1>
   <span class="nguia">2 - Nº Guia no Prestador: ${esc(g.numero)}</span></div>
-<div class="l">${campo(1, 'Registro ANS', g.registro_ans)}${campo(3, 'Nº Guia Principal', '')}${campo(4, 'Data da Autorização', d(g.data_autorizacao))}
+<div class="l">${campo(1, 'Registro ANS', regAns)}${campo(3, 'Nº Guia Principal', '')}${campo(4, 'Data da Autorização', d(g.data_autorizacao))}
   ${campo(5, 'Senha', g.senha, 2)}${campo(6, 'Validade da Senha', d(g.validade_senha))}${campo(7, 'Nº Guia Atribuído pela Operadora', g.numero_operadora, 2)}</div>
 <div class="sec">Dados do Beneficiário</div>
 <div class="l">${campo(8, 'Número da Carteira', g.carteirinha, 2)}${campo(9, 'Validade da Carteira', d(g.validade_carteira))}

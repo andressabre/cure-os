@@ -3,6 +3,27 @@ import { sb, estado, $, $$, esc, tela, toast, falha, modal, confirmar } from '..
 
 const TIPO = { proprio: 'Próprio', intermediario: 'Intermediário', outro: 'Outro' };
 
+const logoOk = (v) => typeof v === 'string' && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(v);
+
+// Logo da operadora: PNG/JPG reduzido no navegador para no máx. 400 px de largura e ~60 KB (data URL).
+async function comprimirLogo(arquivo) {
+  if (!/^image\/(jpeg|png)$/.test(arquivo.type)) throw new Error('Use imagem PNG ou JPG.');
+  const img = await createImageBitmap(arquivo).catch(() => { throw new Error('Não foi possível ler a imagem.'); });
+  for (const larg of [400, 300, 200]) {
+    const k = Math.min(1, larg / img.width);
+    const cv = Object.assign(document.createElement('canvas'), { width: Math.round(img.width * k), height: Math.round(img.height * k) });
+    const ctx = cv.getContext('2d');
+    for (const [tipo, q] of arquivo.type === 'image/png' ? [['image/png'], ['image/jpeg', 0.85]] : [['image/jpeg', 0.85], ['image/jpeg', 0.6]]) {
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      if (tipo === 'image/jpeg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); }
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      const url = cv.toDataURL(tipo, q);
+      if (url.length <= 60 * 1024 * 1.37) return url;
+    }
+  }
+  throw new Error('Logo muito pesado mesmo reduzido (máx. ~60 KB). Use uma imagem mais simples.');
+}
+
 export async function render() {
   const c = tela('Convênios e contratos', `<button class="btn" id="n-cnpj">+ CNPJ</button>
     <button class="btn" id="n-op">+ Operadora</button><button class="btn primario" id="n-ct">+ Contrato</button>`);
@@ -29,8 +50,10 @@ export async function render() {
         <td><button class="btn pequeno" data-ed-ct="${k.id}">Editar</button> <button class="btn pequeno" data-tab="${k.id}">Tabela de valores</button></td></tr>`).join('') || '<tr><td colspan="7" class="vazio">Nenhum contrato</td></tr>'}
       </tbody></table></div>
     <div class="cartao"><h3>Operadoras</h3>
-      <table><thead><tr><th>Nome</th><th>Registro ANS</th><th>CNPJ</th></tr></thead><tbody>
-      ${ops.map((o) => `<tr><td>${esc(o.nome)}</td><td>${esc(o.registro_ans)}</td><td>${esc(o.cnpj)}</td></tr>`).join('')}
+      <table><thead><tr><th>Nome</th><th>Registro ANS</th><th>CNPJ</th><th>Logo (guia)</th><th></th></tr></thead><tbody>
+      ${ops.map((o) => `<tr><td>${esc(o.nome)}</td><td>${esc(o.registro_ans)}</td><td>${esc(o.cnpj)}</td>
+        <td>${logoOk(o.logo) ? `<img src="${esc(o.logo)}" alt="" style="max-height:24px;max-width:80px">` : '—'}</td>
+        <td><button class="btn pequeno" data-ed-op="${o.id}">Editar</button></td></tr>`).join('')}
       </tbody></table></div>`;
 
   const salvar = async (tabela, obj, id, fechar) => {
@@ -72,13 +95,33 @@ export async function render() {
 
   $('#n-cnpj').onclick = () => formCnpj();
   $('#n-ct').onclick = () => (ops.length && cnpjs.length ? formCt() : toast('Cadastre antes uma operadora e um CNPJ.', true));
-  $('#n-op').onclick = () => modal(`<h3>Nova operadora</h3><form class="grade-form" id="f">
-    <label>Nome<input name="nome" required></label><label>Registro ANS<input name="registro_ans"></label><label>CNPJ<input name="cnpj"></label>
+  const formOp = (o = {}) => {
+    let logo = logoOk(o.logo) ? o.logo : null;
+    modal(`<h3>${o.id ? 'Editar' : 'Nova'} operadora</h3><form class="grade-form" id="f">
+    <label>Nome<input name="nome" required value="${esc(o.nome)}"></label><label>Registro ANS (campo 1 da guia)<input name="registro_ans" value="${esc(o.registro_ans)}"></label>
+    <label>CNPJ<input name="cnpj" value="${esc(o.cnpj)}"></label>
+    <label>Logo da operadora (para a guia impressa)<input type="file" id="lg" accept="image/png,image/jpeg"></label>
+    <div><span id="lg-prev"></span> <button type="button" class="btn pequeno" id="lg-rm">Remover logo</button></div>
     </form><div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="s">Salvar</button></div>`,
-  (m, fechar) => ($('#s', m).onclick = () => {
-    const f = Object.fromEntries(new FormData($('#f', m)));
-    if (!f.nome) return toast('Informe o nome.', true); salvar('operadoras', f, null, fechar);
-  }));
+    (m, fechar) => {
+      const prev = () => { $('#lg-prev', m).innerHTML = logo ? `<img src="${esc(logo)}" alt="Logo" style="max-height:40px;max-width:200px">` : '<span class="dica">Sem logo: a guia sai sem imagem.</span>'; $('#lg-rm', m).style.display = logo ? '' : 'none'; };
+      prev();
+      $('#lg', m).onchange = async (e) => {
+        const a = e.target.files[0]; if (!a) return;
+        try { logo = await comprimirLogo(a); } catch (x) { toast(x.message, true); }
+        prev();
+      };
+      $('#lg-rm', m).onclick = () => { logo = null; $('#lg', m).value = ''; prev(); };
+      $('#s', m).onclick = () => {
+        const f = Object.fromEntries(new FormData($('#f', m))); delete f.logo;
+        if (!f.nome) return toast('Informe o nome.', true);
+        if (logo && !f.registro_ans) toast('Atenção: sem Registro ANS o campo 1 da guia sai vazio.', true);
+        salvar('operadoras', { ...f, logo }, o.id, fechar);
+      };
+    });
+  };
+  $('#n-op').onclick = () => formOp();
+  $$('[data-ed-op]', c).forEach((b) => (b.onclick = () => formOp(ops.find((x) => x.id === b.dataset.edOp))));
   $$('[data-ed-cnpj]', c).forEach((b) => (b.onclick = () => formCnpj(cnpjs.find((x) => x.id === b.dataset.edCnpj))));
   $$('[data-ed-ct]', c).forEach((b) => (b.onclick = () => formCt(cts.find((x) => x.id === b.dataset.edCt))));
   $$('[data-tab]', c).forEach((b) => (b.onclick = () => tabela(cts.find((x) => x.id === b.dataset.tab))));
