@@ -129,6 +129,7 @@ Para abrir: 7-Zip → Extrair → senha do backup (a mesma definida na instalaç
   Get-ChildItem $destino -Filter 'cure-os-*.7z' | Sort-Object Name -Descending | Select-Object -Skip $MANTER | ForEach-Object {
     Remove-Item $_.FullName -Force; Log "Removido backup antigo: $($_.Name)" }
 
+  $etapa = 'aviso ao Painel'
   # ---------- Avisa o Cure OS (cartão "Backup" do Painel fica verde)
   Invoke-RestMethod -Method Post -Uri "$URL/rest/v1/rpc/registrar_backup_automatico" -Headers $H -ContentType 'application/json' `
     -Body (@{ p_arquivo = "cure-os-$hoje.7z"; p_linhas = $totalLinhas; p_arquivos = $totalArq } | ConvertTo-Json -Compress) -UseBasicParsing | Out-Null
