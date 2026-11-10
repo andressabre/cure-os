@@ -30,10 +30,11 @@ export async function cartaoBackup(alvo) {
   if (estado.perfil !== 'gestor' || !alvo) return;
   const { data: cl } = await sb.from('clinicas').select('config').eq('id', estado.clinica.id).single();
   const ult = cl?.config?.ultimo_backup, dias = ult ? Math.floor((Date.now() - new Date(ult)) / 864e5) : null;
-  const atrasado = dias == null || dias > DIAS_AVISO;
+  const auto = cl?.config?.ultimo_backup_tipo === 'automatico';
+  const atrasado = dias == null || dias > (auto ? 9 : DIAS_AVISO); // automático é semanal: vermelho se passar de 9 dias
   alvo.innerHTML = `<div class="cartao" ${atrasado ? 'style="border-left:4px solid #c0392b"' : ''}>
     <div class="linha-acoes" style="justify-content:space-between;flex-wrap:wrap">
-      <div><h3 style="margin:0">Backup</h3><span class="muted">${ult ? `Último: ${new Date(ult).toLocaleDateString('pt-BR')} (${dias} dias)` : 'Nenhum backup feito ainda'}
+      <div><h3 style="margin:0">Backup</h3><span class="muted">${ult ? `Último: ${new Date(ult).toLocaleDateString('pt-BR')} (${dias} dias)${auto ? ' · automático semanal (OneDrive)' : ''}` : 'Nenhum backup feito ainda'}
         · o plano gratuito do Supabase não guarda cópias</span></div>
       <span style="display:flex;gap:8px;align-items:center">
         <label class="muted">Documentos de <input type="month" id="bk-mes" value="${mesAnterior()}"></label>

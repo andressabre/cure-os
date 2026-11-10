@@ -1,0 +1,18 @@
+BACKUP SEMANAL DO CURE OS → ONEDRIVE
+
+Instalar (uma vez, no computador de casa com o OneDrive sincronizando):
+  1. Extraia esta pasta em qualquer lugar (ex.: Documentos).
+  2. Dê duplo clique em INSTALAR.cmd.
+  3. Cole a chave secreta do Supabase (Project Settings > API Keys > Secret keys).
+  4. Crie a senha do backup (12+ caracteres) e ANOTE fora deste computador.
+  5. O instalador já faz o primeiro backup. Confira a pasta OneDrive\Backup Cure OS.
+
+Depois disso: todo domingo às 20h (ou assim que o computador for ligado, se estava desligado).
+Mantém os 12 últimos (cerca de 3 meses). O cartão "Backup" do Painel mostra a data do último.
+
+Registro do que aconteceu: %LOCALAPPDATA%\CureOS\backup.log
+Rodar na hora: Agendador de Tarefas > "Cure OS - Backup semanal OneDrive" > Executar.
+Trocar a chave ou a senha: rode INSTALAR.cmd de novo.
+Desinstalar: apague a tarefa no Agendador e a pasta %LOCALAPPDATA%\CureOS.
+
+Abrir um backup: 7-Zip > Extrair > senha do backup.
