@@ -1,5 +1,5 @@
 // Módulo Prontuário (db/023). Sigilo: cada profissional lê e escreve SÓ os próprios registros (RLS por autor).
-// Modelos por área + campo livre; assinado continua editável (db/024 guarda a versão anterior em prontuario_versoes); anexos no bucket "prontuario".
+// Modelos por área + campo livre; assinado é imutável (db/025) — correção só por adendo datado; anexos no bucket "prontuario".
 // Duas entradas: aba "Prontuário" da ficha do paciente (abaProntuario) e rota #prontuarios (meus pacientes + importação dos .txt antigos).
 import { sb, estado, $, $$, esc, data, tela, toast, falha, modal, confirmar } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo } from './documentos.js';
@@ -135,7 +135,7 @@ function cartaoRegistro(r, ads, anx, ats) {
       <span>${r.status === 'rascunho' ? `<button class="btn pequeno" data-edit="${r.id}">Editar</button>
           <button class="btn pequeno primario" data-assinar="${r.id}">Assinar</button>
           <button class="btn pequeno" data-apagar="${r.id}">Apagar</button>`
-        : `<button class="btn pequeno" data-edit="${r.id}">Editar</button> <button class="btn pequeno" data-adendo="${r.id}">Adendo</button> <button class="btn pequeno" data-imp1="${r.id}">Imprimir</button>`}
+        : `<button class="btn pequeno" data-adendo="${r.id}">Adendo</button> <button class="btn pequeno" data-imp1="${r.id}">Imprimir</button>`}
         <button class="btn pequeno" data-anexar="${r.id}">Anexar</button></span></div>
     ${corpoRegistro(r)}
     ${meusAnx.length ? `<p class="muted">📎 ${meusAnx.map((a) => `<a href="#" data-abrir="${esc(a.arquivo)}" onclick="return false">${esc(a.nome || 'anexo')}</a>`).join(' · ')}</p>` : ''}
@@ -162,9 +162,9 @@ function editor(p, r, meusAts, aoSalvar) {
       ${m.campos.filter((x) => x[3] !== 'num').map(([k, rot, dica]) => `<label class="pr-area">${esc(rot)}
         <textarea name="c_${k}" rows="${k === 'obs' ? 2 : 4}" placeholder="${esc(dica || '')}">${esc(c[k] || '')}</textarea></label>`).join('')}
     </form>
-    <p class="muted">${r.status === 'assinado' ? 'Registro já assinado: a alteração fica com a data de edição e a versão anterior é guardada.' : 'Rascunho pode ser editado à vontade. Assinado também pode ser corrigido; a versão anterior fica guardada.'}</p>
+    <p class="muted">${r.status === 'assinado' ? 'Registro assinado não pode ser alterado. Use um adendo.' : 'Rascunho pode ser editado à vontade. Depois de assinado, só por adendo.'}</p>
     <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button>
-      ${r.status === 'assinado' ? '<button class="btn primario" id="rasc">Salvar alteração</button>'
+      ${r.status === 'assinado' ? ''
         : '<button class="btn" id="rasc">Salvar rascunho</button><button class="btn primario" id="ass">Salvar e assinar</button>'}</div>`,
   (box, fechar) => {
     box.classList.add('largo');
@@ -186,7 +186,7 @@ function editor(p, r, meusAts, aoSalvar) {
       if (error) return falha(error, 'Salvar registro');
       toast(assinarJa ? 'Registro assinado.' : r.status === 'assinado' ? 'Alteração salva.' : 'Rascunho salvo.'); fechar(); aoSalvar();
     };
-    $('#rasc', box).onclick = () => salvar(false);
+    $('#rasc', box)?.addEventListener('click', () => salvar(false));
     // Confirmação no próprio botão (o confirmar() trocaria o conteúdo do modal e perderia o texto)
     const bAss = $('#ass', box);
     if (bAss) bAss.onclick = () => {

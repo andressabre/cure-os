@@ -87,7 +87,8 @@ $('#lnk-primeiro').onclick = async (e) => {
     return mostrarLogin('Preencha o e-mail do convite e crie uma senha com 8+ caracteres, depois clique aqui.', true);
   const { error } = await sb.auth.signUp({ email: f.get('email'), password: f.get('senha'),
     options: { emailRedirectTo: location.origin + location.pathname } });
-  if (error) return mostrarLogin(error.message, true);
+  if (error) return mostrarLogin(/CONVITE_OBRIGATORIO|Database error saving new user/i.test(error.message)
+    ? 'Este e-mail não tem convite da clínica. Peça o convite à gestora (use o mesmo e-mail).' : error.message, true);
   mostrarLogin('Conta criada. Confirme pelo link enviado ao seu e-mail e depois entre.');
 };
 

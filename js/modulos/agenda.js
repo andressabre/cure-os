@@ -1,4 +1,5 @@
 // Módulo Agenda: visão do dia (colunas = profissionais) e da semana (colunas = dias de um profissional).
+// Salas (config.salas; padrão = última sala usada pelo profissional), agendamento em série (serie_id) e lembretes por WhatsApp (link wa.me, sem custo).
 import { sb, estado, $, $$, esc, tela, toast, falha, modal, confirmar } from '../core.js';
 
 const SERVICOS = ['Fisioterapia', 'Nutrição', 'Psicologia', 'Palmilha / Baropodometria', 'Terapia Ocupacional', 'Avaliação'];
@@ -10,6 +11,28 @@ const hm = (d) => new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', min
 const minDe = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
 const isoLocal = (dia, min) => new Date(`${dia}T${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}:00`).toISOString();
 const somaDias = (dia, n) => { const d = new Date(dia + 'T12:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const DIAS_SEM = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const LEMBRETE_PADRAO = 'Olá, {nome}! Aqui é da Clínica Cure. Lembrete do seu atendimento de {servico} com {profissional} {dia} às {hora}. '
+  + 'Pode confirmar sua presença? Se precisar remarcar, é só responder esta mensagem.';
+// Primeiro telefone do campo com DDD → formato wa.me (55 + DDD + número)
+export function foneWhats(tel) {
+  for (const parte of String(tel || '').split(/[\/,;|]| e /)) {
+    let d = parte.replace(/\D/g, '').replace(/^0+/, '');
+    if (d.length === 10 || d.length === 11) d = '55' + d;
+    if (/^55\d{10,11}$/.test(d)) return d;
+  }
+  return null;
+}
+function textoLembrete(cfg, a, nomeProf) {
+  const ini = new Date(a.inicio), amanha = somaDias(hojeIso(), 1), dia = ini.toLocaleDateString('sv');
+  const dm = ini.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const quando = dia === hojeIso() ? `hoje (${dm})` : dia === amanha ? `amanhã (${dm})`
+    : `${ini.toLocaleDateString('pt-BR', { weekday: 'long' }).replace(/^(\S+)/, (w) => (/sábado|domingo/.test(w) ? 'no ' : 'na ') + w)} (${dm})`;
+  return (cfg.lembrete_texto || LEMBRETE_PADRAO).replace(/\{nome\}/g, ((a.pacientes?.nome || '').trim().split(/\s+/)[0] || '').toLowerCase().replace(/^./, (c) => c.toUpperCase()))
+    .replace(/\{servico\}/g, (a.servico || 'atendimento').toLowerCase()).replace(/\{profissional\}/g, nomeProf || 'nossa equipe')
+    .replace(/\{dia\}/g, quando).replace(/\{hora\}/g, hm(a.inicio)).replace(/\{sala\}/g, a.sala || '');
+}
+const linkWhats = (cfg, a, nomeProf) => { const f = foneWhats(a.pacientes?.telefone); return f ? `https://wa.me/${f}?text=${encodeURIComponent(textoLembrete(cfg, a, nomeProf))}` : null; };
 
 let vis = { dia: hojeIso(), modo: 'dia', prof: '' };
 
@@ -20,7 +43,7 @@ export async function render() {
     <button class="btn" id="hoje">Hoje</button>
     <select id="modo"><option value="dia">Dia</option><option value="semana">Semana</option></select>
     ${souProf ? '' : '<select id="prof"><option value="">Todos os profissionais</option></select>'}
-    ${souProf ? '<button class="btn" id="cal">Ligar ao Google/Outlook</button>' : '<button class="btn primario" id="novo">+ Agendamento</button>'}`);
+    ${souProf ? '<button class="btn" id="cal">Ligar ao Google/Outlook</button>' : '<button class="btn" id="lemb">📲 Lembretes</button><button class="btn primario" id="novo">+ Agendamento</button>'}`);
   if (souProf) vis.prof = estado.profissionalId;
 
   const cfg = estado.clinica.config || (await sb.from('clinicas').select('config').eq('id', estado.clinica.id).single()).data?.config
@@ -39,6 +62,8 @@ export async function render() {
   $('#prof')?.addEventListener('change', (e) => { vis.prof = e.target.value; render(); });
   $('#novo')?.addEventListener('click', () => editar(null, { dia: vis.dia, min: minDe(cfg.abre), prof: vis.prof }));
   $('#cal')?.addEventListener('click', () => mostrarCalendario(profs.find((p) => p.id === estado.profissionalId)));
+  $('#lemb')?.addEventListener('click', () => lembretes(cfg, profs, render));
+  const SALAS = cfg.salas?.length ? cfg.salas : [];
 
   // Colunas
   let colunas, de, ate;
@@ -55,7 +80,7 @@ export async function render() {
   }
   if (!colunas.length) { c.innerHTML = '<div class="cartao vazio">Cadastre profissionais para usar a agenda.</div>'; return; }
 
-  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, paciente_plano_id, autorizacao_id, pacientes(nome, telefone)')
+  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, paciente_plano_id, autorizacao_id, serie_id, lembrete_enviado_em, pacientes(nome, telefone)')
     .eq('clinica_id', estado.clinica.id).gte('inicio', new Date(de + 'T00:00').toISOString()).lt('inicio', new Date(somaDias(ate, 1) + 'T00:00').toISOString())
     .neq('status', 'cancelado').order('inicio');
   if (vis.prof) q = q.eq('profissional_id', vis.prof);
@@ -114,15 +139,50 @@ export async function render() {
         <label>Data<input type="date" name="dia" value="${dia}" ${souProf ? 'disabled' : ''}></label>
         <label>Hora<input type="time" name="hora" value="${hora}" step="300" ${souProf ? 'disabled' : ''}></label>
         <label>Duração (min)<input type="number" name="dur" value="${dur}" min="5" step="5" ${souProf ? 'disabled' : ''}></label>
-        <label>Sala<input name="sala" value="${esc(a?.sala || '')}" ${souProf ? 'disabled' : ''}></label>
+        <label>Sala<select name="sala" ${souProf ? 'disabled' : ''}><option value="">—</option>
+          ${[...new Set([...SALAS, ...(a?.sala ? [a.sala] : [])])].map((s) => `<option ${s === a?.sala ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
+        ${!a && !souProf ? `<div style="grid-column:1/-1" class="serie-box">
+          <label><span><input type="checkbox" id="rep"> Repetir — agendamento em série</span></label>
+          <div id="rep-op" hidden>
+            <div class="linha-acoes" style="justify-content:flex-start;margin:6px 0">${DIAS_SEM.map((d, i) => (cfg.dias || [1, 2, 3, 4, 5, 6]).includes(i)
+              ? `<label style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" class="rep-dia" value="${i}" ${i === new Date(dia + 'T12:00').getDay() ? 'checked' : ''}>${d}</label>` : '').join('')}</div>
+            <label>Nº de sessões (contando a primeira)<input type="number" id="rep-n" min="2" max="60" value="10"></label>
+            <small class="muted">Mesmo horário, sala e profissional. Datas com conflito ou fora do expediente são puladas e listadas. Com convênio, o total é limitado ao saldo da senha.</small>
+          </div></div>` : ''}
         <label style="grid-column:1/-1">Observação<input name="observacao" value="${esc(a?.observacao || '')}"></label>
       </form>
       <div id="conv"></div>
+      ${a && !souProf && ['agendado', 'confirmado'].includes(a.status) ? (() => { const l = linkWhats(cfg, a, profs.find((x) => x.id === a.profissional_id)?.nome);
+        return `<p>${l ? `<a class="btn pequeno" id="wpp" href="${esc(l)}" target="_blank" rel="noopener">📲 Enviar lembrete no WhatsApp</a>` : '<span class="muted">Sem celular válido com DDD para lembrete.</span>'}
+          ${a.lembrete_enviado_em ? ` <span class="selo ok">lembrete enviado ${new Date(a.lembrete_enviado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''}</p>`; })() : ''}
       ${a ? `<p class="muted">${a.pacientes?.telefone ? 'Telefone: ' + esc(a.pacientes.telefone) + ' · ' : ''}<a href="#paciente-${a.paciente_id}" data-fechar>Abrir ficha do paciente →</a>${a.profissional_id === estado.profissionalId ? ` · <a href="#paciente-${a.paciente_id}-prontuario:${a.id}" data-fechar>Evoluir no prontuário →</a>` : ''}</p>` : ''}
-      <div class="linha-acoes">${a && !souProf ? '<button class="btn escuro" id="canc">Cancelar agendamento</button>' : ''}
+      <div class="linha-acoes">${a && !souProf ? '<button class="btn escuro" id="canc">Cancelar agendamento</button>' : ''}${a?.serie_id && !souProf && !travado0(a) ? '<button class="btn escuro" id="canc-serie">Cancelar esta e as próximas da série</button>' : ''}
         <button class="btn" data-fechar>Fechar</button>${souProf && !a ? '' : '<button class="btn primario" id="s">Salvar</button>'}</div>`,
     (m, fechar) => {
       const busca = $('#pbusca', m), sug = $('#psug', m); let t;
+      // Sala padrão: a do agendamento; senão a última usada pelo profissional; senão config.sala_padrao
+      const selSala = $('[name=sala]', m), selProf = $('[name=profissional_id]', m); let salaMexida = !!a;
+      selSala?.addEventListener('change', () => (salaMexida = true));
+      async function salaPadrao() {
+        if (salaMexida || !selSala) return;
+        const pid = selProf.value;
+        const { data: ult } = await sb.from('atendimentos').select('sala').eq('profissional_id', pid).not('sala', 'is', null).order('inicio', { ascending: false }).limit(1);
+        if (salaMexida || selProf.value !== pid) return;
+        const s = ult?.[0]?.sala || (cfg.sala_padrao || {})[pid] || SALAS[0] || '';
+        if (s && ![...selSala.options].some((o) => o.value === s)) selSala.add(new Option(s, s));
+        selSala.value = s;
+      }
+      if (!a) { salaPadrao(); selProf?.addEventListener('change', salaPadrao); }
+      $('#rep', m)?.addEventListener('change', (e) => ($('#rep-op', m).hidden = !e.target.checked));
+      $('#wpp', m)?.addEventListener('click', async () => {
+        await sb.from('atendimentos').update({ lembrete_enviado_em: new Date().toISOString() }).eq('id', a.id);
+      });
+      $('#canc-serie', m)?.addEventListener('click', async () => {
+        if (!(await confirmar('Cancelar este agendamento e todos os próximos desta série (os já atendidos não mudam)?', 'Cancelar série'))) return;
+        const { data: cs, error: e } = await sb.from('atendimentos').update({ status: 'cancelado', atualizado_em: new Date().toISOString() })
+          .eq('serie_id', a.serie_id).gte('inicio', a.inicio).in('status', ['agendado', 'confirmado']).select('id');
+        if (e) return falha(e); toast(`${cs.length} agendamento(s) cancelado(s).`); render();
+      });
       // Convênio e autorização: agendar convênio exige vínculo com autorização (existente ou solicitação pendente)
       const conv = $('#conv', m); let planos = [], planoId = a?.paciente_plano_id || '', autId = a?.autorizacao_id || '';
       const travado = a && ['atendido', 'cancelado'].includes(a.status); let carregado = false;
@@ -189,33 +249,126 @@ export async function render() {
           if (e) return falha(e); fechar(); return render();
         }
         if (!pacienteId) return toast('Escolha o paciente na lista.', true);
-        const inicio = new Date(`${f.dia}T${f.hora}:00`), fim = new Date(inicio.getTime() + Number(f.dur) * 6e4);
-        const { data: choque } = await sb.from('atendimentos').select('id').eq('profissional_id', f.profissional_id).neq('status', 'cancelado')
-          .lt('inicio', fim.toISOString()).gt('fim', inicio.toISOString()).neq('id', a?.id || '00000000-0000-0000-0000-000000000000').limit(1);
-        const mi = inicio.getHours() * 60 + inicio.getMinutes(), mf = mi + Number(f.dur);
-        if (pausasDoDia(f.dia).some((x) => mi < x.ate && mf > x.de) && !(await confirmar('Esse horário está fora do expediente (almoço ou clínica fechada). Agendar mesmo assim?', 'Agendar'))) return;
-        if (choque?.length && !(await confirmar('Este profissional já tem atendimento nesse horário. Agendar mesmo assim (encaixe)?', 'Agendar'))) return;
+        // Lê tudo do formulário ANTES de qualquer confirmar() (ele troca o conteúdo do modal)
+        const dur = Number(f.dur), sala = f.sala || null;
+        const serie = !a && $('#rep', m)?.checked;
+        const diasSel = serie ? $$('.rep-dia:checked', m).map((x) => Number(x.value)) : [];
+        let nSessoes = serie ? Math.max(2, Math.min(60, parseInt($('#rep-n', m).value) || 2)) : 1;
+        if (serie && !diasSel.length) return toast('Marque ao menos um dia da semana para a série.', true);
         const pl = planos.find((x) => x.id === planoId);
         if (pl?.exige && !autId) return toast('Convênio exige autorização: escolha uma ou crie nova solicitação.', true);
+        const nova = autId === 'nova' ? { senha: $('#c-senha', m).value.trim(), dAut: $('#c-data', m).value || null,
+          qtd: Math.max(1, parseInt($('#c-qtd', m).value) || 1), proc: $('#c-proc', m).value, val: $('#c-val', m).value || null } : null;
+        if (nova?.senha && !nova.dAut) return toast('Informe a data da autorização junto com a senha.', true);
+        let aviso = '';
+        if (pl?.exige && !a) {
+          const x = pl.autorizacoes.find((y) => y.id === autId);
+          const saldo = nova ? nova.qtd : x ? Number(x.qtd) - Number(x.usadas) - Number(x.agendadas) : nSessoes;
+          if (nSessoes > saldo) { aviso = `A senha tem saldo de ${saldo} sessão(ões): a série foi limitada a ${saldo}. `; nSessoes = saldo; }
+          if (nSessoes < 1) return toast('Autorização sem saldo de sessões.', true);
+        }
+        // Datas
+        const datas = [];
+        if (serie) {
+          for (let d = f.dia, k = 0; datas.length < nSessoes && k < 400; d = somaDias(d, 1), k++)
+            if (diasSel.includes(new Date(d + 'T12:00').getDay())) datas.push(d);
+        } else datas.push(f.dia);
+        const ocorr = datas.map((d) => { const ini = new Date(`${d}T${f.hora}:00`); return { dia: d, ini, fim: new Date(ini.getTime() + dur * 6e4) }; });
+        // Conflitos de profissional e de sala (uma consulta para o período todo)
+        const { data: ocup, error: eo } = await sb.from('atendimentos').select('id, inicio, fim, sala, profissional_id').eq('clinica_id', estado.clinica.id)
+          .neq('status', 'cancelado').lt('inicio', ocorr.at(-1).fim.toISOString()).gt('fim', ocorr[0].ini.toISOString())
+          .or(`profissional_id.eq.${f.profissional_id}${sala ? `,sala.eq."${sala.replace(/"/g, '')}"` : ''}`);
+        if (eo) return falha(eo, 'Conflitos');
+        const outros = (ocup || []).filter((x) => x.id !== a?.id);
+        const nomeP = (pid) => profs.find((x) => x.id === pid)?.nome || 'outro profissional';
+        for (const o of ocorr) {
+          const mi = o.ini.getHours() * 60 + o.ini.getMinutes();
+          const sob = outros.filter((x) => new Date(x.inicio) < o.fim && new Date(x.fim) > o.ini);
+          o.motivos = [
+            ...(pausasDoDia(o.dia).some((x) => mi < x.ate && mi + dur > x.de) ? ['fora do expediente'] : []),
+            ...(sob.some((x) => x.profissional_id === f.profissional_id) ? ['profissional ocupado'] : []),
+            ...sob.filter((x) => sala && x.sala === sala && x.profissional_id !== f.profissional_id).map((x) => `${sala} ocupada por ${nomeP(x.profissional_id)}`)];
+        }
+        let criar = ocorr;
+        if (serie) {
+          const ok = ocorr.filter((o) => !o.motivos.length), pul = ocorr.filter((o) => o.motivos.length);
+          if (!ok.length) return toast('Nenhuma data livre na série. Revise horário, dias ou sala.', true);
+          const fmt = (o) => o.ini.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+          if (!(await confirmar(`${aviso}Serão criados ${ok.length} agendamentos às ${f.hora}: ${ok.map(fmt).join(', ')}.`
+            + (pul.length ? ` Pulados (${pul.length}): ${pul.map((o) => `${fmt(o)} — ${o.motivos.join(', ')}`).join('; ')}. Encaixe esses individualmente se quiser.` : ''),
+            `Criar ${ok.length}`))) return;
+          criar = ok;
+        } else if (ocorr[0].motivos.length && !(await confirmar(`Atenção: ${ocorr[0].motivos.join(', ')}. Agendar mesmo assim (encaixe)?`, 'Agendar'))) return;
         let autFinal = pl?.exige ? autId : null;
-        if (autId === 'nova') {
-          const senha = $('#c-senha', m).value.trim(), dAut = $('#c-data', m).value || null;
-          if (senha && !dAut) return toast('Informe a data da autorização junto com a senha.', true);
-          const qtd = Math.max(1, parseInt($('#c-qtd', m).value) || 1);
+        if (nova) {
           const { data: nv, error: e1 } = await sb.from('autorizacoes').insert({ clinica_id: estado.clinica.id, paciente_plano_id: pl.id,
-            profissional_id: f.profissional_id, procedimento_id: $('#c-proc', m).value, qtd_autorizada: qtd, qtd_solicitada: qtd,
-            status: senha ? 'autorizada' : 'pendente', senha: senha || null, data_autorizacao: dAut, validade: $('#c-val', m).value || null }).select('id').single();
+            profissional_id: f.profissional_id, procedimento_id: nova.proc, qtd_autorizada: nova.qtd, qtd_solicitada: nova.qtd,
+            status: nova.senha ? 'autorizada' : 'pendente', senha: nova.senha || null, data_autorizacao: nova.dAut, validade: nova.val }).select('id').single();
           if (e1) return falha(e1, 'Autorização');
           autFinal = nv.id; autId = nv.id;
         }
-        const reg = { ...(carregado && !travado ? { paciente_plano_id: planoId || null, autorizacao_id: autFinal || null } : {}), paciente_id: pacienteId, profissional_id: f.profissional_id, servico: f.servico, sala: f.sala || null, observacao: f.observacao || null,
-          inicio: inicio.toISOString(), fim: fim.toISOString(), atualizado_em: new Date().toISOString() };
-        const { error: e } = a ? await sb.from('atendimentos').update(reg).eq('id', a.id)
-          : await sb.from('atendimentos').insert({ ...reg, clinica_id: estado.clinica.id, status: 'agendado' });
-        if (e) return falha(e); fechar(); toast('Agendamento salvo.'); vis.dia = f.dia; render();
+        const base = { ...(carregado && !travado ? { paciente_plano_id: planoId || null, autorizacao_id: autFinal || null } : {}), paciente_id: pacienteId,
+          profissional_id: f.profissional_id, servico: f.servico, sala, observacao: f.observacao || null, atualizado_em: new Date().toISOString() };
+        const serieId = serie ? crypto.randomUUID() : null;
+        const { error: e } = a ? await sb.from('atendimentos').update({ ...base, inicio: ocorr[0].ini.toISOString(), fim: ocorr[0].fim.toISOString() }).eq('id', a.id)
+          : await sb.from('atendimentos').insert(criar.map((o) => ({ ...base, clinica_id: estado.clinica.id, status: 'agendado', serie_id: serieId,
+            inicio: o.ini.toISOString(), fim: o.fim.toISOString() })));
+        if (e) return falha(e); fechar(); toast(serie ? `${criar.length} agendamentos criados.` : 'Agendamento salvo.'); vis.dia = f.dia; render();
       });
     });
   }
+}
+
+const travado0 = (a) => ['atendido', 'cancelado'].includes(a.status);
+
+// Lembretes do dia escolhido (padrão: próximo dia de atendimento) — envio manual pelo WhatsApp da clínica
+function proximoDiaAberto(cfg) {
+  let d = somaDias(hojeIso(), 1);
+  for (let k = 0; k < 7 && !(cfg.dias || [1, 2, 3, 4, 5, 6]).includes(new Date(d + 'T12:00').getDay()); k++) d = somaDias(d, 1);
+  return d;
+}
+function lembretes(cfg, profs, aoFechar) {
+  let dia = proximoDiaAberto(cfg);
+  const nomeP = (pid) => profs.find((x) => x.id === pid)?.nome;
+  modal(`<h3>📲 Lembretes de atendimento</h3>
+    <div class="linha-acoes" style="justify-content:flex-start"><label>Dia <input type="date" id="ld" value="${dia}"></label></div>
+    <p class="muted">Cada botão abre o WhatsApp (no computador ou celular onde está o WhatsApp da Cure) com a mensagem pronta. Depois de enviar,
+      marque "Confirmou" quando o paciente responder. Lembrete de consulta agendada faz parte do atendimento (LGPD art. 7º, V); o campo "Aceita lembretes"
+      do cadastro vale para divulgação e campanhas.</p>
+    <div id="ll" class="vazio">Carregando…</div>
+    <div class="linha-acoes"><button class="btn" data-fechar>Fechar</button></div>`, (m, fechar) => {
+    m.classList.add('largo');
+    const caixa = $('#modal');
+    caixa.onclick = (e) => { if (e.target === caixa) { fechar(); aoFechar(); } };
+    $$('[data-fechar]', m).forEach((b) => (b.onclick = () => { fechar(); aoFechar(); }));
+    async function carregar() {
+      const { data: ats, error } = await sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, profissional_id, lembrete_enviado_em, pacientes(nome, telefone)')
+        .eq('clinica_id', estado.clinica.id).gte('inicio', new Date(dia + 'T00:00').toISOString()).lt('inicio', new Date(somaDias(dia, 1) + 'T00:00').toISOString())
+        .in('status', ['agendado', 'confirmado']).order('inicio');
+      if (error) return falha(error);
+      const pend = (ats || []).filter((x) => !x.lembrete_enviado_em && x.status === 'agendado').length;
+      $('#ll', m).className = '';
+      $('#ll', m).innerHTML = !ats?.length ? '<div class="vazio">Nenhum atendimento agendado neste dia.</div>' : `
+        <p><strong>${ats.length}</strong> atendimento(s) · <strong>${pend}</strong> sem lembrete</p>
+        <table class="tabela"><thead><tr><th>Hora</th><th>Paciente</th><th>Profissional</th><th>Sala</th><th></th></tr></thead><tbody>
+        ${ats.map((x) => { const l = linkWhats(cfg, x, nomeP(x.profissional_id));
+          return `<tr><td>${hm(x.inicio)}</td><td>${esc(x.pacientes?.nome || '')}<br><small class="muted">${esc(x.pacientes?.telefone || 'sem telefone')}</small></td>
+            <td>${esc(nomeP(x.profissional_id) || '')}<br><small class="muted">${esc(x.servico || '')}</small></td><td>${esc(x.sala || '—')}</td>
+            <td style="white-space:nowrap">${l ? `<a class="btn pequeno ${x.lembrete_enviado_em ? '' : 'primario'}" target="_blank" rel="noopener" href="${esc(l)}" data-env="${x.id}">${x.lembrete_enviado_em ? '✓ Reenviar' : 'WhatsApp'}</a>` : '<span class="muted">sem celular</span>'}
+              ${x.status === 'confirmado' ? '<span class="selo ok">confirmado</span>' : `<button class="btn pequeno" data-conf="${x.id}">Confirmou</button>`}</td></tr>`; }).join('')}
+        </tbody></table>`;
+      $$('[data-env]', m).forEach((b) => b.addEventListener('click', async () => {
+        await sb.from('atendimentos').update({ lembrete_enviado_em: new Date().toISOString() }).eq('id', b.dataset.env);
+        setTimeout(carregar, 800);
+      }));
+      $$('[data-conf]', m).forEach((b) => (b.onclick = async () => {
+        const { error: e } = await sb.from('atendimentos').update({ status: 'confirmado', atualizado_em: new Date().toISOString() }).eq('id', b.dataset.conf);
+        if (e) return falha(e); carregar();
+      }));
+    }
+    $('#ld', m).onchange = (e) => { dia = e.target.value; carregar(); };
+    carregar();
+  });
 }
 
 export function mostrarCalendario(p) {
