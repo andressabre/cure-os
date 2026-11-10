@@ -5,7 +5,7 @@ import { enviarArquivo, abrirArquivo, escolherArquivo, removerArquivo, ACEITA } 
 import { imprimirGuia } from './guia-impressa.js';
 import { abaProntuario } from './prontuario.js';
 import { abaDocumentos } from './emissao.js';
-import { registrarPagamento, seloPagamento } from './particular.js';
+import { registrarPagamento, seloPagamento, excluirPagamento, fazerNota } from './particular.js';
 
 const ABAS = [['resumo', 'Resumo'], ['cadastro', 'Cadastro e convênios'], ['encaminhamentos', 'Encaminhamentos'],
   ['autorizacoes', 'Autorizações e agendamentos'], ['guias', 'Guias e glosas'], ['prontuario', 'Prontuário'], ['documentos', 'Documentos']];
@@ -251,7 +251,8 @@ export async function render(params) {
           const r = recDe[a.id], pode = a.status !== 'cancelado' && (gestao || a.profissional_id === estado.profissionalId);
           return `<tr><td>${dh(a.inicio)}</td><td>${esc(a.servico || '—')}</td><td>${esc(a.profissionais?.nome || '')}</td><td>${esc(a.sala || '—')}</td>
             <td><span class="selo ${ST[a.status]}">${esc(a.status === 'atendido' ? 'realizado' : a.status)}</span></td>
-            <td>${a.status === 'cancelado' ? '—' : seloPagamento(r)} ${pode ? `<button class="btn pequeno" data-pgto="${a.id}">${r ? 'Editar' : 'Registrar'}</button>` : ''}</td></tr>`; }
+            <td>${a.status === 'cancelado' ? '—' : seloPagamento(r)} ${pode ? `<span style="white-space:nowrap"><button class="btn pequeno ${r ? '' : 'primario'}" data-pgto="${a.id}">${r ? 'Editar' : 'Registrar pagamento'}</button>${r ? `
+              <button class="btn pequeno" data-nota="${a.id}">📄 Nota</button> <button class="btn pequeno escuro" data-delpg="${a.id}">Excluir</button>` : ''}</span>` : ''}</td></tr>`; }
         return `<tr><td>${dh(a.inicio)}</td><td>${esc(a.servico || '—')}</td><td>${esc(a.profissionais?.nome || '')}</td><td>${esc(a.sala || '—')}</td>
           <td><span class="selo ${ST[a.status]}">${esc(a.status === 'atendido' ? 'realizado' : a.status)}</span></td>
           <td>${verFin ? (f ? `<span class="selo ${f[1]}">${f[0]}</span>` : a.status === 'atendido' && a.autorizacao_id ? '<span class="selo pendente">sem guia</span>' : '—') : ''}</td></tr>`; };
@@ -294,8 +295,10 @@ export async function render(params) {
       if ($('#area')) { $('#area').onchange = carregaEnc; carregaEnc(); }
       $$('[data-pgto]', alvo).forEach((b) => (b.onclick = () => {
         const a = ats.find((x) => x.id === b.dataset.pgto);
-        registrarPagamento({ ...a, paciente_id: id }, recarregar, recDe[a.id] || null);
+        registrarPagamento({ ...a, paciente_id: id }, recarregar, recDe[a.id] || null, p);
       }));
+      $$('[data-nota]', alvo).forEach((b) => (b.onclick = () => fazerNota(recDe[b.dataset.nota], p)));
+      $$('[data-delpg]', alvo).forEach((b) => (b.onclick = async () => { if (await excluirPagamento(recDe[b.dataset.delpg])) recarregar(); }));
       $$('[data-excaut]', alvo).forEach((b) => (b.onclick = async () => {
         const lig = atsDe(b.dataset.excaut).filter((x) => x.status !== 'cancelado');
         if (!(await confirmar(`Excluir esta autorização?${lig.length ? ` Os ${lig.length} agendamento(s) ligados continuam na agenda, mas ficam SEM autorização (convênio vai pedir de novo).` : ''}`, 'Excluir'))) return;
