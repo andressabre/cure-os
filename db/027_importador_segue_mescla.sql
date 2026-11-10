@@ -1,0 +1,7 @@
+-- 027 — Cadastros mesclados (10/11/2026): o duplicado fica inativo com campos_extras.mesclado_em = id do principal,
+-- e o principal guarda campos_extras.origem_ids_mesclados. O importador de prontuário antigo (por origem_id) segue o ponteiro.
+-- Aplicado como substituição de trecho em importar_prontuario_antigo:
+--   antes:  select id into v_pac from pacientes where ... and origem_id = p_origem_id limit 1;
+--   depois: select coalesce((campos_extras->>'mesclado_em')::uuid, id) into v_pac from pacientes where ... and origem_id = p_origem_id limit 1;
+-- Correção de acentuação da importação (dados, não esquema): 111 nomes convertidos de UTF-8 lido como Latin-1;
+-- o nome original fica em campos_extras.nome_importado. 20 nomes com codificação mista + 6 com "ï¿½" ficaram para a limpeza de cadastro.
