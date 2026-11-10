@@ -1,0 +1,3 @@
+-- 033 — editar_procedimento_particular(clinica, proc, nome, valor, remover): pela janela de pagamento.
+-- Nome só em código CURE-*; valor novo = nova vigência a partir de hoje (histórico preservado); remover = encerra a vigência.
+-- (Aplicado via apply_migration; corpo completo no Supabase.)

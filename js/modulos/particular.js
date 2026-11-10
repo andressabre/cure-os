@@ -64,7 +64,12 @@ export async function registrarPagamento(at, aoSalvar, rec = null, pac = null) {
           <option value="__avulso" ${i.modo === 'avulso' ? 'selected' : ''}>Outro (só neste pagamento)</option></select>
           ${i.modo === 'novo' ? `<div style="display:flex;gap:6px;margin-top:6px"><input data-k="${k}" class="i-desc" placeholder="Nome (ex.: Consulta de nutrição)" value="${esc(i.descricao)}">
             <button class="btn pequeno primario" data-salvarproc="${k}" title="Salva na tabela particular com o valor ao lado">💾 Salvar na tabela</button></div>`
-          : i.modo === 'avulso' ? `<input data-k="${k}" class="i-desc" style="margin-top:6px" placeholder="Descrição" value="${esc(i.descricao)}">` : ''}</td>
+          : i.modo === 'avulso' ? `<input data-k="${k}" class="i-desc" style="margin-top:6px" placeholder="Descrição" value="${esc(i.descricao)}">`
+          : i.modo === 'editar' ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap"><input data-k="${k}" class="i-desc" value="${esc(i.descricao)}"
+              ${/^CURE-/.test(tab.find((t) => t.id === i.procedimento_id)?.codigo || '') ? '' : 'disabled title="Código TUSS: só o valor pode mudar"'}>
+            <button class="btn pequeno primario" data-salvaredit="${k}" title="Salva o nome e o valor ao lado na tabela particular">💾 Salvar alteração</button>
+            <button class="btn pequeno escuro" data-tirar="${k}">Tirar da tabela</button></div>`
+          : i.procedimento_id ? `<a href="#" data-editproc="${k}" style="font-size:.85em;margin-left:6px">✏️ editar na tabela</a>` : ''}</td>
         <td class="num"><input data-k="${k}" class="i-qtd" type="number" min="1" step="1" value="${i.qtd}" style="width:60px"></td>
         <td class="num"><input data-k="${k}" class="i-val" type="number" min="0" step="0.01" value="${i.valor}" style="width:90px"></td>
         <td class="num">${brl(n2(i.qtd) * n2(i.valor))}</td>
@@ -72,6 +77,24 @@ export async function registrarPagamento(at, aoSalvar, rec = null, pac = null) {
       $$('.i-proc', m).forEach((s) => (s.onchange = () => { const t = tab.find((x) => x.id === s.value), i = itens[s.dataset.k];
         i.modo = s.value === '__novo' ? 'novo' : s.value === '__avulso' ? 'avulso' : null;
         i.procedimento_id = t?.id || null; i.descricao = t ? nomeCurto(t.descricao) : ''; if (t) i.valor = t.valor; desenhar(); }));
+      $$('[data-editproc]', m).forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); itens[a.dataset.editproc].modo = 'editar'; desenhar(); }));
+      $$('[data-salvaredit]', m).forEach((b) => (b.onclick = async () => {
+        const i = itens[b.dataset.salvaredit];
+        if (!(n2(i.valor) >= 0)) return toast('Valor inválido.', true);
+        const { data: r2, error } = await sb.rpc('editar_procedimento_particular', { p_clinica: estado.clinica.id, p_proc: i.procedimento_id,
+          p_nome: (i.descricao || '').trim(), p_valor: n2(i.valor), p_remover: false });
+        if (error) return falha(error, 'Editar procedimento');
+        const t = tab.find((x) => x.id === i.procedimento_id); if (t) { t.descricao = r2.descricao; t.valor = Number(r2.valor); }
+        Object.assign(i, { descricao: nomeCurto(r2.descricao), modo: null }); toast('Tabela particular atualizada (valor novo vale a partir de hoje).'); desenhar();
+      }));
+      $$('[data-tirar]', m).forEach((b) => (b.onclick = async () => {
+        const i = itens[b.dataset.tirar];
+        const { error } = await sb.rpc('editar_procedimento_particular', { p_clinica: estado.clinica.id, p_proc: i.procedimento_id, p_nome: null, p_valor: null, p_remover: true });
+        if (error) return falha(error, 'Tirar da tabela');
+        const k = tab.findIndex((x) => x.id === i.procedimento_id); if (k >= 0) tab.splice(k, 1);
+        Object.assign(i, { modo: 'avulso' }); i.procedimento_id = null;
+        toast('Saiu da tabela particular (pagamentos antigos não mudam). Este item ficou como "Outro".'); desenhar();
+      }));
       $$('[data-salvarproc]', m).forEach((b) => (b.onclick = async () => {
         const i = itens[b.dataset.salvarproc];
         if ((i.descricao || '').trim().length < 3) return toast('Informe o nome do procedimento.', true);
@@ -100,6 +123,7 @@ export async function registrarPagamento(at, aoSalvar, rec = null, pac = null) {
     $('#pdel', m)?.addEventListener('click', async () => { if (await excluirPagamento(rec)) { fechar(); aoSalvar?.(); } });
     $('#pok', m).onclick = async () => {
       const f = Object.fromEntries(new FormData($('#fp', m)));
+      if (itens.some((i) => i.modo === 'editar')) return toast('Salve a alteração do procedimento antes.', true);
       if (itens.some((i) => i.modo === 'novo')) return toast('Clique em "Salvar na tabela" no procedimento novo (ou escolha "Outro").', true);
       if (itens.some((i) => !i.procedimento_id && !i.descricao.trim())) return toast('Escolha o procedimento ou descreva o item.', true);
       if (n2(d.value) > subtotal()) return toast('Desconto maior que o subtotal.', true);
