@@ -1,13 +1,17 @@
 // Módulo Ficha do paciente: tudo que se liga ao paciente num lugar só.
-// Abas: Resumo · Dados · Convênios · Encaminhamentos · Autorizações · Atendimentos · Guias e glosas · Prontuário · Documentos
+// Abas: Resumo · Cadastro e convênios · Encaminhamentos · Autorizações e agendamentos · Guias e glosas · Prontuário · Documentos
 import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo, removerArquivo, ACEITA } from './documentos.js';
 import { imprimirGuia } from './guia-impressa.js';
 import { abaProntuario } from './prontuario.js';
 import { abaDocumentos } from './emissao.js';
 
-const ABAS = [['resumo', 'Resumo'], ['dados', 'Dados'], ['convenios', 'Convênios'], ['encaminhamentos', 'Encaminhamentos'], ['autorizacoes', 'Autorizações'],
-  ['atendimentos', 'Atendimentos'], ['guias', 'Guias e glosas'], ['prontuario', 'Prontuário'], ['documentos', 'Documentos']];
+const ABAS = [['resumo', 'Resumo'], ['cadastro', 'Cadastro e convênios'], ['encaminhamentos', 'Encaminhamentos'],
+  ['autorizacoes', 'Autorizações e agendamentos'], ['guias', 'Guias e glosas'], ['prontuario', 'Prontuário'], ['documentos', 'Documentos']];
+const ALIAS = { dados: 'cadastro', convenios: 'cadastro', atendimentos: 'autorizacoes' };   // links antigos continuam valendo
+// Situação de faturamento do atendimento, pela guia em que ele entrou
+const FIN = { rascunho: ['a faturar', 'pendente'], pronta: ['a faturar', 'pendente'], enviada: ['faturado', 'clinica'], paga: ['pago', 'ok'],
+  glosa_parcial: ['glosa parcial', 'alerta'], glosa_total: ['glosado', 'alerta'], cancelada: ['guia cancelada', 'outra'] };
 const ST = { agendado: 'pendente', confirmado: 'pendente', presente: 'pendente', atendido: 'ok', faltou: 'alerta', cancelado: 'outra' };
 const AREAS = { fisioterapia: 'Fisioterapia', nutricao: 'Nutrição', psicologia: 'Psicologia', palmilha: 'Palmilha / podologia', outra: 'Outra' };
 const opcoesArea = (sel) => Object.entries(AREAS).map(([k, n]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${n}</option>`).join('');
@@ -16,7 +20,8 @@ const dh = (d) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '
 
 export async function render(params) {
   const [id, abaHash] = [params.slice(0, 36), params.slice(37) || 'resumo'];
-  const [abaUrl, abaExtra] = abaHash.split(':');
+  const [abaBruta, abaExtra] = abaHash.split(':');
+  const abaUrl = ALIAS[abaBruta] || abaBruta;
   const c = tela('Paciente', '<a class="btn" href="#pacientes">← Pacientes</a>');
   const gestao = podeGerir() || estado.perfil === 'recepcao';
   const cid = estado.clinica.id;
@@ -24,7 +29,7 @@ export async function render(params) {
   const [{ data: p, error }, { data: planos }, { data: ats }, { data: auts }, { data: contratos }, { data: encs }, { data: sols }] = await Promise.all([
     sb.from('pacientes').select('*').eq('id', id).single(),
     sb.from('paciente_planos').select('*, contratos(id, nome)').eq('paciente_id', id).order('principal', { ascending: false }),
-    sb.from('atendimentos').select('id, inicio, fim, status, servico, autorizacao_id, profissional_id, profissionais(nome)').eq('paciente_id', id).order('inicio', { ascending: false }),
+    sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, autorizacao_id, paciente_plano_id, profissional_id, profissionais(nome)').eq('paciente_id', id).order('inicio', { ascending: false }),
     sb.from('autorizacoes').select('*, procedimentos(codigo, descricao), profissionais(nome), paciente_planos!inner(paciente_id, contratos(nome))')
       .eq('paciente_planos.paciente_id', id).order('data_autorizacao', { ascending: false }),
     gestao ? sb.from('contratos').select('id, nome').eq('clinica_id', cid).eq('ativo', true).order('nome') : Promise.resolve({ data: [] }),
@@ -72,8 +77,13 @@ export async function render(params) {
         ${Object.keys(x).length ? `<div class="cartao"><h3>Do sistema antigo</h3><p class="muted">${Object.entries(x).map(([k, v]) => `<strong>${esc(k.replace(/_/g, ' '))}:</strong> ${esc(v)}`).join(' · ')}</p></div>` : ''}`;
     },
 
-    dados() {
-      alvo.innerHTML = `<div class="cartao"><form class="grade-form" id="f">
+    cadastro() {
+      alvo.innerHTML = '<div id="sub-dados"></div><h3 style="margin:18px 0 8px">Convênios</h3><div id="sub-conv"></div>';
+      abas.dados($('#sub-dados')); abas.convenios($('#sub-conv'));
+    },
+
+    dados(t = alvo) {
+      t.innerHTML = `<div class="cartao"><form class="grade-form" id="fdados">
         <label>Nome<input name="nome" required value="${esc(p.nome)}"></label>
         <label>Nome social<input name="nome_social" value="${esc(p.nome_social)}"></label>
         <label>CPF<input name="cpf" value="${esc(p.cpf)}"></label>
@@ -87,9 +97,9 @@ export async function render(params) {
         <label>Cidade<input name="cidade" value="${esc(e.cidade)}"></label><label>UF<input name="uf" maxlength="2" value="${esc(e.uf)}"></label>
         <label><span><input type="checkbox" name="consentimento_comunicacao" ${p.consentimento_comunicacao ? 'checked' : ''}> Aceita lembretes (LGPD)</span></label>
         <label><span><input type="checkbox" name="ativo" ${p.ativo ? 'checked' : ''}> Ativo</span></label>
-      </form>${gestao ? '<div class="linha-acoes"><button class="btn primario" id="s">Salvar</button></div>' : ''}</div>`;
-      $('#s')?.addEventListener('click', async () => {
-        const fd = new FormData($('#f')), f = Object.fromEntries(fd);
+      </form>${gestao ? '<div class="linha-acoes"><button class="btn primario" id="sdados">Salvar dados</button></div>' : ''}</div>`;
+      $('#sdados')?.addEventListener('click', async () => {
+        const fd = new FormData($('#fdados')), f = Object.fromEntries(fd);
         if (!f.nome.trim()) return toast('Informe o nome.', true);
         const { error: er } = await sb.from('pacientes').update({ nome: f.nome.trim(), nome_social: f.nome_social || null, cpf: f.cpf.replace(/\D/g, '') || null,
           data_nascimento: f.data_nascimento || null, sexo: f.sexo || null, nome_mae: f.nome_mae || null, cns: f.cns || null, telefone: f.telefone || null,
@@ -99,34 +109,34 @@ export async function render(params) {
       });
     },
 
-    convenios() {
-      alvo.innerHTML = `<div class="cartao">
+    convenios(t = alvo) {
+      t.innerHTML = `<div class="cartao">
         ${x.convenio_origem ? `<div class="dica">No sistema antigo: <strong>${esc(x.convenio_origem)}</strong>${x.carteirinha_origem ? ` · carteirinha ${esc(x.carteirinha_origem)}` : ''}</div>` : ''}
         <table><thead><tr><th>Contrato</th><th>Plano</th><th>Carteirinha</th><th>Validade</th><th>Principal</th><th></th></tr></thead><tbody>
         ${(planos || []).map((pl) => `<tr><td>${esc(pl.contratos?.nome)}</td><td>${esc(pl.plano_nome || '—')}</td><td>${esc(pl.carteirinha)}</td>
           <td>${pl.validade ? `${data(pl.validade)}${pl.validade < hojeIso() ? ' <span class="selo alerta">vencida</span>' : ''}` : '—'}</td>
           <td>${pl.principal ? '✓' : ''}</td><td>${gestao ? `<button class="btn pequeno" data-del="${pl.id}">Remover</button>` : ''}</td></tr>`).join('')
           || '<tr><td colspan="6" class="vazio">Nenhum convênio vinculado.</td></tr>'}</tbody></table>
-        ${gestao ? `<h3 style="margin-top:16px">Vincular convênio</h3><form class="grade-form" id="f">
+        ${gestao ? `<h3 style="margin-top:16px">Vincular convênio</h3><form class="grade-form" id="fconv">
           <label>Contrato<select name="contrato_id">${contratos.map((k) => `<option value="${k.id}" ${sugere(k.nome) ? 'selected' : ''}>${esc(k.nome)}</option>`).join('')}</select></label>
           <label>Plano<input name="plano_nome" placeholder="ex.: Executivo, Rede 843"></label>
           <label>Carteirinha<input name="carteirinha" required value="${esc(x.carteirinha_origem || '')}"></label>
           <label>Validade<input type="date" name="validade"></label>
           <label><span><input type="checkbox" name="principal" ${(planos || []).length ? '' : 'checked'}> Principal</span></label>
-          </form><div class="linha-acoes"><button class="btn primario" id="s">Vincular</button></div>` : ''}</div>`;
+          </form><div class="linha-acoes"><button class="btn primario" id="sconv">Vincular</button></div>` : ''}</div>`;
       function sugere(nome) {
         const o = (x.convenio_origem || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/\s+/)[0];
         return o && nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(o.replace('correios', 'postal'));
       }
-      $('#s')?.addEventListener('click', async () => {
-        const fd = new FormData($('#f')), f = Object.fromEntries(fd);
+      $('#sconv')?.addEventListener('click', async () => {
+        const fd = new FormData($('#fconv')), f = Object.fromEntries(fd);
         if (!f.carteirinha.trim()) return toast('Informe a carteirinha.', true);
         if (fd.has('principal')) await sb.from('paciente_planos').update({ principal: false }).eq('paciente_id', id);
         const { error: er } = await sb.from('paciente_planos').insert({ clinica_id: cid, paciente_id: id, contrato_id: f.contrato_id,
           plano_nome: f.plano_nome || null, carteirinha: f.carteirinha.trim(), validade: f.validade || null, principal: fd.has('principal') });
         if (er) return falha(er); toast('Convênio vinculado.'); recarregar();
       });
-      $$('[data-del]', alvo).forEach((b) => (b.onclick = async () => {
+      $$('[data-del]', t).forEach((b) => (b.onclick = async () => {
         if (!(await confirmar('Remover este vínculo? Guias já emitidas não são afetadas.', 'Remover'))) return;
         const { error: er } = await sb.from('paciente_planos').delete().eq('id', b.dataset.del);
         if (er) return falha(er, er.code === '23503' ? 'Há guias ou autorizações usando este convênio' : ''); recarregar();
@@ -223,16 +233,36 @@ export async function render(params) {
     },
 
     async autorizacoes() {
-      // sessões usadas = atendimentos realizados ligados à autorização
+      // Autorização (senha) com os agendamentos dela logo abaixo; status do atendimento + situação de faturamento da guia
       const usadas = {}; (ats || []).forEach((a) => a.autorizacao_id && a.status === 'atendido' && (usadas[a.autorizacao_id] = (usadas[a.autorizacao_id] || 0) + 1));
-      alvo.innerHTML = `<div class="cartao"><table><thead><tr><th>Data</th><th>Convênio</th><th>Procedimento</th><th>Senha</th><th class="num">Usadas / autorizadas</th><th>Validade</th><th>Encaminhamento</th></tr></thead><tbody>
-        ${(auts || []).map((a) => { const u = usadas[a.id] || 0, venc = a.validade && a.validade < hojeIso();
-          return `<tr><td>${data(a.data_autorizacao)}</td><td>${esc(a.paciente_planos?.contratos?.nome)}</td>
-          <td>${esc(a.procedimentos?.codigo)} · ${esc(a.procedimentos?.descricao)}</td><td>${esc(a.senha || '—')}</td>
-          <td class="num"><strong>${u} / ${a.qtd_autorizada}</strong> ${u >= a.qtd_autorizada ? '<span class="selo alerta">esgotada</span>' : ''}</td>
-          <td>${a.validade ? data(a.validade) : '—'} ${venc ? '<span class="selo alerta">vencida</span>' : ''}</td>
-          <td>${celulaEnc(a)}</td></tr>`; }).join('')
-        || '<tr><td colspan="7" class="vazio">Nenhuma autorização registrada.</td></tr>'}</tbody></table>
+      const fin = {};
+      const verFin = podeGerir();   // guia_itens: só gestão/financeiro (RLS)
+      if (verFin && (ats || []).length) {
+        const { data: its } = await sb.from('guia_itens').select('atendimento_id, guias(status)').in('atendimento_id', ats.map((a) => a.id));
+        (its || []).forEach((g) => g.atendimento_id && g.guias && (fin[g.atendimento_id] = g.guias.status));
+      }
+      const linhaAt = (a) => { const f = FIN[fin[a.id]];
+        return `<tr><td>${dh(a.inicio)}</td><td>${esc(a.servico || '—')}</td><td>${esc(a.profissionais?.nome || '')}</td><td>${esc(a.sala || '—')}</td>
+          <td><span class="selo ${ST[a.status]}">${esc(a.status === 'atendido' ? 'realizado' : a.status)}</span></td>
+          ${verFin ? `<td>${f ? `<span class="selo ${f[1]}">${f[0]}</span>` : a.status === 'atendido' && a.autorizacao_id ? '<span class="selo pendente">sem guia</span>' : '—'}</td>` : ''}</tr>`; };
+      const tabAts = (lista, vazio) => lista.length ? `<table class="sub-ats"><thead><tr><th>Data</th><th>Serviço</th><th>Profissional</th><th>Sala</th><th>Atendimento</th>${verFin ? '<th>Faturamento</th>' : ''}</tr></thead>
+        <tbody>${lista.map(linhaAt).join('')}</tbody></table>` : `<p class="muted">${vazio}</p>`;
+      const atsDe = (aid) => (ats || []).filter((a) => a.autorizacao_id === aid).sort((x, y) => x.inicio.localeCompare(y.inicio));
+      const semAut = (ats || []).filter((a) => !a.autorizacao_id).sort((x, y) => y.inicio.localeCompare(x.inicio));
+      alvo.innerHTML = `<div class="cartao"><p class="muted">Cada autorização (senha) com os agendamentos ligados a ela. "Faturamento" vem da guia: a faturar → faturado (lote enviado) → pago ou glosado.</p>
+        ${(auts || []).map((a) => { const u = usadas[a.id] || 0, venc = a.validade && a.validade < hojeIso(), lig = atsDe(a.id);
+          const travada = lig.some((x) => x.status === 'atendido');
+          return `<div class="aut-bloco" style="border:1px solid var(--borda,#ddd);border-radius:8px;padding:10px 12px;margin:10px 0">
+            <div class="linha-acoes" style="justify-content:space-between;margin:0;flex-wrap:wrap">
+              <div><strong>${a.status === 'pendente' ? '⏳ senha pendente' : 'Senha ' + esc(a.senha || '—')}</strong> · ${esc(a.paciente_planos?.contratos?.nome)} ·
+                ${esc(a.procedimentos?.codigo)} ${esc((a.procedimentos?.descricao || '').slice(0, 60))}<br>
+                <span class="muted">autorizada em ${data(a.data_autorizacao)} · validade ${a.validade ? data(a.validade) : '—'} ${venc ? '<span class="selo alerta">vencida</span>' : ''}
+                · <strong>${u} / ${a.qtd_autorizada}</strong> usadas ${u >= a.qtd_autorizada ? '<span class="selo alerta">esgotada</span>' : ''}</span></div>
+              <div>${celulaEnc(a)} ${gestao && !travada ? `<button class="btn pequeno escuro" data-excaut="${a.id}" title="Só sem atendimento realizado">Excluir</button>` : ''}</div>
+            </div>${tabAts(lig, 'Nenhum agendamento ligado a esta autorização.')}</div>`; }).join('')
+          || '<div class="vazio">Nenhuma autorização registrada.</div>'}
+        <h3 style="margin-top:18px">Agendamentos sem autorização <span class="muted" style="font-weight:400">(particular ou convênio sem senha)</span></h3>
+        ${tabAts(semAut, 'Nenhum.')}
         ${gestao && (planos || []).length ? `<h3 style="margin-top:16px">Registrar autorização</h3><form class="grade-form" id="f">
           <label>Convênio<select name="paciente_plano_id" id="pl">${planos.map((pl) => `<option value="${pl.id}" data-ct="${pl.contrato_id}">${esc(pl.contratos?.nome)}</option>`).join('')}</select></label>
           <label>Procedimento<select name="procedimento_id" id="proc"></select></label>
@@ -242,7 +272,7 @@ export async function render(params) {
           <label>Senha<input name="senha"></label><label>Nº guia operadora<input name="guia"></label>
           <label>Data da autorização<input type="date" name="data" value="${hojeIso()}"></label><label>Validade<input type="date" name="validade"></label>
           </form><div class="linha-acoes"><button class="btn primario" id="s">Registrar</button></div>`
-          : gestao ? '<div class="dica">Vincule um convênio na aba Convênios para registrar autorizações.</div>' : ''}</div>`;
+          : gestao ? '<div class="dica">Vincule um convênio na aba Cadastro e convênios para registrar autorizações.</div>' : ''}</div>`;
       const carregaProcs = async () => {
         const ct = $('#pl').selectedOptions[0].dataset.ct;
         const { data: itens } = await sb.from('contrato_tabela').select('procedimentos(id, codigo, descricao)').eq('contrato_id', ct).is('vigencia_fim', null);
@@ -251,6 +281,15 @@ export async function render(params) {
       if ($('#pl')) { $('#pl').onchange = carregaProcs; carregaProcs(); }
       const carregaEnc = () => { $('#enc').innerHTML = '<option value="">— sem encaminhamento —</option>' + opcoesEnc($('#area').value); };
       if ($('#area')) { $('#area').onchange = carregaEnc; carregaEnc(); }
+      $$('[data-excaut]', alvo).forEach((b) => (b.onclick = async () => {
+        const lig = atsDe(b.dataset.excaut).filter((x) => x.status !== 'cancelado');
+        if (!(await confirmar(`Excluir esta autorização?${lig.length ? ` Os ${lig.length} agendamento(s) ligados continuam na agenda, mas ficam SEM autorização (convênio vai pedir de novo).` : ''}`, 'Excluir'))) return;
+        const { error: e1 } = await sb.from('atendimentos').update({ autorizacao_id: null }).eq('autorizacao_id', b.dataset.excaut);
+        if (e1) return falha(e1);
+        const { error: er } = await sb.from('autorizacoes').delete().eq('id', b.dataset.excaut);
+        if (er) return falha(er, er.code === '23503' ? 'Esta autorização já tem guia gerada — cancele a guia antes' : 'Excluir');
+        toast('Autorização excluída.'); recarregar();
+      }));
       $$('[data-vinc]', alvo).forEach((b) => (b.onclick = async () => {
         const sel = $(`select[data-encsel="${b.dataset.vinc}"]`, alvo);
         if (!sel.value) return toast('Escolha o encaminhamento.', true);
