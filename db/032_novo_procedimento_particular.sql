@@ -1,0 +1,3 @@
+-- 032 — novo_procedimento_particular(clinica, nome, valor): cadastro rápido pela janela de pagamento.
+-- Cria procedimentos (codigo_tabela '00', codigo CURE-<slug>-<3>) + contrato_tabela no contrato particular ativo (tipo_guia PARTICULAR).
+-- Qualquer perfil da clínica; recusa nome repetido na tabela particular. (Aplicado via apply_migration; corpo completo no Supabase.)

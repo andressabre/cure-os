@@ -7,6 +7,8 @@ export const FORMAS = { pix: 'PIX', dinheiro: 'Dinheiro', debito: 'Débito', cre
 export const EMISSOR_NFSE = 'https://www.nfse.gov.br/EmissorNacional';
 const hoje = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 const n2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+// Só o nome do procedimento na lista (sem as observações entre parênteses)
+export const nomeCurto = (d) => String(d || '').replace(/\s*\([^)]*\)/g, '').trim();
 
 async function tabelaParticular() {
   const { data } = await sb.from('contrato_tabela').select('valor, procedimentos(id, codigo, descricao), contratos!inner(clinica_id)')
@@ -16,7 +18,7 @@ async function tabelaParticular() {
 }
 
 // Itens gravados (db/031) ou, em registro antigo, o procedimento único
-export const itensDe = (r) => (r?.itens?.length ? r.itens
+export const itensDe = (r) => (r?.itens?.length ? r.itens.map((i) => ({ ...i, modo: i.procedimento_id ? null : 'avulso' }))
   : r ? [{ procedimento_id: r.procedimento_id, descricao: r.descricao || '', qtd: 1, valor: Number(r.valor_tabela ?? r.valor_pago) }] : []);
 export const resumoItens = (r) => itensDe(r).map((i) => `${i.descricao || 'item'}${Number(i.qtd) > 1 ? ' ×' + i.qtd : ''}`).join(' + ');
 
@@ -27,7 +29,7 @@ export async function registrarPagamento(at, aoSalvar, rec = null, pac = null) {
   if (!itens.length) {   // sugere o 1º item pelo serviço do agendamento
     const s = (at.servico || '').toLowerCase().split(/[ /]/)[0];
     const t = s && tab.find((x) => x.descricao.toLowerCase().includes(s));
-    itens = [t ? { procedimento_id: t.id, descricao: t.descricao, qtd: 1, valor: t.valor } : { procedimento_id: null, descricao: '', qtd: 1, valor: 0 }];
+    itens = [t ? { procedimento_id: t.id, descricao: nomeCurto(t.descricao), qtd: 1, valor: t.valor } : { procedimento_id: null, descricao: '', qtd: 1, valor: 0 }];
   }
   const r = rec || {};
   modal(`<h3>💲 Pagamento — particular</h3>
@@ -56,15 +58,30 @@ export async function registrarPagamento(at, aoSalvar, rec = null, pac = null) {
     const totais = () => { $('#tsub', m).textContent = brl(subtotal()); $('#tdesc', m).textContent = brl(d.value); $('#ttot', m).textContent = brl(total()); };
     function desenhar() {
       $('#ilist', m).innerHTML = itens.map((i, k) => `<tr>
-        <td><select data-k="${k}" class="i-proc" style="max-width:340px"><option value="">— outro (descrever) —</option>
-          ${tab.map((t) => `<option value="${t.id}" ${t.id === i.procedimento_id ? 'selected' : ''}>${esc(t.descricao)}</option>`).join('')}</select>
-          ${i.procedimento_id ? '' : `<input data-k="${k}" class="i-desc" placeholder="ex.: consulta de nutrição" value="${esc(i.descricao)}">`}</td>
+        <td><select data-k="${k}" class="i-proc" style="max-width:340px"><option value="" disabled ${i.procedimento_id || i.modo ? '' : 'selected'}>Escolha…</option>
+          ${tab.map((t) => `<option value="${t.id}" ${t.id === i.procedimento_id ? 'selected' : ''}>${esc(nomeCurto(t.descricao))}</option>`).join('')}
+          <option value="__novo" ${i.modo === 'novo' ? 'selected' : ''}>＋ Cadastrar novo procedimento…</option>
+          <option value="__avulso" ${i.modo === 'avulso' ? 'selected' : ''}>Outro (só neste pagamento)</option></select>
+          ${i.modo === 'novo' ? `<div style="display:flex;gap:6px;margin-top:6px"><input data-k="${k}" class="i-desc" placeholder="Nome (ex.: Consulta de nutrição)" value="${esc(i.descricao)}">
+            <button class="btn pequeno primario" data-salvarproc="${k}" title="Salva na tabela particular com o valor ao lado">💾 Salvar na tabela</button></div>`
+          : i.modo === 'avulso' ? `<input data-k="${k}" class="i-desc" style="margin-top:6px" placeholder="Descrição" value="${esc(i.descricao)}">` : ''}</td>
         <td class="num"><input data-k="${k}" class="i-qtd" type="number" min="1" step="1" value="${i.qtd}" style="width:60px"></td>
         <td class="num"><input data-k="${k}" class="i-val" type="number" min="0" step="0.01" value="${i.valor}" style="width:90px"></td>
         <td class="num">${brl(n2(i.qtd) * n2(i.valor))}</td>
         <td>${itens.length > 1 ? `<button class="btn pequeno" data-rm="${k}">✕</button>` : ''}</td></tr>`).join('');
       $$('.i-proc', m).forEach((s) => (s.onchange = () => { const t = tab.find((x) => x.id === s.value), i = itens[s.dataset.k];
-        i.procedimento_id = t?.id || null; i.descricao = t?.descricao || ''; if (t) i.valor = t.valor; desenhar(); }));
+        i.modo = s.value === '__novo' ? 'novo' : s.value === '__avulso' ? 'avulso' : null;
+        i.procedimento_id = t?.id || null; i.descricao = t ? nomeCurto(t.descricao) : ''; if (t) i.valor = t.valor; desenhar(); }));
+      $$('[data-salvarproc]', m).forEach((b) => (b.onclick = async () => {
+        const i = itens[b.dataset.salvarproc];
+        if ((i.descricao || '').trim().length < 3) return toast('Informe o nome do procedimento.', true);
+        if (!(n2(i.valor) > 0)) return toast('Informe o valor do procedimento na coluna Valor.', true);
+        const { data: novo, error } = await sb.rpc('novo_procedimento_particular', { p_clinica: estado.clinica.id, p_nome: i.descricao.trim(), p_valor: n2(i.valor) });
+        if (error) return falha(error, 'Novo procedimento');
+        tab.push({ id: novo.id, codigo: novo.codigo, descricao: novo.descricao, valor: Number(novo.valor) }); tab.sort((a, c) => a.descricao.localeCompare(c.descricao));
+        Object.assign(i, { procedimento_id: novo.id, descricao: novo.descricao, modo: null });
+        toast('Procedimento salvo na tabela particular.'); desenhar();
+      }));
       $$('.i-desc', m).forEach((x) => (x.oninput = () => (itens[x.dataset.k].descricao = x.value)));
       $$('.i-qtd', m).forEach((x) => (x.onchange = () => { itens[x.dataset.k].qtd = Math.max(1, parseInt(x.value) || 1); desenhar(); }));
       $$('.i-val', m).forEach((x) => (x.onchange = () => { itens[x.dataset.k].valor = n2(x.value); desenhar(); }));
@@ -73,6 +90,7 @@ export async function registrarPagamento(at, aoSalvar, rec = null, pac = null) {
       totais();
     }
     $('#iadd', m).onclick = () => { itens.push({ procedimento_id: null, descricao: '', qtd: 1, valor: 0 }); desenhar(); };
+    itens.forEach((i) => { if (!i.procedimento_id && i.descricao) i.modo = 'avulso'; });
     d.oninput = () => { pct.value = ''; totais(); };
     pct.oninput = () => { d.value = (subtotal() * (Number(pct.value) || 0) / 100).toFixed(2); totais(); };
     $('#pf', m).onchange = (e) => { if (e.target.value !== 'credito_parcelado') $('#ppar', m).value = 1; };
@@ -82,7 +100,8 @@ export async function registrarPagamento(at, aoSalvar, rec = null, pac = null) {
     $('#pdel', m)?.addEventListener('click', async () => { if (await excluirPagamento(rec)) { fechar(); aoSalvar?.(); } });
     $('#pok', m).onclick = async () => {
       const f = Object.fromEntries(new FormData($('#fp', m)));
-      if (itens.some((i) => !i.procedimento_id && !i.descricao.trim())) return toast('Descreva o item "outro".', true);
+      if (itens.some((i) => i.modo === 'novo')) return toast('Clique em "Salvar na tabela" no procedimento novo (ou escolha "Outro").', true);
+      if (itens.some((i) => !i.procedimento_id && !i.descricao.trim())) return toast('Escolha o procedimento ou descreva o item.', true);
       if (n2(d.value) > subtotal()) return toast('Desconto maior que o subtotal.', true);
       const reg = { itens: itens.map((i) => ({ procedimento_id: i.procedimento_id, descricao: i.descricao.trim(), qtd: n2(i.qtd), valor: n2(i.valor) })),
         procedimento_id: itens.find((i) => i.procedimento_id)?.procedimento_id || null, descricao: resumoItens({ itens }).slice(0, 200),
