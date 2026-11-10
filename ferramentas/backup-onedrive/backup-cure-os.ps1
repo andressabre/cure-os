@@ -7,6 +7,11 @@
 
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+# O PowerShell se identifica como "Mozilla/..." e o Supabase recusa chave secreta vinda de navegador (401).
+$UA = 'CureOS-Backup/1.1 (PowerShell)'
+$PSDefaultParameterValues['Invoke-RestMethod:UserAgent'] = $UA
+$PSDefaultParameterValues['Invoke-WebRequest:UserAgent'] = $UA
+$etapa = 'início'
 
 $URL      = 'https://paipxhfhwiztznvbxawz.supabase.co'
 $BASE     = Join-Path $env:LOCALAPPDATA 'CureOS'
@@ -34,8 +39,13 @@ try {
   Log "Início do backup ($hoje)"
 
   # ---------- Tabelas: lista vem da própria API (novas tabelas entram sozinhas)
-  $api = Invoke-RestMethod -Uri "$URL/rest/v1/" -Headers $H -UseBasicParsing
-  $tabelas = @($api.definitions.PSObject.Properties.Name | Where-Object { $_ -notmatch '^rpc' } | Sort-Object)
+  $etapa = 'teste da chave'
+  if ($chave -notmatch '^(sb_secret_|eyJ)') { throw 'A chave salva não parece uma chave secreta (deve começar com sb_secret_). Rode o INSTALAR.cmd de novo.' }
+  Invoke-WebRequest -Uri "$URL/rest/v1/clinicas?select=id&limit=1" -Headers $H -UseBasicParsing | Out-Null
+  $etapa = 'lista de tabelas'
+  $api = $null
+  try { $api = Invoke-RestMethod -Uri "$URL/rest/v1/" -Headers $H -UseBasicParsing } catch { Log 'Aviso: a API não devolveu a lista de tabelas; usando a lista fixa.' }
+  $tabelas = @(if ($api) { $api.definitions.PSObject.Properties.Name | Where-Object { $_ -notmatch '^rpc' } | Sort-Object })
   if (-not $tabelas.Count) {  # reserva, caso a API não liste as tabelas
     $tabelas = @('clinicas','cnpjs_faturamento','profissionais','usuarios_clinica','convites','pacientes','operadoras','contratos','paciente_planos',
       'procedimentos','contrato_tabela','regras_repasse','solicitantes','encaminhamentos','autorizacoes','atendimentos','lotes','guias','guia_itens',
@@ -46,7 +56,8 @@ try {
   $totalLinhas = 0
   foreach ($t in $tabelas) {
     $pag = 1000; $off = 0; $n = 0; $parte = 0
-    $temId = if ($api.definitions.$t) { $api.definitions.$t.properties.PSObject.Properties.Name -contains 'id' } else { $t -notin @('motivos_glosa','glosas_operadora') }
+    $etapa = "tabela $t"
+    $temId = if ($api -and $api.definitions.$t) { $api.definitions.$t.properties.PSObject.Properties.Name -contains 'id' } else { $t -notin @('motivos_glosa','glosas_operadora') }
     do {
       $parte++
       $q = "$URL/rest/v1/$t`?select=*&limit=$pag&offset=$off" + $(if ($temId) { '&order=id' } else { '' })
@@ -62,6 +73,7 @@ try {
   Log "Tabelas: $($tabelas.Count) · linhas: $totalLinhas"
 
   # ---------- Storage: todos os buckets, recursivo
+  $etapa = 'arquivos do Storage'
   $buckets = Invoke-RestMethod -Uri "$URL/storage/v1/bucket" -Headers $H -UseBasicParsing
   $totalArq = 0
   function Listar($bucket, $prefixo) {
@@ -100,6 +112,7 @@ Contém dados de saúde (LGPD). Não compartilhe o link deste arquivo do OneDriv
 Para abrir: 7-Zip → Extrair → senha do backup (a mesma definida na instalação).
 "@ | Set-Content -Path (Join-Path $tmp 'LEIA-ME.txt') -Encoding UTF8
 
+  $etapa = 'compactação'
   # ---------- Compacta com senha (AES-256, cabeçalho cifrado) direto na pasta do OneDrive
   $final = Join-Path $destino "cure-os-$hoje.7z"
   $parcial = "$final.parcial"
@@ -123,7 +136,9 @@ Para abrir: 7-Zip → Extrair → senha do backup (a mesma definida na instalaç
   exit 0
 }
 catch {
-  Log "ERRO: $($_.Exception.Message)"
+  $msg = $_.Exception.Message
+  if ($msg -match '401') { $msg += ' — chave recusada. Confira se copiou a SECRET key (sb_secret_...) do projeto cure-os, inteira, e rode o INSTALAR.cmd de novo.' }
+  Log "ERRO na etapa '$etapa': $msg"
   if ($tmp -and (Test-Path $tmp)) { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
   exit 1
 }
