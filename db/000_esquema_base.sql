@@ -1,4 +1,6 @@
 -- =====================================================================
+-- !! INCOMPLETO (10/11/2026): contém só seções 1-5. Faltam funções, triggers, policies, grants,
+-- !! storage e trigger em auth.users. NÃO usar para recriar banco até esta linha sair.
 -- db/000_esquema_base.sql
 -- Esquema base extraido da producao do projeto Supabase (paipxhfhwiztznvbxawz)
 -- em 2026-11-10, via execute_sql somente leitura.
