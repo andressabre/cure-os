@@ -59,8 +59,12 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).
-- Políticas sempre `TO authenticated`. Rodar `get_advisors` (security) depois de cada migração.
+- Políticas sempre `TO authenticated`. Após toda migração: `get_advisors` (security) + `ferramentas/auditoria-rls.sql` devem voltar vazios
+  (alertas esperados: RPCs `authenticated` com checagem interna de perfil, `verificar_documento` anônima, senha vazada — painel).
+- db/034: EXECUTE fechado também em funções comuns; `alter default privileges` revoga EXECUTE de `public` para funções novas.
+- **Auditoria (db/035):** `auditar()` em 14 tabelas de negócio (só colunas alteradas; ignora `atualizado_em`, `arquivo_xml`, valores > 2000 chars);
+  `registrar_leitura_prontuario` (só o autor; sem texto clínico; 1×/sessão por registro); tela `#auditoria` só gestor. Sem limpeza automática (tabela cresce).
 
 ## Pendências técnicas (laudo 10/11/2026)
 Backup institucional com todos os prontuários; piloto ponta a ponta com 1 convênio; retorno em PDF/planilha; mesclar pacientes duplicados;
-trilha de auditoria; exportar esquema (migrações 002–006, 008) e criar testes SQL de regressão das regras de guia.
+exportar esquema (migrações 002–006, 008) e criar testes SQL de regressão das regras de guia.

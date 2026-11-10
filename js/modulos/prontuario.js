@@ -43,6 +43,8 @@ const SEM_ACESSO = `<div class="cartao vazio">🔒 O prontuário é sigiloso: ca
   Seu acesso não está ligado a um cadastro de profissional, então nenhum conteúdo clínico aparece aqui.</div>`;
 
 // ---------------------------------------------------------------- aba da ficha
+const LIDOS = new Set();
+
 export async function abaProntuario(alvo, p, ats, extra) {
   if (!estado.profissionalId) { alvo.innerHTML = SEM_ACESSO; return; }
   const cid = estado.clinica.id, me = await eu();
@@ -53,6 +55,7 @@ export async function abaProntuario(alvo, p, ats, extra) {
     sb.from('prontuario_anexos').select('*').eq('clinica_id', cid).order('criado_em'),
   ]);
   if (error) return falha(error, 'Prontuário');
+  (regs || []).filter((r) => !LIDOS.has(r.id)).forEach((r) => { LIDOS.add(r.id); sb.rpc('registrar_leitura_prontuario', { p_registro: r.id }); }); // auditoria de leitura (1x por sessão)
   const meusAts = (ats || []).filter((a) => a.profissional_id === estado.profissionalId && ['atendido', 'presente'].includes(a.status));
   const semRegistro = meusAts.filter((a) => !(regs || []).some((r) => r.atendimento_id === a.id));
   const recarregar = () => abaProntuario(alvo, p, ats);

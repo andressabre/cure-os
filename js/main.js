@@ -14,6 +14,7 @@ import * as paciente from './modulos/paciente.js';
 import * as financeiro from './modulos/financeiro.js';
 import * as lotes from './modulos/lotes.js';
 import * as prontuarios from './modulos/prontuario.js';
+import * as auditoria from './modulos/auditoria.js';
 
 // Cada módulo é independente: para mexer em um, só o arquivo dele muda.
 const ROTAS = [
@@ -31,6 +32,7 @@ const ROTAS = [
   { id: 'repasse', nome: 'Tabela de repasse', mod: repasse, perfis: ['gestor', 'financeiro'] },
   { id: 'extrato', nome: 'Meu extrato', mod: extrato, perfis: ['profissional'] },
   { id: 'acessos', nome: 'Acessos', mod: acessos, perfis: ['gestor'] },
+  { id: 'auditoria', nome: 'Auditoria', mod: auditoria, perfis: ['gestor'] },
 ];
 
 const PERFIL_NOME = { gestor: 'Gestora', financeiro: 'Financeiro', recepcao: 'Recepção', profissional: 'Profissional' };
