@@ -546,10 +546,19 @@ export async function render(params) {
 
   // Boas-vindas: e-mail (abre o programa de e-mail) ou WhatsApp, com texto padrão da clínica editável — sem serviço pago.
   async function boasVindas() {
-    const PADRAO = 'Olá, {nome}! Seja muito bem-vindo(a) à {clinica}.\n\n'
-      + 'Ficamos felizes em cuidar de você. Para que a agenda funcione bem para todos, combinamos assim: se precisar desmarcar ou remarcar, '
-      + 'avise com pelo menos 24 horas de antecedência. Ausências sem esse aviso são consideradas como sessão realizada.\n\n'
-      + 'Qualquer dúvida, é só responder esta mensagem. Até breve!\nEquipe {clinica}';
+    const PADRAO = {
+      particular: 'Olá, {nome}! Seja muito bem-vindo(a) à {clinica}.\n\n'
+        + 'Ficamos felizes em cuidar de você. Para que a agenda funcione bem para todos, combinamos assim: se precisar desmarcar ou remarcar, '
+        + 'avise com pelo menos 24 horas de antecedência. Ausências sem esse aviso são consideradas como sessão realizada.\n\n'
+        + 'Qualquer dúvida, é só responder esta mensagem. Até breve!\nEquipe {clinica}',
+      convenio: 'Olá, {nome}! Seja muito bem-vindo(a) à {clinica}.\n\n'
+        + 'Ficamos felizes em cuidar de você. Para que a agenda funcione bem para todos, combinamos assim: se precisar desmarcar ou remarcar, '
+        + 'avise com pelo menos 24 horas de antecedência. Faltas sem esse aviso liberam o horário reservado para outro paciente e podem exigir '
+        + 'nova autorização do seu plano para continuar o tratamento.\n\n'
+        + 'Qualquer dúvida, é só responder esta mensagem. Até breve!\nEquipe {clinica}',
+    };
+    const CHAVE = { particular: 'boas_vindas_texto', convenio: 'boas_vindas_convenio' };
+    const temConv = (planos || []).some((pl) => !/particular/i.test(pl.contratos?.nome || ''));
     const { data: cl } = await sb.from('clinicas').select('config').eq('id', cid).single();
     const cfg = cl?.config || {};
     const primeiro = ((p.nome_social || p.nome || '').trim().split(/\s+/)[0] || '').toLowerCase().replace(/^./, (k) => k.toUpperCase());
@@ -557,16 +566,20 @@ export async function render(params) {
     const cel = foneDig(p.celular);
     modal(`<h3>Boas-vindas — ${esc(p.nome)}</h3>
       <p class="muted">Use {nome} e {clinica} no texto. O e-mail abre no seu programa de e-mail (Outlook/Gmail) já preenchido; é só enviar.</p>
-      <textarea id="bv" rows="10" style="width:100%">${esc(cfg.boas_vindas_texto || PADRAO)}</textarea>
+      <label style="max-width:260px">Texto para<select id="bvtipo"><option value="particular">Particular</option><option value="convenio" ${temConv ? 'selected' : ''}>Convênio</option></select></label>
+      <textarea id="bv" rows="10" style="width:100%;margin-top:8px"></textarea>
       <div class="linha-acoes">${podeGerir() ? '<button class="btn" id="bvpadrao">Salvar como texto padrão</button>' : ''}<button class="btn" data-fechar>Fechar</button>
         <button class="btn" id="bvwpp" ${/^55\d{10,11}$/.test(cel) ? '' : 'disabled title="Sem celular com DDD"'}>📲 WhatsApp</button>
         <button class="btn primario" id="bvmail" ${p.email ? '' : 'disabled title="Paciente sem e-mail"'}>✉ Abrir e-mail</button></div>`, (m) => {
       const txt = () => montar($('#bv', m).value);
+      const carrega = () => { const k = $('#bvtipo', m).value; $('#bv', m).value = cfg[CHAVE[k]] || PADRAO[k]; };
+      $('#bvtipo', m).onchange = carrega; carrega();
       $('#bvmail', m).onclick = () => { location.href = `mailto:${encodeURIComponent(p.email)}?subject=${encodeURIComponent('Boas-vindas à ' + (estado.clinica.nome || 'clínica'))}&body=${encodeURIComponent(txt())}`; };
       $('#bvwpp', m).onclick = () => window.open(`https://wa.me/${cel}?text=${encodeURIComponent(txt())}`, '_blank', 'noopener');
       $('#bvpadrao', m)?.addEventListener('click', async () => {
         const { data: atual } = await sb.from('clinicas').select('config').eq('id', cid).single();
-        const novo = { ...(atual?.config || {}), boas_vindas_texto: $('#bv', m).value };
+        const novo = { ...(atual?.config || {}), [CHAVE[$('#bvtipo', m).value]]: $('#bv', m).value };
+        cfg[CHAVE[$('#bvtipo', m).value]] = $('#bv', m).value;
         const { error: er } = await sb.from('clinicas').update({ config: novo }).eq('id', cid);
         if (er) return falha(er, 'Salvar texto padrão'); toast('Texto padrão salvo.');
       });

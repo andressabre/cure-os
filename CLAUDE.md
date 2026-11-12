@@ -51,7 +51,7 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 - **Ficha do paciente (12/11/2026):** abas Resumo · Cadastro e encaminhamentos · Autorizações e guias · Prontuário · Documentos.
   Autorização sem senha = `pendente` (exceto Particular); guias aparecem dentro da autorização (imprimir/cancelar); filtro por situação/convênio/ordem.
 - **Cadastro (db/041):** `pacientes.observacao` e `pacientes.alerta` (alerta em destaque na ficha e ao escolher o paciente na agenda);
-  boas-vindas por mailto/wa.me com texto `clinicas.config.boas_vindas_texto` ({nome} {clinica}).
+  boas-vindas por mailto/wa.me com textos `clinicas.config.boas_vindas_texto` (particular) e `boas_vindas_convenio` ({nome} {clinica}).
 - **Documentos:** botão único ★ Favoritos (seletor de modelo no editor: salvar edição / excluir modelo / salvar / imprimir).
 - **Telefones (db/040):** `pacientes.celular` (WhatsApp) separado de `telefone` fixo; gravados só dígitos com 55; máscara `mascaraFone` no core.
 - **Prontuário:** registros por modelo de área; RLS só pelo autor. **Desde db/039 (12/11/2026) não há etapa de assinar:** salvar grava status
