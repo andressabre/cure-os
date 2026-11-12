@@ -216,3 +216,13 @@ p.ok{color:var(--verde);font-weight:600} p.aviso{background:var(--amarelo-claro)
 .aut-cab{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap} .aut-acoes{display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap}
 .aut-bloco .sub-ats{margin-top:8px}
 details.cartao>summary{cursor:pointer;list-style:revert}
+/* Cadastro do paciente: grade de 12 colunas e alerta */
+.form-dados{display:grid;grid-template-columns:repeat(12,1fr);gap:10px 12px;align-items:start}
+.form-dados .c1{grid-column:span 1}.form-dados .c2{grid-column:span 2}.form-dados .c3{grid-column:span 3}.form-dados .c4{grid-column:span 4}
+.form-dados .c5{grid-column:span 5}.form-dados .c6{grid-column:span 6}.form-dados .c12{grid-column:1/-1}
+@media (max-width:1100px){.form-dados{grid-template-columns:repeat(6,1fr)}.form-dados .c5,.form-dados .c4{grid-column:span 3}.form-dados .c6{grid-column:1/-1}}
+.icones-dados{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.icone-check{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--linha);border-radius:20px;padding:4px 12px;cursor:pointer;font-weight:500}
+.icone-check input{min-height:0;margin:0}
+.alerta-paciente{margin:10px 0 0;padding:8px 12px;border-radius:var(--raio);background:var(--vermelho-claro);color:var(--vermelho);border:1px solid var(--vermelho)}
+.rotulo-alerta textarea{border-color:#E5B8AF}

@@ -59,6 +59,7 @@ export async function render(params) {
       <div><span class="muted">${[idade != null ? idade + ' anos' : null, p.sexo, p.celular && foneFmt(p.celular), p.telefone && foneFmt(p.telefone)].filter(Boolean).map(esc).join(' · ') || 'Sem dados básicos'}</span>
         ${(planos || []).map((pl) => `<span class="selo clinica">${esc(pl.contratos?.nome)} · ${esc(pl.carteirinha)}</span>`).join(' ')
           || (x.convenio_origem ? `<span class="selo outra">Sistema antigo: ${esc(x.convenio_origem)}</span>` : '')}</div>
+      ${p.alerta ? `<div class="alerta-paciente">⚠️ <strong>Alerta:</strong> ${esc(p.alerta)}</div>` : ''}
       ${faltas.length ? `<div class="dica" style="margin:10px 0 0">⚠️ Para faturar convênio falta: <strong>${faltas.map(esc).join(', ')}</strong></div>` : ''}
     </div>
     <nav class="abas">${ABAS.map(([k, n]) => `<a href="#paciente-${id}-${k}" class="${k === abaUrl ? 'ativa' : ''}">${n}</a>`).join('')}</nav>
@@ -86,23 +87,31 @@ export async function render(params) {
     },
 
     dados(t = alvo) {
-      t.innerHTML = `<div class="cartao"><h3 style="margin-bottom:10px">Dados do paciente</h3><form class="grade-form" id="fdados">
-        <label>Nome<input name="nome" required value="${esc(p.nome)}"></label>
-        <label>Nome social<input name="nome_social" value="${esc(p.nome_social)}"></label>
-        <label>CPF<input name="cpf" value="${esc(p.cpf)}"></label>
-        <label>Nascimento<input type="date" name="data_nascimento" value="${esc(p.data_nascimento)}"></label>
-        <label>Sexo<select name="sexo"><option value=""></option><option ${p.sexo === 'F' ? 'selected' : ''}>F</option><option ${p.sexo === 'M' ? 'selected' : ''}>M</option></select></label>
-        <label>Nome da mãe<input name="nome_mae" value="${esc(p.nome_mae)}"></label>
-        <label>CNS (cartão SUS)<input name="cns" value="${esc(p.cns)}"></label>
-        <label>Celular (WhatsApp)<input name="celular" value="${esc(p.celular)}"></label>
-        <label>Telefone fixo<input name="telefone" value="${esc(p.telefone)}"></label>
-        <label>E-mail<input name="email" value="${esc(p.email)}"></label>
-        <label>Rua<input name="rua" value="${esc(e.rua)}"></label><label>CEP<input name="cep" value="${esc(e.cep)}"></label>
-        <label>Cidade<input name="cidade" value="${esc(e.cidade)}"></label><label>UF<input name="uf" maxlength="2" value="${esc(e.uf)}"></label>
-        <label><span><input type="checkbox" name="consentimento_comunicacao" ${p.consentimento_comunicacao ? 'checked' : ''}> Recebe mensagens de relacionamento (aniversário, reavaliação)</span>
-          ${p.comunicacao_optout_em ? `<small class="muted">pediu para sair em ${data(p.comunicacao_optout_em.slice(0, 10))}</small>` : ''}</label>
-        <label><span><input type="checkbox" name="ativo" ${p.ativo ? 'checked' : ''}> Ativo</span></label>
-      </form>${gestao ? '<div class="linha-acoes"><button class="btn primario" id="sdados">Salvar dados</button></div>' : ''}</div>`;
+      t.innerHTML = `<div class="cartao"><div class="linha-acoes" style="justify-content:space-between;margin:0 0 10px"><h3>Dados do paciente</h3>
+          ${gestao ? '<button class="btn pequeno" id="boasvindas" title="Mensagem de boas-vindas com as combinações da clínica">✉ Boas-vindas</button>' : ''}</div>
+        <form class="form-dados" id="fdados">
+        <label class="c5">Nome<input name="nome" required value="${esc(p.nome)}"></label>
+        <label class="c3">Nome social<input name="nome_social" value="${esc(p.nome_social)}"></label>
+        <label class="c2">CPF<input name="cpf" value="${esc(p.cpf)}"></label>
+        <label class="c2">Nascimento<input type="date" name="data_nascimento" value="${esc(p.data_nascimento)}"></label>
+        <label class="c1">Sexo<select name="sexo"><option value=""></option><option ${p.sexo === 'F' ? 'selected' : ''}>F</option><option ${p.sexo === 'M' ? 'selected' : ''}>M</option></select></label>
+        <label class="c4">Nome da mãe<input name="nome_mae" value="${esc(p.nome_mae)}"></label>
+        <label class="c2">CNS<input name="cns" value="${esc(p.cns)}"></label>
+        <label class="c3">Celular (WhatsApp)<input name="celular" value="${esc(p.celular)}"></label>
+        <label class="c2">Telefone fixo<input name="telefone" value="${esc(p.telefone)}"></label>
+        <label class="c4">E-mail<input name="email" value="${esc(p.email)}"></label>
+        <label class="c4">Rua<input name="rua" value="${esc(e.rua)}"></label><label class="c2">CEP<input name="cep" value="${esc(e.cep)}"></label>
+        <label class="c3">Cidade<input name="cidade" value="${esc(e.cidade)}"></label><label class="c1">UF<input name="uf" maxlength="2" value="${esc(e.uf)}"></label>
+        <label class="c6">Observações<textarea name="observacao" rows="2" placeholder="Preferências, horários, combinações…">${esc(p.observacao)}</textarea></label>
+        <label class="c6 rotulo-alerta">⚠️ Alerta interno <small class="muted">(aparece em destaque na ficha e na agenda)</small>
+          <textarea name="alerta" rows="2" placeholder="Só fatos objetivos. Ex.: não reagendar — decisão da gestão em 10/2026.">${esc(p.alerta)}</textarea></label>
+        <div class="c12 icones-dados">
+          <label class="icone-check" title="Recebe mensagens de relacionamento (aniversário, reavaliação)${p.comunicacao_optout_em ? ` — pediu para sair em ${data(p.comunicacao_optout_em.slice(0, 10))}` : ''}">
+            <input type="checkbox" name="consentimento_comunicacao" ${p.consentimento_comunicacao ? 'checked' : ''}> 💬 Mensagens</label>
+          <label class="icone-check" title="Paciente ativo (aparece nas buscas e na agenda)"><input type="checkbox" name="ativo" ${p.ativo ? 'checked' : ''}> ✓ Ativo</label>
+          ${gestao ? '<button type="button" class="btn primario" id="sdados" style="margin-left:auto">Salvar dados</button>' : ''}
+        </div>
+      </form></div>`;
       const fm = $('#fdados', t);
       mascaraFone(fm.celular); mascaraFone(fm.telefone); soNumeros(fm.cns);
       $('#sdados')?.addEventListener('click', async () => {
@@ -115,11 +124,12 @@ export async function render(params) {
         try { celular = fone('celular', true); telefone = fone('telefone', false); } catch (er) { return toast(er.message, true); }
         const { error: er } = await sb.from('pacientes').update({ nome: f.nome.trim(), nome_social: f.nome_social || null, cpf: f.cpf.replace(/\D/g, '') || null,
           data_nascimento: f.data_nascimento || null, sexo: f.sexo || null, nome_mae: f.nome_mae || null, cns: f.cns.replace(/\D/g, '') || null,
-          celular, telefone, email: f.email || null, consentimento_comunicacao: fd.has('consentimento_comunicacao'), ativo: fd.has('ativo'),
+          celular, telefone, email: f.email || null, observacao: f.observacao.trim() || null, alerta: f.alerta.trim() || null, consentimento_comunicacao: fd.has('consentimento_comunicacao'), ativo: fd.has('ativo'),
           comunicacao_optout_em: fd.has('consentimento_comunicacao') ? null : (p.comunicacao_optout_em || new Date().toISOString()),
           endereco: { ...e, rua: f.rua, cep: f.cep, cidade: f.cidade, uf: f.uf.toUpperCase() } }).eq('id', id);
         if (er) return falha(er, er.code === '23505' ? 'CPF já cadastrado em outro paciente' : 'Salvar'); toast('Salvo.'); recarregar();
       });
+      $('#boasvindas', t)?.addEventListener('click', boasVindas);
     },
 
     convenios(t = alvo) {
@@ -531,6 +541,35 @@ export async function render(params) {
         if (sel) sel.value = sid;
         fechar();
       };
+    });
+  }
+
+  // Boas-vindas: e-mail (abre o programa de e-mail) ou WhatsApp, com texto padrão da clínica editável — sem serviço pago.
+  async function boasVindas() {
+    const PADRAO = 'Olá, {nome}! Seja muito bem-vindo(a) à {clinica}.\n\n'
+      + 'Ficamos felizes em cuidar de você. Para que a agenda funcione bem para todos, combinamos assim: se precisar desmarcar ou remarcar, '
+      + 'avise com pelo menos 24 horas de antecedência. Ausências sem esse aviso são consideradas como sessão realizada.\n\n'
+      + 'Qualquer dúvida, é só responder esta mensagem. Até breve!\nEquipe {clinica}';
+    const { data: cl } = await sb.from('clinicas').select('config').eq('id', cid).single();
+    const cfg = cl?.config || {};
+    const primeiro = ((p.nome_social || p.nome || '').trim().split(/\s+/)[0] || '').toLowerCase().replace(/^./, (k) => k.toUpperCase());
+    const montar = (txt) => txt.replace(/\{nome\}/g, primeiro).replace(/\{clinica\}/g, estado.clinica.nome || 'clínica');
+    const cel = foneDig(p.celular);
+    modal(`<h3>Boas-vindas — ${esc(p.nome)}</h3>
+      <p class="muted">Use {nome} e {clinica} no texto. O e-mail abre no seu programa de e-mail (Outlook/Gmail) já preenchido; é só enviar.</p>
+      <textarea id="bv" rows="10" style="width:100%">${esc(cfg.boas_vindas_texto || PADRAO)}</textarea>
+      <div class="linha-acoes">${podeGerir() ? '<button class="btn" id="bvpadrao">Salvar como texto padrão</button>' : ''}<button class="btn" data-fechar>Fechar</button>
+        <button class="btn" id="bvwpp" ${/^55\d{10,11}$/.test(cel) ? '' : 'disabled title="Sem celular com DDD"'}>📲 WhatsApp</button>
+        <button class="btn primario" id="bvmail" ${p.email ? '' : 'disabled title="Paciente sem e-mail"'}>✉ Abrir e-mail</button></div>`, (m) => {
+      const txt = () => montar($('#bv', m).value);
+      $('#bvmail', m).onclick = () => { location.href = `mailto:${encodeURIComponent(p.email)}?subject=${encodeURIComponent('Boas-vindas à ' + (estado.clinica.nome || 'clínica'))}&body=${encodeURIComponent(txt())}`; };
+      $('#bvwpp', m).onclick = () => window.open(`https://wa.me/${cel}?text=${encodeURIComponent(txt())}`, '_blank', 'noopener');
+      $('#bvpadrao', m)?.addEventListener('click', async () => {
+        const { data: atual } = await sb.from('clinicas').select('config').eq('id', cid).single();
+        const novo = { ...(atual?.config || {}), boas_vindas_texto: $('#bv', m).value };
+        const { error: er } = await sb.from('clinicas').update({ config: novo }).eq('id', cid);
+        if (er) return falha(er, 'Salvar texto padrão'); toast('Texto padrão salvo.');
+      });
     });
   }
 

@@ -232,11 +232,11 @@ export async function render() {
         pacienteId = null; clearTimeout(t); conv.innerHTML = '';
         t = setTimeout(async () => {
           if (busca.value.trim().length < 2) return (sug.innerHTML = '');
-          const { data: ps } = await sb.from('pacientes').select('id, nome, telefone, celular').eq('clinica_id', estado.clinica.id).eq('ativo', true)
+          const { data: ps } = await sb.from('pacientes').select('id, nome, telefone, celular, alerta').eq('clinica_id', estado.clinica.id).eq('ativo', true)
             .ilike('nome', `%${busca.value.trim()}%`).order('nome').limit(8);
-          sug.innerHTML = (ps || []).map((x) => `<div data-id="${x.id}">${esc(x.nome)} <span class="muted">${esc(x.celular || x.telefone || '')}</span></div>`).join('')
+          sug.innerHTML = (ps || []).map((x) => `<div data-id="${x.id}">${x.alerta ? '⚠️ ' : ''}${esc(x.nome)} <span class="muted">${esc(x.celular || x.telefone || '')}</span></div>`).join('')
             || '<div class="muted">Nenhum paciente — cadastre em Pacientes.</div>';
-          $$('[data-id]', sug).forEach((d) => (d.onclick = () => { pacienteId = d.dataset.id; busca.value = ps.find((x) => x.id === d.dataset.id).nome; sug.innerHTML = ''; planoId = ''; autId = ''; carregarConv(); }));
+          $$('[data-id]', sug).forEach((d) => (d.onclick = () => { pacienteId = d.dataset.id; const px = ps.find((x) => x.id === d.dataset.id); busca.value = px.nome; if (px.alerta) toast('⚠️ Alerta do paciente: ' + px.alerta, true); sug.innerHTML = ''; planoId = ''; autId = ''; carregarConv(); }));
         }, 250);
       };
       $$('[data-st]', m).forEach((b) => (b.onclick = async () => {

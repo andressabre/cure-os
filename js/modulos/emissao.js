@@ -84,24 +84,18 @@ export async function abaDocumentos(alvo, p, ats) {
   alvo.innerHTML = `<div class="cartao"><div class="linha-acoes" style="justify-content:space-between;margin:0">
       <span class="muted">${souProf ? 'Documentos com conteúdo clínico ficam visíveis só para você.' : 'A recepção emite declarações de comparecimento e de acompanhante.'}</span>
       <span>${tiposOk.map(([k, t]) => `<button class="btn" data-novo="${k}">${esc(t.nome)}</button>`).join(' ')}
-        ${meusModelos.map((m) => `<button class="btn" data-mod="${m.id}">★ ${esc(m.titulo)}</button>`).join(' ')}</span></div></div>
+        ${souProf ? `<button class="btn" id="favs" title="Modelos que você salvou">★ Favoritos${meusModelos.length ? ` (${meusModelos.length})` : ''}</button>` : ''}</span></div></div>
     <div class="cartao"><h3>Emitidos</h3>${(emitidos || []).length ? `<table><thead><tr><th>Data</th><th>Documento</th><th>Profissional</th><th>Código</th><th></th></tr></thead><tbody>
       ${emitidos.map((d) => `<tr><td>${new Date(d.emitido_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(d.titulo)}</td>
         <td>${esc(d.profissionais?.nome || 'Recepção')}</td><td><code>${esc(d.codigo)}</code></td>
         <td class="doc-acoes"><button class="btn pequeno" data-reimp="${d.id}">Imprimir</button>
-          ${podeMexer(d) ? `<button class="btn pequeno" data-edit="${d.id}">Editar</button><button class="btn pequeno" data-del="${d.id}">Excluir</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum documento emitido.</div>'}</div>
-    ${souProf ? `<div class="cartao"><h3>Meus modelos</h3>
-      <p class="muted">Modelos salvos (botão "Salvar texto como meu modelo" ao preparar um documento) aparecem aqui e como botões ★ no topo desta aba. Só você os vê.</p>
-      ${meusModelos.length ? `<table><thead><tr><th>Modelo</th><th>Tipo</th><th></th></tr></thead><tbody>
-        ${meusModelos.map((m) => `<tr><td>★ ${esc(m.titulo)}</td><td>${esc(TIPOS[m.tipo]?.nome || m.tipo)}</td>
-          <td class="doc-acoes"><button class="btn pequeno" data-usar="${m.id}">Usar</button><button class="btn pequeno" data-ren="${m.id}">Renomear</button>
-            <button class="btn pequeno" data-delmod="${m.id}">Excluir</button></td></tr>`).join('')}</tbody></table>`
-        : '<div class="vazio">Nenhum modelo salvo ainda.</div>'}</div>` : ''}`;
+          ${podeMexer(d) ? `<button class="btn pequeno" data-edit="${d.id}">Editar</button><button class="btn pequeno" data-del="${d.id}">Excluir</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum documento emitido.</div>'}</div>`;
 
   $$('[data-novo]', alvo).forEach((b) => (b.onclick = () => editor(p, ats, eu, b.dataset.novo, null, recarregar)));
-  $$('[data-mod],[data-usar]', alvo).forEach((b) => (b.onclick = () => {
-    const m = modelos.find((x) => x.id === (b.dataset.mod || b.dataset.usar)); editor(p, ats, eu, m.tipo, m, recarregar);
-  }));
+  $('#favs', alvo)?.addEventListener('click', () => {
+    if (!meusModelos.length) return toast('Nenhum favorito ainda: ao preparar um documento, use "★ Salvar como favorito".', true);
+    editor(p, ats, eu, meusModelos[0].tipo, meusModelos[0], recarregar, null, meusModelos);
+  });
   $$('[data-edit]', alvo).forEach((b) => (b.onclick = () => {
     const d = emitidos.find((x) => x.id === b.dataset.edit); editor(p, ats, eu, d.tipo, null, recarregar, d);
   }));
@@ -115,23 +109,6 @@ export async function abaDocumentos(alvo, p, ats) {
     const d = emitidos.find((x) => x.id === b.dataset.reimp);
     imprimirDoc(d, await profDoc(d, eu), await timbrado());
   }));
-  $$('[data-ren]', alvo).forEach((b) => (b.onclick = () => {
-    const m = modelos.find((x) => x.id === b.dataset.ren);
-    modal(`<h3>Renomear modelo</h3><input id="nm" value="${esc(m.titulo)}" style="width:100%">
-      <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="ok">Salvar</button></div>`, (box, fechar) => {
-      $('#ok', box).onclick = async () => {
-        const titulo = $('#nm', box).value.trim(); if (!titulo) return toast('Informe o nome.', true);
-        const { error: e } = await sb.from('documento_modelos').update({ titulo }).eq('id', m.id);
-        if (e) return falha(e, 'Renomear modelo'); toast('Modelo renomeado.'); fechar(); recarregar();
-      };
-    });
-  }));
-  $$('[data-delmod]', alvo).forEach((b) => (b.onclick = async () => {
-    const m = modelos.find((x) => x.id === b.dataset.delmod);
-    if (!(await confirmar(`Excluir o modelo "${m.titulo}"? Os documentos já emitidos não mudam.`, 'Excluir'))) return;
-    const { error: e } = await sb.from('documento_modelos').delete().eq('id', m.id);
-    if (e) return falha(e, 'Excluir modelo'); toast('Modelo excluído.'); recarregar();
-  }));
 }
 
 async function profDoc(d, eu) {
@@ -140,7 +117,7 @@ async function profDoc(d, eu) {
   return (await sb.from('profissionais').select('nome, conselho, numero_conselho, uf_conselho, especialidade').eq('id', d.profissional_id).single()).data;
 }
 
-function editor(p, ats, eu, tipo, modeloProprio, aoEmitir, existente) {
+function editor(p, ats, eu, tipo, modeloProprio, aoEmitir, existente, favs) {
   const T = TIPOS[tipo], cpf = p.cpf ? `, CPF ${p.cpf}` : '';
   const meus = (ats || []).filter((a) => ['atendido', 'presente'].includes(a.status) && (!eu || a.profissional_id === eu.id))
     .sort((a, b) => b.inicio.localeCompare(a.inicio));
@@ -155,13 +132,15 @@ function editor(p, ats, eu, tipo, modeloProprio, aoEmitir, existente) {
         <label>CID<input name="cid" placeholder="Só com autorização do paciente"></label>
         <label><span><input type="checkbox" name="cid_ok"> Paciente autorizou constar o CID</span></label>` : ''}
       ${tipo === 'acompanhante' ? '<label style="grid-column:1/-1">Nome do acompanhante<input name="acomp" required></label>' : ''}
+      ${favs ? `<label style="grid-column:1/-1">★ Modelo favorito<select name="fav">${favs.map((m) => `<option value="${m.id}" ${m.id === modeloProprio?.id ? 'selected' : ''}>${esc(m.titulo)}</option>`).join('')}</select></label>` : ''}
       <label style="grid-column:1/-1">Título<input name="titulo" value="${esc(existente?.titulo || modeloProprio?.titulo || T.titulo)}"></label>
     </form>
     <label class="pr-area" style="display:grid;gap:4px;margin-top:12px">Texto (pode editar antes de emitir)
       <textarea id="corpo" rows="14" style="width:100%;resize:vertical"></textarea></label>
     <p class="muted">${existente ? `O código <code>${esc(existente.codigo)}</code> é mantido e passa a validar o texto novo (o anterior deixa de existir).`
       : 'Ao salvar, o documento recebe um código de verificação e fica registrado. Você pode editá-lo ou excluí-lo depois pela lista.'}</p>
-    <div class="linha-acoes">${eu ? '<button class="btn" id="salvamod">Salvar texto como meu modelo</button>' : ''}<button class="btn" data-fechar>Cancelar</button>
+    <div class="linha-acoes">${favs ? '<button class="btn" id="delmod">Excluir modelo</button><button class="btn" id="edmod">Salvar edição do modelo</button>'
+      : eu && !existente ? '<button class="btn" id="salvamod">★ Salvar como favorito</button>' : ''}<button class="btn" data-fechar>Cancelar</button>
       <button class="btn" id="salvar">Salvar</button><button class="btn primario" id="emitir">Salvar e imprimir</button></div>`, (box, fechar) => {
     box.classList.add('largo');
     const f = $('#fd', box), corpo = $('#corpo', box);
@@ -184,17 +163,36 @@ function editor(p, ats, eu, tipo, modeloProprio, aoEmitir, existente) {
     const gerar = () => { if (existente) return; if (!editado) corpo.value = preencher(modeloProprio?.corpo ?? T.corpo, valores()); };
     f.oninput = gerar; f.onchange = gerar; gerar();
     if (f.cid) f.cid.oninput = () => { if (f.cid.value) f.cid_ok.closest('label').style.color = f.cid_ok.checked ? '' : 'var(--vermelho)'; gerar(); };
-    $('#salvamod', box)?.addEventListener('click', async () => {
-      // Guarda o texto com os campos automáticos de volta como {marcadores}, para reaproveitar com outros pacientes
+    // Texto → modelo: campos automáticos voltam a ser {marcadores}, para reaproveitar com outros pacientes
+    const paraModelo = () => {
       const v = valores(); let txt = corpo.value;
       for (const k of ['paciente', 'acompanhante']) if (v[k] && v[k].length > 3) txt = txt.split(v[k]).join(`{${k}}`);
       if (v.cpf_frase) txt = txt.split(v.cpf_frase).join('{cpf_frase}');
       if (v.horario_frase) txt = txt.split(v.horario_frase).join('{horario_frase}');
-      txt = txt.split(v.data).join('{data}');
+      return txt.split(v.data).join('{data}');
+    };
+    $('#salvamod', box)?.addEventListener('click', async () => {
       const { error } = await sb.from('documento_modelos').insert({ clinica_id: estado.clinica.id, profissional_id: eu.id, tipo,
-        titulo: f.titulo.value || T.titulo, corpo: txt });
-      if (error) return falha(error, 'Salvar modelo'); toast('Modelo salvo em "Meus modelos" (aba Documentos).'); aoEmitir();
+        titulo: f.titulo.value || T.titulo, corpo: paraModelo() });
+      if (error) return falha(error, 'Salvar favorito'); toast('Salvo em ★ Favoritos.'); aoEmitir();
     });
+    if (favs) {
+      // Trocar o favorito no seletor recarrega o editor com o texto dele
+      f.fav.onchange = () => { const m = favs.find((k) => k.id === f.fav.value); editor(p, ats, eu, m.tipo, m, aoEmitir, null, favs); };
+      $('#edmod', box).onclick = async () => {
+        const titulo = f.titulo.value.trim() || modeloProprio.titulo;
+        const { error } = await sb.from('documento_modelos').update({ titulo, corpo: paraModelo() }).eq('id', modeloProprio.id);
+        if (error) return falha(error, 'Salvar edição do modelo');
+        Object.assign(modeloProprio, { titulo, corpo: paraModelo() });
+        f.fav.selectedOptions[0].textContent = titulo; toast('Favorito atualizado.');
+      };
+      $('#delmod', box).onclick = async () => {
+        const nome = modeloProprio.titulo;
+        if (!(await confirmar(`Excluir o favorito "${nome}"? Documentos já emitidos não mudam.`, 'Excluir'))) return;
+        const { error } = await sb.from('documento_modelos').delete().eq('id', modeloProprio.id);
+        if (error) return falha(error, 'Excluir modelo'); toast('Favorito excluído.'); aoEmitir();
+      };
+    }
     const gravar = async (imprimir) => {
       if (!corpo.value.trim()) return toast('O documento está vazio.', true);
       if (!existente && tipo === 'acompanhante' && !f.acomp.value.trim()) return toast('Informe o nome do acompanhante.', true);
