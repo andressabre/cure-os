@@ -32,7 +32,7 @@ function textoLembrete(cfg, a, nomeProf) {
     .replace(/\{servico\}/g, (a.servico || 'atendimento').toLowerCase()).replace(/\{profissional\}/g, nomeProf || 'nossa equipe')
     .replace(/\{dia\}/g, quando).replace(/\{hora\}/g, hm(a.inicio)).replace(/\{sala\}/g, a.sala || '');
 }
-const linkWhats = (cfg, a, nomeProf) => { const f = foneWhats(a.pacientes?.telefone); return f ? `https://wa.me/${f}?text=${encodeURIComponent(textoLembrete(cfg, a, nomeProf))}` : null; };
+const linkWhats = (cfg, a, nomeProf) => { const f = foneWhats(a.pacientes?.celular) || foneWhats(a.pacientes?.telefone); return f ? `https://wa.me/${f}?text=${encodeURIComponent(textoLembrete(cfg, a, nomeProf))}` : null; };
 
 let vis = { dia: hojeIso(), modo: 'dia', prof: '' };
 
@@ -81,7 +81,7 @@ export async function render() {
   }
   if (!colunas.length) { c.innerHTML = '<div class="cartao vazio">Cadastre profissionais para usar a agenda.</div>'; return; }
 
-  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, paciente_plano_id, autorizacao_id, serie_id, lembrete_enviado_em, pacientes(nome, telefone)')
+  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, paciente_plano_id, autorizacao_id, serie_id, lembrete_enviado_em, pacientes(nome, telefone, celular)')
     .eq('clinica_id', estado.clinica.id).gte('inicio', new Date(de + 'T00:00').toISOString()).lt('inicio', new Date(somaDias(ate, 1) + 'T00:00').toISOString())
     .neq('status', 'cancelado').order('inicio');
   if (vis.prof) q = q.eq('profissional_id', vis.prof);
@@ -158,7 +158,7 @@ export async function render() {
           ${a.lembrete_enviado_em ? ` <span class="selo ok">lembrete enviado ${new Date(a.lembrete_enviado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''}</p>`; })() : ''}
       ${a && !a.paciente_plano_id && a.status !== 'cancelado' && (!souProf || a.profissional_id === estado.profissionalId)
         ? '<p><button class="btn pequeno" id="pgto">💲 Pagamento (particular)</button> <span id="pgto-st"></span></p>' : ''}
-      ${a ? `<p class="muted">${a.pacientes?.telefone ? 'Telefone: ' + esc(a.pacientes.telefone) + ' · ' : ''}<a href="#paciente-${a.paciente_id}" data-fechar>Abrir ficha do paciente →</a>${a.profissional_id === estado.profissionalId ? ` · <a href="#paciente-${a.paciente_id}-prontuario:${a.id}" data-fechar>Evoluir no prontuário →</a>` : ''}</p>` : ''}
+      ${a ? `<p class="muted">${(a.pacientes?.celular || a.pacientes?.telefone) ? 'Telefone: ' + esc(a.pacientes.celular || a.pacientes.telefone) + ' · ' : ''}<a href="#paciente-${a.paciente_id}" data-fechar>Abrir ficha do paciente →</a>${a.profissional_id === estado.profissionalId ? ` · <a href="#paciente-${a.paciente_id}-prontuario:${a.id}" data-fechar>Evoluir no prontuário →</a>` : ''}</p>` : ''}
       <div class="linha-acoes">${a && !souProf ? '<button class="btn escuro" id="canc">Cancelar agendamento</button>' : ''}${a?.serie_id && !souProf && !travado0(a) ? '<button class="btn escuro" id="canc-serie">Cancelar esta e as próximas da série</button>' : ''}
         <button class="btn" data-fechar>Fechar</button>${souProf && !a ? '' : '<button class="btn primario" id="s">Salvar</button>'}</div>`,
     (m, fechar) => {
@@ -232,9 +232,9 @@ export async function render() {
         pacienteId = null; clearTimeout(t); conv.innerHTML = '';
         t = setTimeout(async () => {
           if (busca.value.trim().length < 2) return (sug.innerHTML = '');
-          const { data: ps } = await sb.from('pacientes').select('id, nome, telefone').eq('clinica_id', estado.clinica.id).eq('ativo', true)
+          const { data: ps } = await sb.from('pacientes').select('id, nome, telefone, celular').eq('clinica_id', estado.clinica.id).eq('ativo', true)
             .ilike('nome', `%${busca.value.trim()}%`).order('nome').limit(8);
-          sug.innerHTML = (ps || []).map((x) => `<div data-id="${x.id}">${esc(x.nome)} <span class="muted">${esc(x.telefone || '')}</span></div>`).join('')
+          sug.innerHTML = (ps || []).map((x) => `<div data-id="${x.id}">${esc(x.nome)} <span class="muted">${esc(x.celular || x.telefone || '')}</span></div>`).join('')
             || '<div class="muted">Nenhum paciente — cadastre em Pacientes.</div>';
           $$('[data-id]', sug).forEach((d) => (d.onclick = () => { pacienteId = d.dataset.id; busca.value = ps.find((x) => x.id === d.dataset.id).nome; sug.innerHTML = ''; planoId = ''; autId = ''; carregarConv(); }));
         }, 250);
@@ -369,7 +369,7 @@ function lembretes(cfg, profs, aoFechar) {
     caixa.onclick = (e) => { if (e.target === caixa) { fechar(); aoFechar(); } };
     $$('[data-fechar]', m).forEach((b) => (b.onclick = () => { fechar(); aoFechar(); }));
     async function carregar() {
-      const { data: ats, error } = await sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, profissional_id, lembrete_enviado_em, pacientes(nome, telefone)')
+      const { data: ats, error } = await sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, profissional_id, lembrete_enviado_em, pacientes(nome, telefone, celular)')
         .eq('clinica_id', estado.clinica.id).gte('inicio', new Date(dia + 'T00:00').toISOString()).lt('inicio', new Date(somaDias(dia, 1) + 'T00:00').toISOString())
         .in('status', ['agendado', 'confirmado']).order('inicio');
       if (error) return falha(error);
@@ -379,7 +379,7 @@ function lembretes(cfg, profs, aoFechar) {
         <p><strong>${ats.length}</strong> atendimento(s) · <strong>${pend}</strong> sem lembrete</p>
         <table class="tabela"><thead><tr><th>Hora</th><th>Paciente</th><th>Profissional</th><th>Sala</th><th></th></tr></thead><tbody>
         ${ats.map((x) => { const l = linkWhats(cfg, x, nomeP(x.profissional_id));
-          return `<tr><td>${hm(x.inicio)}</td><td>${esc(x.pacientes?.nome || '')}<br><small class="muted">${esc(x.pacientes?.telefone || 'sem telefone')}</small></td>
+          return `<tr><td>${hm(x.inicio)}</td><td>${esc(x.pacientes?.nome || '')}<br><small class="muted">${esc(x.pacientes?.celular || x.pacientes?.telefone || 'sem telefone')}</small></td>
             <td>${esc(nomeP(x.profissional_id) || '')}<br><small class="muted">${esc(x.servico || '')}</small></td><td>${esc(x.sala || '—')}</td>
             <td style="white-space:nowrap">${l ? `<a class="btn pequeno ${x.lembrete_enviado_em ? '' : 'primario'}" target="_blank" rel="noopener" href="${esc(l)}" data-env="${x.id}">${x.lembrete_enviado_em ? '✓ Reenviar' : 'WhatsApp'}</a>` : '<span class="muted">sem celular</span>'}
               ${x.status === 'confirmado' ? '<span class="selo ok">confirmado</span>' : `<button class="btn pequeno" data-conf="${x.id}">Confirmou</button>`}</td></tr>`; }).join('')}

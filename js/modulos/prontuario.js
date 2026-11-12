@@ -1,5 +1,6 @@
 // Módulo Prontuário (db/023). Sigilo: cada profissional lê e escreve SÓ os próprios registros (RLS por autor).
-// Modelos por área + campo livre; assinado é imutável (db/025) — correção só por adendo datado; anexos no bucket "prontuario".
+// Modelos por área + campo livre. Sem etapa de assinatura (db/039): salvar grava o registro como final e ele pode ser editado depois
+// (versão anterior guardada em prontuario_versoes pelo gatilho); adendos e anexos (bucket "prontuario") ficam dentro do registro expandido.
 // Duas entradas: aba "Prontuário" da ficha do paciente (abaProntuario) e rota #prontuarios (meus pacientes + importação dos .txt antigos).
 import { sb, estado, $, $$, esc, data, tela, toast, falha, modal, confirmar } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo } from './documentos.js';
@@ -44,6 +45,7 @@ const SEM_ACESSO = `<div class="cartao vazio">🔒 O prontuário é sigiloso: ca
 
 // ---------------------------------------------------------------- aba da ficha
 const LIDOS = new Set();
+const ABERTOS = new Set();   // registros expandidos (sobrevive ao recarregar a aba)
 
 export async function abaProntuario(alvo, p, ats, extra) {
   if (!estado.profissionalId) { alvo.innerHTML = SEM_ACESSO; return; }
@@ -63,30 +65,34 @@ export async function abaProntuario(alvo, p, ats, extra) {
 
   alvo.innerHTML = `
     <div class="cartao"><div class="linha-acoes" style="justify-content:space-between;margin:0">
-      <span class="muted">🔒 Só você vê estes registros · ${esc(me?.nome)} ${esc(me?.conselho || '')} ${esc(me?.numero_conselho || '')}</span>
-      <span><select id="mod">${modelosArea.map(([k, m]) => `<option value="${k}">${esc(m.nome)}</option>`).join('')}</select>
-        <button class="btn primario" id="novo">Novo registro</button>
-        ${(regs || []).some((r) => r.status === 'assinado') ? '<button class="btn" id="imp">Imprimir prontuário</button>' : ''}</span></div>
-      ${semRegistro.length ? `<div class="dica" style="margin:10px 0 0">⚠️ ${semRegistro.length} atendimento(s) seu(s) sem evolução registrada:
+      <span class="muted">🔒 Só você vê · ${esc(me?.nome)} ${esc(me?.conselho || '')} ${esc(me?.numero_conselho || '')} · ${(regs || []).length} registro(s)</span>
+      <span>${modelosArea.length > 1 ? `<select id="mod" title="Modelo do novo registro">${modelosArea.map(([k, m]) => `<option value="${k}">${esc(m.nome)}</option>`).join('')}</select>` : ''}
+        <button class="btn primario" id="novo">+ Novo registro</button>
+        ${(regs || []).length ? '<button class="btn" id="imp">Imprimir prontuário</button>' : ''}</span></div>
+      ${semRegistro.length ? `<div class="dica" style="margin:10px 0 0">⚠️ ${semRegistro.length} atendimento(s) seu(s) sem evolução:
         ${semRegistro.slice(0, 6).map((a) => `<a href="#" data-evol="${a.id}">${dh(a.inicio)}</a>`).join(' · ')}</div>` : ''}
     </div>
-    ${(regs || []).length ? regs.map((r) => cartaoRegistro(r, ads, anx, ats)).join('') : '<div class="cartao vazio">Nenhum registro seu para este paciente.</div>'}`;
+    ${(regs || []).length ? `<div class="cartao pr-lista">${regs.map((r) => linhaRegistro(r, ads, anx, ats, me)).join('')}</div>`
+      : '<div class="cartao vazio">Nenhum registro seu para este paciente.</div>'}`;
 
-  $('#novo', alvo).onclick = () => editor(p, { modelo: $('#mod', alvo).value }, meusAts, recarregar);
+  const modeloEscolhido = () => $('#mod', alvo)?.value || modelosArea[0]?.[0] || 'livre';
+  $('#novo', alvo).onclick = () => editor(p, { modelo: modeloEscolhido() }, meusAts, recarregar);
   $$('[data-evol]', alvo).forEach((b) => (b.onclick = (e) => {
     e.preventDefault();
     const at = meusAts.find((a) => a.id === b.dataset.evol);
     editor(p, { modelo: modeloSessao(minhaArea, regs), atendimento_id: at.id, data_registro: at.inicio.slice(0, 10) }, meusAts, recarregar);
   }));
-  $('#imp', alvo)?.addEventListener('click', () => imprimir(p, regs.filter((r) => r.status === 'assinado'), ads, me));
+  $('#imp', alvo)?.addEventListener('click', () => imprimir(p, regs, ads, me));
+  $$('[data-tog]', alvo).forEach((b) => (b.onclick = () => {
+    const linha = b.closest('.pr-linha'), id = b.dataset.tog, aberto = linha.classList.toggle('aberto');
+    aberto ? ABERTOS.add(id) : ABERTOS.delete(id);
+    b.setAttribute('aria-expanded', aberto);
+  }));
   $$('[data-edit]', alvo).forEach((b) => (b.onclick = () => editor(p, regs.find((r) => r.id === b.dataset.edit), meusAts, recarregar)));
   $$('[data-apagar]', alvo).forEach((b) => (b.onclick = async () => {
-    if (!(await confirmar('Apagar este rascunho? Ele ainda não foi assinado.', 'Apagar'))) return;
+    if (!(await confirmar('Apagar este rascunho?', 'Apagar'))) return;
     const { error: e } = await sb.from('prontuario_registros').delete().eq('id', b.dataset.apagar);
     if (e) return falha(e); toast('Rascunho apagado.'); recarregar();
-  }));
-  $$('[data-assinar]', alvo).forEach((b) => (b.onclick = async () => {
-    if (await assinar(b.dataset.assinar)) recarregar();
   }));
   $$('[data-adendo]', alvo).forEach((b) => (b.onclick = () => adendo(b.dataset.adendo, recarregar)));
   $$('[data-anexar]', alvo).forEach((b) => (b.onclick = async () => {
@@ -105,8 +111,8 @@ export async function abaProntuario(alvo, p, ats, extra) {
   if (extra) {
     const ja = (regs || []).find((r) => r.atendimento_id === extra);
     const at = meusAts.find((a) => a.id === extra);
-    if (ja?.status === 'rascunho') editor(p, ja, meusAts, recarregar);
-    else if (!ja && at) editor(p, { modelo: modeloSessao(minhaArea, regs), atendimento_id: at.id, data_registro: at.inicio.slice(0, 10) }, meusAts, recarregar);
+    if (ja) editor(p, ja, meusAts, recarregar);
+    else if (at) editor(p, { modelo: modeloSessao(minhaArea, regs), atendimento_id: at.id, data_registro: at.inicio.slice(0, 10) }, meusAts, recarregar);
   }
 }
 
@@ -114,6 +120,13 @@ export async function abaProntuario(alvo, p, ats, extra) {
 function modeloSessao(area, regs) {
   if (area === 'fisioterapia') return (regs || []).some((r) => r.modelo === 'fisio_avaliacao') ? 'fisio_evolucao' : 'fisio_avaliacao';
   return { nutricao: 'soapn', psicologia: 'psico_registro' }[area] || 'livre';
+}
+
+// Prévia de uma linha: primeiros campos de texto preenchidos, em ordem do modelo
+function previa(r, max = 120) {
+  const m = MODELOS[r.modelo] || MODELOS.livre, c = r.conteudo || {};
+  const t = m.campos.filter(([, , , tipo]) => tipo !== 'num').map(([k]) => String(c[k] ?? '').trim()).filter(Boolean).join(' · ').replace(/\s+/g, ' ');
+  return t.length > max ? t.slice(0, max).trimEnd() + '…' : t;
 }
 
 function corpoRegistro(r) {
@@ -125,25 +138,31 @@ function corpoRegistro(r) {
     .map(([k, rot]) => `<div class="pr-campo"><div class="pr-rot">${esc(rot)}</div><div class="pr-txt">${esc(c[k])}</div></div>`).join('');
 }
 
-function cartaoRegistro(r, ads, anx, ats) {
+function linhaRegistro(r, ads, anx, ats, me) {
   const m = MODELOS[r.modelo] || MODELOS.livre, at = (ats || []).find((a) => a.id === r.atendimento_id);
   const meusAds = (ads || []).filter((a) => a.registro_id === r.id), meusAnx = (anx || []).filter((a) => a.registro_id === r.id);
-  const selo = r.origem === 'sistema_antigo' ? '<span class="selo outra">sistema antigo</span>'
-    : r.status === 'assinado' ? `<span class="selo ok" title="Hash ${esc(r.hash_assinatura)}">✓ assinado ${dh(r.assinado_em)}</span>` : '<span class="selo pendente">rascunho</span>';
-  const ed = r.editado_em ? ` <span class="selo outra" title="A versão anterior fica guardada">editado ${dh(r.editado_em)}</span>` : '';
-  return `<div class="cartao pr-registro">
-    <div class="linha-acoes" style="justify-content:space-between;margin:0 0 8px">
-      <span><strong>${data(r.data_registro)}</strong> · ${esc(m.nome)}${r.origem_arquivo ? ` · <span class="muted">${esc(r.origem_arquivo)}</span>` : ''}
-        ${at ? ` · <span class="muted">atendimento ${dh(at.inicio)}</span>` : ''} ${selo}${ed}</span>
-      <span>${r.status === 'rascunho' ? `<button class="btn pequeno" data-edit="${r.id}">Editar</button>
-          <button class="btn pequeno primario" data-assinar="${r.id}">Assinar</button>
-          <button class="btn pequeno" data-apagar="${r.id}">Apagar</button>`
-        : `<button class="btn pequeno" data-adendo="${r.id}">Adendo</button> <button class="btn pequeno" data-imp1="${r.id}">Imprimir</button>`}
-        <button class="btn pequeno" data-anexar="${r.id}">Anexar</button></span></div>
-    ${corpoRegistro(r)}
-    ${meusAnx.length ? `<p class="muted">📎 ${meusAnx.map((a) => `<a href="#" data-abrir="${esc(a.arquivo)}" onclick="return false">${esc(a.nome || 'anexo')}</a>`).join(' · ')}</p>` : ''}
-    ${meusAds.map((a) => `<div class="dica" style="margin:8px 0 0"><strong>Adendo ${dh(a.criado_em)}:</strong> ${esc(a.texto)}</div>`).join('')}
-  </div>`;
+  const aberto = ABERTOS.has(r.id);
+  const selos = (r.origem === 'sistema_antigo' ? ' <span class="selo outra">sistema antigo</span>' : '')
+    + (r.status === 'rascunho' ? ' <span class="selo pendente">rascunho</span>' : '');
+  const ed = r.editado_em ? ` <span class="muted pr-ed" title="A versão anterior fica guardada">editado em ${new Date(r.editado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>` : '';
+  return `<div class="pr-linha${aberto ? ' aberto' : ''}">
+    <button type="button" class="pr-cab" data-tog="${r.id}" aria-expanded="${aberto}">
+      <span class="pr-data">${data(r.data_registro)}</span>
+      <span class="pr-mod">${esc(m.nome)}</span>
+      <span class="pr-prof muted">${esc(me?.nome || '')}</span>
+      <span class="pr-previa muted">${esc(previa(r))}</span>${selos}${ed}
+    </button>
+    <div class="pr-corpo">
+      ${at ? `<p class="muted">Atendimento ${dh(at.inicio)}${r.origem_arquivo ? ' · ' + esc(r.origem_arquivo) : ''}</p>` : r.origem_arquivo ? `<p class="muted">${esc(r.origem_arquivo)}</p>` : ''}
+      ${corpoRegistro(r)}
+      ${meusAnx.length ? `<p class="muted">📎 ${meusAnx.map((a) => `<a href="#" data-abrir="${esc(a.arquivo)}" onclick="return false">${esc(a.nome || 'anexo')}</a>`).join(' · ')}</p>` : ''}
+      ${meusAds.map((a) => `<div class="dica" style="margin:8px 0 0"><strong>Adendo ${dh(a.criado_em)}:</strong> ${esc(a.texto)}</div>`).join('')}
+      <div class="linha-acoes pr-acoes">
+        <button class="btn pequeno primario" data-edit="${r.id}">Editar</button>
+        ${r.status === 'rascunho' ? `<button class="btn pequeno" data-apagar="${r.id}">Apagar</button>` : `<button class="btn pequeno" data-adendo="${r.id}">Adendo</button>`}
+        <button class="btn pequeno" data-anexar="${r.id}">Anexar</button>
+        <button class="btn pequeno" data-imp1="${r.id}">Imprimir</button></div>
+    </div></div>`;
 }
 
 function editor(p, r, meusAts, aoSalvar) {
@@ -165,16 +184,14 @@ function editor(p, r, meusAts, aoSalvar) {
       ${m.campos.filter((x) => x[3] !== 'num').map(([k, rot, dica]) => `<label class="pr-area">${esc(rot)}
         <textarea name="c_${k}" rows="${k === 'obs' ? 2 : 4}" placeholder="${esc(dica || '')}">${esc(c[k] || '')}</textarea></label>`).join('')}
     </form>
-    <p class="muted">${r.status === 'assinado' ? 'Registro assinado não pode ser alterado. Use um adendo.' : 'Rascunho pode ser editado à vontade. Depois de assinado, só por adendo.'}</p>
-    <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button>
-      ${r.status === 'assinado' ? ''
-        : '<button class="btn" id="rasc">Salvar rascunho</button><button class="btn primario" id="ass">Salvar e assinar</button>'}</div>`,
+    <p class="muted">${r.id ? 'Ao salvar, a alteração substitui o texto; a versão anterior fica guardada.' : 'Você poderá editar este registro depois.'}</p>
+    <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="salvar">Salvar</button></div>`,
   (box, fechar) => {
     box.classList.add('largo');
     const f = $('#fr', box);
     const recalc = () => { const v = imc({ peso: +f.m_peso?.value, altura: +f.m_altura?.value }); if ($('#imc', box)) $('#imc', box).value = v || ''; };
     f.m_peso?.addEventListener('input', recalc); f.m_altura?.addEventListener('input', recalc);
-    const salvar = async (assinarJa) => {
+    const salvar = async () => {
       const fd = Object.fromEntries(new FormData(f)), conteudo = {};
       m.campos.forEach(([k, , , t]) => { const v = fd['c_' + k]; if (v !== '' && v != null) conteudo[k] = t === 'num' ? Number(v) : v; });
       if (m.medidas) {
@@ -182,33 +199,19 @@ function editor(p, r, meusAts, aoSalvar) {
         if (Object.keys(mm).length) conteudo.medidas = mm;
       }
       if (!Object.keys(conteudo).length) return toast('O registro está vazio.', true);
-      const linha = { data_registro: fd.data_registro, atendimento_id: fd.atendimento_id || null, conteudo, ...(assinarJa ? { status: 'assinado' } : {}) };
+      const linha = { data_registro: fd.data_registro, atendimento_id: fd.atendimento_id || null, conteudo, status: 'assinado' };   // 'assinado' = status final (db/039); sem etapa de assinatura na tela
       const q = r.id ? sb.from('prontuario_registros').update(linha).eq('id', r.id)
         : sb.from('prontuario_registros').insert({ ...linha, clinica_id: estado.clinica.id, paciente_id: p.id, profissional_id: estado.profissionalId, area, modelo: r.modelo });
       const { error } = await q;
       if (error) return falha(error, 'Salvar registro');
-      toast(assinarJa ? 'Registro assinado.' : r.status === 'assinado' ? 'Alteração salva.' : 'Rascunho salvo.'); fechar(); aoSalvar();
+      toast(r.id ? 'Alteração salva.' : 'Registro salvo.'); fechar(); aoSalvar();
     };
-    $('#rasc', box)?.addEventListener('click', () => salvar(false));
-    // Confirmação no próprio botão (o confirmar() trocaria o conteúdo do modal e perderia o texto)
-    const bAss = $('#ass', box);
-    if (bAss) bAss.onclick = () => {
-      if (bAss.dataset.armado) return salvar(true);
-      bAss.dataset.armado = '1'; bAss.textContent = 'Confirmar: assinar e bloquear';
-      setTimeout(() => { delete bAss.dataset.armado; bAss.textContent = 'Salvar e assinar'; }, 5000);
-    };
+    $('#salvar', box).onclick = salvar;
   });
 }
 
-async function assinar(id) {
-  if (!(await confirmar('Assinar este registro? Depois de assinado ele não pode mais ser alterado.', 'Assinar'))) return false;
-  const { error } = await sb.from('prontuario_registros').update({ status: 'assinado' }).eq('id', id);
-  if (error) { falha(error, 'Assinar'); return false; }
-  toast('Registro assinado.'); return true;
-}
-
 function adendo(registroId, aoSalvar) {
-  modal(`<h3>Adendo</h3><p class="muted">O registro original não muda. O adendo fica datado e também não pode ser alterado.</p>
+  modal(`<h3>Adendo</h3><p class="muted">O adendo fica datado e anexado ao registro.</p>
     <textarea id="txt" rows="5" style="width:100%"></textarea>
     <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="ok">Salvar adendo</button></div>`, (box, fechar) => {
     $('#ok', box).onclick = async () => {
@@ -219,7 +222,7 @@ function adendo(registroId, aoSalvar) {
   });
 }
 
-// Impressão / exportação para o paciente (só registros assinados)
+// Impressão / exportação para o paciente
 function imprimir(p, regs, ads, me) {
   const j = window.open('', '_blank'); if (!j) return falha('Permita pop-ups deste site para imprimir.');
   const base = location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '');
@@ -236,7 +239,7 @@ function imprimir(p, regs, ads, me) {
   ${regs.map((r) => `<div class="reg"><strong>${data(r.data_registro)} — ${esc((MODELOS[r.modelo] || MODELOS.livre).nome)}</strong>
     ${corpoRegistro(r).replace(/class="pr-rot"/g, 'class="rot"').replace(/class="pr-txt"/g, 'class="txt"')}
     ${(ads || []).filter((a) => a.registro_id === r.id).map((a) => `<div class="ad"><strong>Adendo ${dh(a.criado_em)}:</strong> ${esc(a.texto)}</div>`).join('')}
-    <div style="font-size:9pt;color:#666;margin-top:4px">${r.origem === 'sistema_antigo' ? 'Importado do sistema anterior' : `Assinado eletronicamente em ${dh(r.assinado_em)} · verificação ${esc((r.hash_assinatura || '').slice(0, 16))}`}</div></div>`).join('')}
+    <div style="font-size:9pt;color:#666;margin-top:4px">${r.origem === 'sistema_antigo' ? 'Importado do sistema anterior' : `Registrado em ${dh(r.assinado_em || r.criado_em)}${r.editado_em ? ` · editado em ${dh(r.editado_em)}` : ''} · verificação ${esc((r.hash_assinatura || '').slice(0, 16))}`}</div></div>`).join('')}
   <footer>Clínica Cure — Saúde e Desempenho · Documento gerado pelo Cure OS em ${dh(new Date())}. Informação sigilosa.</footer></body></html>`);
   j.document.close();
 }
@@ -275,7 +278,7 @@ function ultimaData(txt) {
 function importar() {
   modal(`<h3>Importar prontuários antigos</h3>
     <p class="muted">Escolha a pasta (ou os arquivos .txt) do sistema antigo. Os arquivos têm o nome <code>profissional.paciente.serviço.txt</code>.
-      Marque <strong>só os seus</strong>: o registro será gravado como seu, assinado e marcado "sistema antigo". Reimportar não duplica.</p>
+      Marque <strong>só os seus</strong>: o registro será gravado como seu e marcado "sistema antigo". Reimportar não duplica.</p>
     <div class="linha-acoes" style="justify-content:flex-start"><label class="btn">Escolher pasta<input type="file" id="fpasta" webkitdirectory hidden></label>
       <label class="btn">Escolher arquivos<input type="file" id="farq" multiple accept=".txt" hidden></label></div>
     <div id="prev"></div>

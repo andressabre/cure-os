@@ -186,3 +186,33 @@ p.ok{color:var(--verde);font-weight:600} p.aviso{background:var(--amarelo-claro)
 .pr-campo{margin:8px 0}
 .pr-rot{font-size:12.5px;font-weight:600;color:var(--texto-2);text-transform:uppercase;letter-spacing:.03em}
 .pr-txt{white-space:pre-wrap}
+
+/* ---------- Prontuário compacto (lista expansível) e ações de documentos ---------- */
+.pr-lista{padding:0}
+.pr-linha{border-bottom:1px solid var(--borda,#D9DDD8)} .pr-linha:last-child{border-bottom:0}
+.pr-cab{all:unset;box-sizing:border-box;display:flex;align-items:baseline;gap:10px;width:100%;padding:9px 14px;cursor:pointer;overflow:hidden;white-space:nowrap}
+.pr-cab:hover,.pr-cab:focus-visible{background:var(--papel)}
+.pr-data{font-weight:600;flex:none} .pr-mod{flex:none} .pr-prof{flex:none;font-size:13px}
+.pr-previa{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:13.5px}
+.pr-ed{flex:none;font-size:12px}
+.pr-corpo{display:none;padding:4px 14px 12px}
+.pr-linha.aberto .pr-corpo{display:block} .pr-linha.aberto .pr-previa{visibility:hidden}
+.pr-acoes{justify-content:flex-start;margin-top:10px}
+.doc-acoes{white-space:nowrap;text-align:right}
+@media (max-width:640px){.pr-prof{display:none}}
+
+/* ---------- Ficha do paciente: formulários em linha, autorizações ---------- */
+.caixa-form{border:1px dashed var(--linha);border-radius:8px;padding:12px;margin:0 0 12px;background:#FAFBF9}
+.form-linha{display:grid;grid-template-columns:repeat(12,1fr);gap:10px 12px;align-items:start}
+.form-linha>label{grid-column:span 2} .form-linha>label.estreita{grid-column:span 1}
+.form-linha>label.larga{grid-column:span 3} .form-linha>label.larga2{grid-column:span 4}
+.form-linha small{font-weight:400;font-size:12px;line-height:1.2}
+@media (max-width:1100px){.form-linha{grid-template-columns:repeat(6,1fr)} .form-linha>label.larga2{grid-column:span 6}}
+.filtros-aut{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:12px}
+.filtros-aut label{min-width:170px} #resumo-aut{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:8px} #abrir-aut{margin-left:auto}
+.aut-bloco{border:1px solid var(--linha);border-left:5px solid var(--linha);border-radius:8px;padding:10px 12px;margin:10px 0;background:var(--branco)}
+.aut-bloco.sit-ativa{border-left-color:var(--verde)} .aut-bloco.sit-pendente{border-left-color:var(--amarelo)}
+.aut-bloco.sit-vencida{border-left-color:var(--vermelho)} .aut-bloco.sit-esgotada,.aut-bloco.sit-encerrada{border-left-color:var(--texto-3);opacity:.85}
+.aut-cab{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap} .aut-acoes{display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap}
+.aut-bloco .sub-ats{margin-top:8px}
+details.cartao>summary{cursor:pointer;list-style:revert}

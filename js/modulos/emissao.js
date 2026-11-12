@@ -1,7 +1,8 @@
 // Emissão de documentos timbrados (db/024): atestado, declaração de comparecimento/acompanhante,
 // orientação de alta, relatório ao médico, orientações e livre. Modelos padrão aqui + modelos próprios (documento_modelos).
 // Sigilo: documento clínico só o autor vê; declarações sem dado clínico também recepção/gestão.
-import { sb, estado, $, $$, esc, toast, falha, modal } from '../core.js';
+// Documento emitido pode ser editado (mesmo código de verificação), excluído, salvo sem imprimir ou reimpresso (db/039).
+import { sb, estado, $, $$, esc, toast, falha, modal, confirmar } from '../core.js';
 
 const REGIAO = { SC: { CRN: '10', CREFITO: '10', CRP: '12' } };
 export const conselhoFmt = (p) => {
@@ -78,32 +79,74 @@ export async function abaDocumentos(alvo, p, ats) {
   if (error) return falha(error, 'Documentos');
   const tiposOk = Object.entries(TIPOS).filter(([k]) => souProf || (ehRecepcao && SO_RECEPCAO.includes(k)));
   const recarregar = () => abaDocumentos(alvo, p, ats);
+  const meusModelos = souProf ? (modelos || []).filter((m) => m.profissional_id === estado.profissionalId) : [];
+  const podeMexer = (d) => (d.profissional_id ? d.profissional_id === estado.profissionalId : ehRecepcao && SO_RECEPCAO.includes(d.tipo));
   alvo.innerHTML = `<div class="cartao"><div class="linha-acoes" style="justify-content:space-between;margin:0">
       <span class="muted">${souProf ? 'Documentos com conteúdo clínico ficam visíveis só para você.' : 'A recepção emite declarações de comparecimento e de acompanhante.'}</span>
       <span>${tiposOk.map(([k, t]) => `<button class="btn" data-novo="${k}">${esc(t.nome)}</button>`).join(' ')}
-        ${(modelos || []).filter((m) => m.profissional_id === estado.profissionalId).map((m) => `<button class="btn" data-mod="${m.id}">★ ${esc(m.titulo)}</button>`).join(' ')}</span></div></div>
+        ${meusModelos.map((m) => `<button class="btn" data-mod="${m.id}">★ ${esc(m.titulo)}</button>`).join(' ')}</span></div></div>
     <div class="cartao"><h3>Emitidos</h3>${(emitidos || []).length ? `<table><thead><tr><th>Data</th><th>Documento</th><th>Profissional</th><th>Código</th><th></th></tr></thead><tbody>
       ${emitidos.map((d) => `<tr><td>${new Date(d.emitido_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(d.titulo)}</td>
         <td>${esc(d.profissionais?.nome || 'Recepção')}</td><td><code>${esc(d.codigo)}</code></td>
-        <td><button class="btn pequeno" data-reimp="${d.id}">Imprimir</button></td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum documento emitido.</div>'}</div>`;
+        <td class="doc-acoes"><button class="btn pequeno" data-reimp="${d.id}">Imprimir</button>
+          ${podeMexer(d) ? `<button class="btn pequeno" data-edit="${d.id}">Editar</button><button class="btn pequeno" data-del="${d.id}">Excluir</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum documento emitido.</div>'}</div>
+    ${souProf ? `<div class="cartao"><h3>Meus modelos</h3>
+      <p class="muted">Modelos salvos (botão "Salvar texto como meu modelo" ao preparar um documento) aparecem aqui e como botões ★ no topo desta aba. Só você os vê.</p>
+      ${meusModelos.length ? `<table><thead><tr><th>Modelo</th><th>Tipo</th><th></th></tr></thead><tbody>
+        ${meusModelos.map((m) => `<tr><td>★ ${esc(m.titulo)}</td><td>${esc(TIPOS[m.tipo]?.nome || m.tipo)}</td>
+          <td class="doc-acoes"><button class="btn pequeno" data-usar="${m.id}">Usar</button><button class="btn pequeno" data-ren="${m.id}">Renomear</button>
+            <button class="btn pequeno" data-delmod="${m.id}">Excluir</button></td></tr>`).join('')}</tbody></table>`
+        : '<div class="vazio">Nenhum modelo salvo ainda.</div>'}</div>` : ''}`;
 
   $$('[data-novo]', alvo).forEach((b) => (b.onclick = () => editor(p, ats, eu, b.dataset.novo, null, recarregar)));
-  $$('[data-mod]', alvo).forEach((b) => (b.onclick = () => { const m = modelos.find((x) => x.id === b.dataset.mod); editor(p, ats, eu, m.tipo, m, recarregar); }));
+  $$('[data-mod],[data-usar]', alvo).forEach((b) => (b.onclick = () => {
+    const m = modelos.find((x) => x.id === (b.dataset.mod || b.dataset.usar)); editor(p, ats, eu, m.tipo, m, recarregar);
+  }));
+  $$('[data-edit]', alvo).forEach((b) => (b.onclick = () => {
+    const d = emitidos.find((x) => x.id === b.dataset.edit); editor(p, ats, eu, d.tipo, null, recarregar, d);
+  }));
+  $$('[data-del]', alvo).forEach((b) => (b.onclick = async () => {
+    const d = emitidos.find((x) => x.id === b.dataset.del);
+    if (!(await confirmar(`Excluir "${d.titulo}" (código ${d.codigo})? O código deixará de ser válido na verificação pública.`, 'Excluir'))) return;
+    const { error: e } = await sb.from('documentos_emitidos').delete().eq('id', d.id);
+    if (e) return falha(e, 'Excluir documento'); toast('Documento excluído.'); recarregar();
+  }));
   $$('[data-reimp]', alvo).forEach((b) => (b.onclick = async () => {
     const d = emitidos.find((x) => x.id === b.dataset.reimp);
-    let prof = null;
-    if (d.profissional_id) prof = d.profissional_id === eu?.id ? eu : (await sb.from('profissionais').select('nome, conselho, numero_conselho, uf_conselho, especialidade').eq('id', d.profissional_id).single()).data;
-    imprimirDoc(d, prof, await timbrado());
+    imprimirDoc(d, await profDoc(d, eu), await timbrado());
+  }));
+  $$('[data-ren]', alvo).forEach((b) => (b.onclick = () => {
+    const m = modelos.find((x) => x.id === b.dataset.ren);
+    modal(`<h3>Renomear modelo</h3><input id="nm" value="${esc(m.titulo)}" style="width:100%">
+      <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="ok">Salvar</button></div>`, (box, fechar) => {
+      $('#ok', box).onclick = async () => {
+        const titulo = $('#nm', box).value.trim(); if (!titulo) return toast('Informe o nome.', true);
+        const { error: e } = await sb.from('documento_modelos').update({ titulo }).eq('id', m.id);
+        if (e) return falha(e, 'Renomear modelo'); toast('Modelo renomeado.'); fechar(); recarregar();
+      };
+    });
+  }));
+  $$('[data-delmod]', alvo).forEach((b) => (b.onclick = async () => {
+    const m = modelos.find((x) => x.id === b.dataset.delmod);
+    if (!(await confirmar(`Excluir o modelo "${m.titulo}"? Os documentos já emitidos não mudam.`, 'Excluir'))) return;
+    const { error: e } = await sb.from('documento_modelos').delete().eq('id', m.id);
+    if (e) return falha(e, 'Excluir modelo'); toast('Modelo excluído.'); recarregar();
   }));
 }
 
-function editor(p, ats, eu, tipo, modeloProprio, aoEmitir) {
+async function profDoc(d, eu) {
+  if (!d.profissional_id) return null;
+  if (d.profissional_id === eu?.id) return eu;
+  return (await sb.from('profissionais').select('nome, conselho, numero_conselho, uf_conselho, especialidade').eq('id', d.profissional_id).single()).data;
+}
+
+function editor(p, ats, eu, tipo, modeloProprio, aoEmitir, existente) {
   const T = TIPOS[tipo], cpf = p.cpf ? `, CPF ${p.cpf}` : '';
   const meus = (ats || []).filter((a) => ['atendido', 'presente'].includes(a.status) && (!eu || a.profissional_id === eu.id))
     .sort((a, b) => b.inicio.localeCompare(a.inicio));
   const atendidos = [...meus].reverse();
   const area = eu ? (AREA_CONS[eu.conselho] || eu.especialidade || 'saúde') : null;
-  modal(`<h3>${esc(modeloProprio?.titulo || T.nome)} — ${esc(p.nome_social || p.nome)}</h3>
+  modal(`<h3>${existente ? 'Editar' : ''} ${esc(existente?.titulo || modeloProprio?.titulo || T.nome)} — ${esc(p.nome_social || p.nome)}</h3>
     <form id="fd" class="grade-form">
       <label>Atendimento<select name="at"><option value="">— data de hoje —</option>
         ${meus.map((a) => `<option value="${a.id}">${new Date(a.inicio).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · ${esc(a.profissionais?.nome || a.servico || '')}</option>`).join('')}</select></label>
@@ -112,16 +155,21 @@ function editor(p, ats, eu, tipo, modeloProprio, aoEmitir) {
         <label>CID<input name="cid" placeholder="Só com autorização do paciente"></label>
         <label><span><input type="checkbox" name="cid_ok"> Paciente autorizou constar o CID</span></label>` : ''}
       ${tipo === 'acompanhante' ? '<label style="grid-column:1/-1">Nome do acompanhante<input name="acomp" required></label>' : ''}
-      <label style="grid-column:1/-1">Título<input name="titulo" value="${esc(modeloProprio?.titulo || T.titulo)}"></label>
+      <label style="grid-column:1/-1">Título<input name="titulo" value="${esc(existente?.titulo || modeloProprio?.titulo || T.titulo)}"></label>
     </form>
     <label class="pr-area" style="display:grid;gap:4px;margin-top:12px">Texto (pode editar antes de emitir)
       <textarea id="corpo" rows="14" style="width:100%;resize:vertical"></textarea></label>
-    <p class="muted">Ao emitir, o documento recebe um código de verificação e fica registrado. Ele não pode ser alterado depois; para corrigir, emita outro.</p>
+    <p class="muted">${existente ? `O código <code>${esc(existente.codigo)}</code> é mantido e passa a validar o texto novo (o anterior deixa de existir).`
+      : 'Ao salvar, o documento recebe um código de verificação e fica registrado. Você pode editá-lo ou excluí-lo depois pela lista.'}</p>
     <div class="linha-acoes">${eu ? '<button class="btn" id="salvamod">Salvar texto como meu modelo</button>' : ''}<button class="btn" data-fechar>Cancelar</button>
-      <button class="btn primario" id="emitir">Emitir e imprimir</button></div>`, (box, fechar) => {
+      <button class="btn" id="salvar">Salvar</button><button class="btn primario" id="emitir">Salvar e imprimir</button></div>`, (box, fechar) => {
     box.classList.add('largo');
     const f = $('#fd', box), corpo = $('#corpo', box);
-    let editado = false; corpo.oninput = () => (editado = true);
+    let editado = !!existente; corpo.oninput = () => (editado = true);
+    if (existente) {   // edição: só título e texto; os campos automáticos não se aplicam
+      $$('label', f).filter((l) => !l.querySelector('[name=titulo]')).forEach((l) => (l.style.display = 'none'));
+      corpo.value = existente.corpo;
+    }
     const valores = () => {
       const at = meus.find((a) => a.id === f.at.value);
       const dias = Number(f.dias?.value || 1);
@@ -133,7 +181,7 @@ function editor(p, ats, eu, tipo, modeloProprio, aoEmitir) {
         sessoes: atendidos.length, primeira: atendidos[0] ? dBr(atendidos[0].inicio) : '____', ultima: atendidos.at(-1) ? dBr(atendidos.at(-1).inicio) : '____',
         hoje: dBr(new Date().toISOString()) };
     };
-    const gerar = () => { if (!editado) corpo.value = preencher(modeloProprio?.corpo ?? T.corpo, valores()); };
+    const gerar = () => { if (existente) return; if (!editado) corpo.value = preencher(modeloProprio?.corpo ?? T.corpo, valores()); };
     f.oninput = gerar; f.onchange = gerar; gerar();
     if (f.cid) f.cid.oninput = () => { if (f.cid.value) f.cid_ok.closest('label').style.color = f.cid_ok.checked ? '' : 'var(--vermelho)'; gerar(); };
     $('#salvamod', box)?.addEventListener('click', async () => {
@@ -145,20 +193,26 @@ function editor(p, ats, eu, tipo, modeloProprio, aoEmitir) {
       txt = txt.split(v.data).join('{data}');
       const { error } = await sb.from('documento_modelos').insert({ clinica_id: estado.clinica.id, profissional_id: eu.id, tipo,
         titulo: f.titulo.value || T.titulo, corpo: txt });
-      if (error) return falha(error, 'Salvar modelo'); toast('Modelo salvo: aparece como ★ na aba Documentos.');
+      if (error) return falha(error, 'Salvar modelo'); toast('Modelo salvo em "Meus modelos" (aba Documentos).'); aoEmitir();
     });
-    $('#emitir', box).onclick = async () => {
+    const gravar = async (imprimir) => {
       if (!corpo.value.trim()) return toast('O documento está vazio.', true);
-      if (tipo === 'acompanhante' && !f.acomp.value.trim()) return toast('Informe o nome do acompanhante.', true);
-      if (f.cid?.value && !f.cid_ok.checked) return toast('Marque a autorização do paciente ou apague o CID.', true);
-      const linha = { clinica_id: estado.clinica.id, paciente_id: p.id, profissional_id: eu?.id || null, atendimento_id: f.at.value || null,
-        tipo, titulo: f.titulo.value || T.titulo, corpo: corpo.value };
-      const janela = window.open('', '_blank');   // abre já no clique (bloqueador de pop-up)
-      const { data: d, error } = await sb.from('documentos_emitidos').insert(linha).select('*').single();
-      if (error) { janela?.close(); return falha(error, 'Emitir'); }
-      imprimirDoc(d, eu, await timbrado(), janela);
+      if (!existente && tipo === 'acompanhante' && !f.acomp.value.trim()) return toast('Informe o nome do acompanhante.', true);
+      if (!existente && f.cid?.value && !f.cid_ok.checked) return toast('Marque a autorização do paciente ou apague o CID.', true);
+      const titulo = f.titulo.value || T.titulo, texto = corpo.value;
+      const janela = imprimir ? window.open('', '_blank') : null;   // abre já no clique (bloqueador de pop-up)
+      const q = existente
+        ? sb.from('documentos_emitidos').update({ titulo, corpo: texto }).eq('id', existente.id).select('*').single()
+        : sb.from('documentos_emitidos').insert({ clinica_id: estado.clinica.id, paciente_id: p.id, profissional_id: eu?.id || null,
+            atendimento_id: f.at.value || null, tipo, titulo, corpo: texto }).select('*').single();
+      const { data: d, error } = await q;
+      if (error) { janela?.close(); return falha(error, existente ? 'Salvar alterações' : 'Salvar documento'); }
+      if (imprimir) imprimirDoc(d, await profDoc(d, eu), await timbrado(), janela);
+      toast(existente ? 'Documento atualizado.' : 'Documento salvo.');
       fechar(); aoEmitir();
     };
+    $('#salvar', box).onclick = () => gravar(false);
+    $('#emitir', box).onclick = () => gravar(true);
   });
 }
 

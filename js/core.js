@@ -61,3 +61,27 @@ export function tela(titulo, acoesHtml = '') {
 }
 
 export const podeGerir = () => ['gestor', 'financeiro'].includes(estado.perfil);
+
+// Telefones: grava só dígitos com 55 na frente; mostra +55 (DD) 9XXXX-XXXX. Exige DDD.
+export const foneDig = (v) => { let d = String(v || '').replace(/\D/g, '').replace(/^0+/, ''); if (d.length === 10 || d.length === 11) d = '55' + d; return d; };
+export const foneFmt = (v) => { const d = foneDig(v); const m = d.match(/^55(\d{2})(\d{4,5})(\d{4})$/); return m ? `+55 (${m[1]}) ${m[2]}-${m[3]}` : String(v || ''); };
+export const foneValido = (v, cel = false) => { const d = foneDig(v); return !d || (cel ? /^55\d{2}9\d{8}$/ : /^55\d{10,11}$/).test(d); };
+export function mascaraFone(inp) {
+  if (!inp) return;
+  const aplica = () => { const d = inp.value.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '').slice(0, 11);
+    inp.value = !d ? '' : d.length <= 2 ? `+55 (${d}` : d.length <= 6 ? `+55 (${d.slice(0, 2)}) ${d.slice(2)}`
+      : `+55 (${d.slice(0, 2)}) ${d.slice(2, d.length - 4)}-${d.slice(-4)}`; };
+  inp.addEventListener('input', aplica); inp.inputMode = 'numeric'; inp.placeholder = '+55 (47) 99999-9999';
+  if (inp.value) { inp.value = inp.value.replace(/\D/g, '').length >= 10 ? foneFmt(inp.value) : inp.value; }
+}
+// Campo só números (carteirinha, CNS…)
+export function soNumeros(inp) { if (inp) { inp.inputMode = 'numeric'; inp.addEventListener('input', () => (inp.value = inp.value.replace(/\D/g, ''))); } }
+
+// CID-10 (DATASUS, lista local em dados/cid10.json — carregada só quando usada)
+let _cid = null;
+export async function descricaoCid(cod) {
+  _cid ||= fetch('dados/cid10.json').then((r) => r.json()).catch(() => ({}));
+  const t = await _cid, c = normCid(cod);
+  return t[c] || t[c.slice(0, 3)] || '';
+}
+export const normCid = (v) => { const c = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return c.length > 3 ? c.slice(0, 3) + '.' + c.slice(3, 4) : c; };

@@ -1,5 +1,5 @@
 // Módulo Pacientes: lista, busca, cadastro e importação do sistema antigo.
-import { sb, estado, $, $$, esc, data, tela, toast, falha, modal } from '../core.js';
+import { sb, estado, $, $$, esc, data, tela, toast, falha, modal, foneFmt, foneDig, foneValido, mascaraFone } from '../core.js';
 import { lerArquivo, sugerirMapa, sugerirTabela, dicionario, converter, ROTULOS, formatos } from './importador.js';
 
 const ORIGEM = 'motivar_2012';
@@ -15,12 +15,12 @@ export async function render() {
   let t;
   const buscar = async () => {
     const q = $('#busca').value.trim(), sit = $('#sit').value;
-    let consulta = sb.from('pacientes').select('id, nome, cpf, data_nascimento, telefone, ativo, campos_extras', { count: 'exact' })
+    let consulta = sb.from('pacientes').select('id, nome, cpf, data_nascimento, telefone, celular, ativo, campos_extras', { count: 'exact' })
       .eq('clinica_id', estado.clinica.id).order('nome').limit(100);
     if (sit !== '') consulta = consulta.eq('ativo', sit === '1');
     if (q.length >= 2) {
       const dig = q.replace(/\D/g, '');
-      consulta = dig.length >= 4 ? consulta.or(`cpf.ilike.%${dig}%,telefone.ilike.%${dig}%`) : consulta.ilike('nome', `%${q}%`);
+      consulta = dig.length >= 4 ? consulta.or(`cpf.ilike.%${dig}%,telefone.ilike.%${dig}%,celular.ilike.%${dig}%`) : consulta.ilike('nome', `%${q}%`);
     }
     const { data: ps, count, error } = await consulta;
     if (error) return falha(error);
@@ -28,7 +28,7 @@ export async function render() {
       <table><thead><tr><th>Nome</th><th>CPF</th><th>Nascimento</th><th>Telefone</th><th>Convênio (origem)</th><th></th></tr></thead><tbody>
       ${ps.map((p) => `<tr class="clicavel" data-id="${p.id}"><td><strong>${esc(p.nome)}</strong>${p.ativo ? '' : ' <span class="selo outra">inativo</span>'}</td>
         <td>${esc(p.cpf ? p.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '—')}</td><td>${data(p.data_nascimento)}</td>
-        <td>${esc(p.telefone || '—')}</td><td>${esc(p.campos_extras?.convenio_origem || '—')}</td><td>›</td></tr>`).join('')
+        <td>${esc(p.celular || p.telefone ? foneFmt(p.celular || p.telefone) : '—')}</td><td>${esc(p.campos_extras?.convenio_origem || '—')}</td><td>›</td></tr>`).join('')
         || '<tr><td colspan="6" class="vazio">Nenhum paciente encontrado.</td></tr>'}</tbody></table>`;
     $$('tr[data-id]', $('#lista')).forEach((tr) => (tr.onclick = () => (location.hash = 'paciente-' + tr.dataset.id)));
   };
@@ -50,7 +50,8 @@ export async function render() {
       <label>Sexo<select name="sexo"><option value=""></option><option ${p.sexo === 'F' ? 'selected' : ''}>F</option><option ${p.sexo === 'M' ? 'selected' : ''}>M</option></select></label>
       <label>Nome da mãe<input name="nome_mae" value="${esc(p.nome_mae)}"></label>
       <label>CNS<input name="cns" value="${esc(p.cns)}"></label>
-      <label>Telefone<input name="telefone" value="${esc(p.telefone)}"></label>
+      <label>Celular (WhatsApp)<input name="celular" value="${esc(p.celular)}"></label>
+      <label>Telefone fixo<input name="telefone" value="${esc(p.telefone)}"></label>
       <label>E-mail<input name="email" value="${esc(p.email)}"></label>
       <label>Rua<input name="rua" value="${esc(e.rua)}"></label>
       <label>CEP<input name="cep" value="${esc(e.cep)}"></label>
@@ -61,16 +62,19 @@ export async function render() {
     </form>
     ${Object.keys(x).length ? `<p class="muted" style="margin-top:12px"><strong>Do sistema antigo:</strong> ${Object.entries(x).map(([k, v]) => `${esc(k.replace(/_/g, ' '))}: ${esc(v)}`).join(' · ')}</p>` : ''}
     <div class="linha-acoes"><button class="btn" data-fechar>Fechar</button><button class="btn primario" id="s">Salvar</button></div>`,
-    (m, fechar) => ($('#s', m).onclick = async () => {
+    (m, fechar) => { mascaraFone($('#f', m).celular); mascaraFone($('#f', m).telefone); $('#s', m).onclick = async () => {
       const fd = new FormData($('#f', m)), f = Object.fromEntries(fd);
       if (!f.nome.trim()) return toast('Informe o nome.', true);
+      for (const [k, cel] of [['celular', true], ['telefone', false]])
+        if (f[k].trim() && foneDig(f[k]) !== foneDig(p[k]) && !foneValido(f[k], cel)) return toast(cel ? 'Celular: informe DDD + 9 dígitos.' : 'Telefone: informe DDD + número.', true);
       const reg = { nome: f.nome.trim(), nome_social: f.nome_social || null, cpf: f.cpf.replace(/\D/g, '') || null,
         data_nascimento: f.data_nascimento || null, sexo: f.sexo || null, nome_mae: f.nome_mae || null, cns: f.cns || null,
-        telefone: f.telefone || null, email: f.email || null, consentimento_comunicacao: fd.has('consentimento_comunicacao'),
+        celular: f.celular.trim() ? (foneValido(f.celular, true) ? foneDig(f.celular) : p.celular) : null,
+        telefone: f.telefone.trim() ? (foneValido(f.telefone) ? foneDig(f.telefone) : p.telefone) : null, email: f.email || null, consentimento_comunicacao: fd.has('consentimento_comunicacao'),
         ativo: fd.has('ativo'), endereco: { ...e, rua: f.rua, cep: f.cep, cidade: f.cidade, uf: f.uf.toUpperCase() } };
       const q = id ? sb.from('pacientes').update(reg).eq('id', id) : sb.from('pacientes').insert({ ...reg, clinica_id: estado.clinica.id });
       const { error } = await q; if (error) return falha(error, error.code === '23505' ? 'CPF já cadastrado' : 'Salvar'); fechar(); toast('Salvo.'); buscar();
-    }));
+    }; });
   }
 
   function importar() {

@@ -46,9 +46,14 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   Painel: `guias_liberadas_resumo` → aviso "N guias liberadas" e "N seguradas" em `pendencias`. Nomes na tela: Em aberto → Liberada → No lote → Faturado (lote enviado) → Pago/Glosa.
   Só SP/SADT (nutri, psico e fisio não usam Guia de Consulta — decidido 10/11/2026).
 - **Guia impressa no modelo da operadora (db/038):** `operadoras.logo` (data URL ≤ ~60 KB, editado em Contratos → Operadoras) + Registro ANS no campo 1.
-- **Encaminhamentos** por área com validade, vinculados à autorização sem misturar áreas; anexos ANS por guia; Storage privado `documentos`.
-- **Prontuário:** registros por modelo de área; RLS só pelo autor; **assinado é imutável** (db/025) — correção só por adendo;
-  `prontuario_versoes` guarda o histórico das edições do período em que foi liberado (09–10/11/2026). Importador dos .txt antigos.
+- **Encaminhamentos** por área com validade (padrão pedido + 180 dias), vinculados à autorização sem misturar áreas; anexos ANS por guia; Storage privado `documentos`.
+  CID-10 local em `dados/cid10.json` (DATASUS via pacote MIT @br-health-kit/cid10) → indicação clínica automática (`descricaoCid` no core).
+- **Ficha do paciente (12/11/2026):** abas Resumo · Cadastro e encaminhamentos · Autorizações e guias · Prontuário · Documentos.
+  Autorização sem senha = `pendente` (exceto Particular); guias aparecem dentro da autorização (imprimir/cancelar); filtro por situação/convênio/ordem.
+- **Telefones (db/040):** `pacientes.celular` (WhatsApp) separado de `telefone` fixo; gravados só dígitos com 55; máscara `mascaraFone` no core.
+- **Prontuário:** registros por modelo de área; RLS só pelo autor. **Desde db/039 (12/11/2026) não há etapa de assinar:** salvar grava status
+  'assinado' (status final usado por adendos/impressão/backup) e o autor pode editar; todo UPDATE de conteúdo/data guarda a versão anterior em
+  `prontuario_versoes` e marca `editado_em`; DELETE de registro final continua bloqueado. Tela em lista compacta expansível. Importador dos .txt antigos.
 - **Documentos timbrados** (`emissao.js`) com código de verificação público (`verificar.html` → `verificar_documento`, única função anônima).
 - **Financeiro:** contas, categorias com grupo DRE, lançamentos previsto × realizado, repasse do mês, caixa e DRE.
 - **Backup** (só gestor): ZIP no navegador. Limitação: pela RLS, exporta só o prontuário de quem gera o backup.
