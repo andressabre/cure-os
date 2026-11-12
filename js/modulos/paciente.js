@@ -95,20 +95,22 @@ export async function render(params) {
         <label class="c2">CPF<input name="cpf" value="${esc(p.cpf)}"></label>
         <label class="c2">Nascimento<input type="date" name="data_nascimento" value="${esc(p.data_nascimento)}"></label>
         <label class="c1">Sexo<select name="sexo"><option value=""></option><option ${p.sexo === 'F' ? 'selected' : ''}>F</option><option ${p.sexo === 'M' ? 'selected' : ''}>M</option></select></label>
-        <label class="c4">Nome da mãe<input name="nome_mae" value="${esc(p.nome_mae)}"></label>
-        <label class="c2">CNS<input name="cns" value="${esc(p.cns)}"></label>
+        <label class="c7">Nome da mãe<input name="nome_mae" value="${esc(p.nome_mae)}"></label>
+        <label class="c4">CNS (cartão SUS)<input name="cns" value="${esc(p.cns)}"></label>
+        <div class="c12 sep-form">Contato e endereço</div>
         <label class="c3">Celular (WhatsApp)<input name="celular" value="${esc(p.celular)}"></label>
-        <label class="c2">Telefone fixo<input name="telefone" value="${esc(p.telefone)}"></label>
-        <label class="c4">E-mail<input name="email" value="${esc(p.email)}"></label>
-        <label class="c4">Rua<input name="rua" value="${esc(e.rua)}"></label><label class="c2">CEP<input name="cep" value="${esc(e.cep)}"></label>
-        <label class="c3">Cidade<input name="cidade" value="${esc(e.cidade)}"></label><label class="c1">UF<input name="uf" maxlength="2" value="${esc(e.uf)}"></label>
-        <label class="c6">Observações<textarea name="observacao" rows="2" placeholder="Preferências, horários, combinações…">${esc(p.observacao)}</textarea></label>
-        <label class="c6 rotulo-alerta">⚠️ Alerta interno <small class="muted">(aparece em destaque na ficha e na agenda)</small>
-          <textarea name="alerta" rows="2" placeholder="Só fatos objetivos. Ex.: não reagendar — decisão da gestão em 10/2026.">${esc(p.alerta)}</textarea></label>
+        <label class="c3">Telefone fixo<input name="telefone" value="${esc(p.telefone)}"></label>
+        <label class="c6">E-mail<input name="email" value="${esc(p.email)}"></label>
+        <label class="c6">Rua<input name="rua" value="${esc(e.rua)}"></label>
+        <label class="c2">CEP<input name="cep" value="${esc(e.cep)}"></label>
+        <label class="c3">Cidade<input name="cidade" value="${esc(e.cidade)}"></label>
+        <label class="c1">UF<input name="uf" maxlength="2" value="${esc(e.uf)}"></label>
+        <label class="c12">Observações<textarea name="observacao" rows="2" placeholder="Preferências, horários, combinações…">${esc(p.observacao)}</textarea></label>
         <div class="c12 icones-dados">
           <label class="icone-check" title="Recebe mensagens de relacionamento (aniversário, reavaliação)${p.comunicacao_optout_em ? ` — pediu para sair em ${data(p.comunicacao_optout_em.slice(0, 10))}` : ''}">
             <input type="checkbox" name="consentimento_comunicacao" ${p.consentimento_comunicacao ? 'checked' : ''}> 💬 Mensagens</label>
           <label class="icone-check" title="Paciente ativo (aparece nas buscas e na agenda)"><input type="checkbox" name="ativo" ${p.ativo ? 'checked' : ''}> ✓ Ativo</label>
+          ${gestao ? `<button type="button" class="icone-check ${p.alerta ? 'com-alerta' : ''}" id="ed-alerta" title="${p.alerta ? 'Alerta: ' + esc(p.alerta) : 'Adicionar alerta interno (aparece na ficha e na agenda)'}">⚠️ ${p.alerta ? 'Alerta ativo' : 'Alerta'}</button>` : ''}
           ${gestao ? '<button type="button" class="btn primario" id="sdados" style="margin-left:auto">Salvar dados</button>' : ''}
         </div>
       </form></div>`;
@@ -124,12 +126,21 @@ export async function render(params) {
         try { celular = fone('celular', true); telefone = fone('telefone', false); } catch (er) { return toast(er.message, true); }
         const { error: er } = await sb.from('pacientes').update({ nome: f.nome.trim(), nome_social: f.nome_social || null, cpf: f.cpf.replace(/\D/g, '') || null,
           data_nascimento: f.data_nascimento || null, sexo: f.sexo || null, nome_mae: f.nome_mae || null, cns: f.cns.replace(/\D/g, '') || null,
-          celular, telefone, email: f.email || null, observacao: f.observacao.trim() || null, alerta: f.alerta.trim() || null, consentimento_comunicacao: fd.has('consentimento_comunicacao'), ativo: fd.has('ativo'),
+          celular, telefone, email: f.email || null, observacao: f.observacao.trim() || null, consentimento_comunicacao: fd.has('consentimento_comunicacao'), ativo: fd.has('ativo'),
           comunicacao_optout_em: fd.has('consentimento_comunicacao') ? null : (p.comunicacao_optout_em || new Date().toISOString()),
           endereco: { ...e, rua: f.rua, cep: f.cep, cidade: f.cidade, uf: f.uf.toUpperCase() } }).eq('id', id);
         if (er) return falha(er, er.code === '23505' ? 'CPF já cadastrado em outro paciente' : 'Salvar'); toast('Salvo.'); recarregar();
       });
       $('#boasvindas', t)?.addEventListener('click', boasVindas);
+      // Alerta interno: só um ícone; abre uma caixinha para escrever, salva direto
+      $('#ed-alerta', t)?.addEventListener('click', () => modal(`<h3>⚠️ Alerta interno</h3>
+        <p class="muted">Aparece em destaque na ficha e quando o paciente é escolhido na agenda. Escreva só fatos objetivos (o paciente pode pedir acesso ao cadastro).</p>
+        <textarea id="txal" rows="4" style="width:100%" placeholder="Ex.: não reagendar — decisão da gestão em 10/2026.">${esc(p.alerta)}</textarea>
+        <div class="linha-acoes">${p.alerta ? '<button class="btn" id="rmal">Remover alerta</button>' : ''}<button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="okal">Salvar</button></div>`, (m, fechar) => {
+        const grava = async (v) => { const { error: er } = await sb.from('pacientes').update({ alerta: v }).eq('id', id); if (er) return falha(er, 'Alerta'); fechar(); toast(v ? 'Alerta salvo.' : 'Alerta removido.'); recarregar(); };
+        $('#okal', m).onclick = () => grava($('#txal', m).value.trim() || null);
+        $('#rmal', m) && ($('#rmal', m).onclick = () => grava(null));
+      }));
     },
 
     convenios(t = alvo) {
@@ -347,20 +358,28 @@ export async function render(params) {
       const filtro = { sit: sessionStorage.getItem('aut_sit') || 'abertas', conv: '', ordem: sessionStorage.getItem('aut_ordem') || 'recente' };
       const convs = [...new Set((auts || []).map((a) => a.paciente_planos?.contratos?.nome).filter(Boolean))];
 
-      const bloco = (a) => { const u = usadas[a.id] || 0, sit = situ(a), lig = atsDe(a.id), travada = lig.some((k) => k.status === 'atendido');
+      const chipEnc = (a) => { const en = (encs || []).find((k) => k.id === a.encaminhamento_id);
+        if (!en) return '<span class="selo alerta">sem encaminhamento</span>';
+        return `<button class="chip-link" ${en.arquivo ? `data-abrir-enc="${esc(en.arquivo)}"` : 'disabled'} title="${en.arquivo ? 'Abrir o pedido médico' : 'Pedido sem arquivo'}">📋 Pedido ${esc(AREAS[en.area])} · ${data(en.data_pedido)}${en.cid ? ' · ' + esc(en.cid) : ''}</button>${en.arquivo ? '' : ' <span class="selo alerta">sem arquivo</span>'}`; };
+      const bloco = (a) => { const u = usadas[a.id] || 0, sit = situ(a), lig = atsDe(a.id), q = a.qtd_autorizada || 0;
+        const pct = q ? Math.min(100, Math.round((u / q) * 100)) : 0;
         return `<div class="aut-bloco sit-${sit}">
           <div class="aut-cab">
-            <div><span class="selo ${SIT[sit][1]}">${SIT[sit][0]}</span> <strong>${a.senha ? 'Senha ' + esc(a.senha) : 'sem senha'}</strong>
-              ${a.numero_guia_operadora ? `<span class="muted">· guia operadora ${esc(a.numero_guia_operadora)}</span>` : ''}<br>
-              <span>${esc(a.paciente_planos?.contratos?.nome)} · ${esc(a.procedimentos?.codigo)} ${esc((a.procedimentos?.descricao || '').slice(0, 70))}</span><br>
-              <span class="muted">${a.data_autorizacao ? 'autorizada em ' + data(a.data_autorizacao) : 'solicitada'} · validade ${a.validade ? data(a.validade) : '—'}
-                · <strong>${u} / ${a.qtd_autorizada ?? '?'}</strong> realizadas</span></div>
-            <div class="aut-acoes">${a.guia_arquivo ? `<button class="btn pequeno primario" data-guiaop="${esc(a.guia_arquivo)}" title="Guia autorizada pela operadora (abrir/imprimir)">📄 Guia da operadora</button>` : ''}
-              ${gestao ? `<button class="btn pequeno" data-anxguia="${a.id}">${a.guia_arquivo ? 'Trocar guia' : '📎 Anexar guia'}</button>` : ''}
-              ${celulaEnc(a)}${gestao ? ` <button class="btn pequeno" data-edaut="${a.id}">Editar</button>` : ''}
-              ${gestao && !travada ? ` <button class="btn pequeno escuro" data-excaut="${a.id}" title="Só sem atendimento realizado">Excluir</button>` : ''}</div>
+            <div class="aut-tit"><span class="selo ${SIT[sit][1]}">${SIT[sit][0]}</span>
+              <strong>${a.senha ? 'Senha ' + esc(a.senha) : 'Sem senha'}</strong>
+              ${a.numero_guia_operadora ? `<span class="muted">· guia ${esc(a.numero_guia_operadora)}</span>` : ''}
+              <span class="muted">· ${esc(a.paciente_planos?.contratos?.nome)}</span></div>
+            <div class="aut-acoes">${a.guia_arquivo ? `<button class="btn pequeno primario" data-guiaop="${esc(a.guia_arquivo)}" title="Abrir/imprimir a guia autorizada pela operadora">📄 Guia da operadora</button>`
+                : gestao && a.senha ? `<button class="btn pequeno" data-anxguia="${a.id}" title="Anexar o PDF da guia emitida pelo portal">📎 Anexar guia</button>` : ''}
+              ${gestao ? `<button class="btn pequeno" data-edaut="${a.id}">Editar</button>` : ''}</div>
           </div>
-          ${tabAts(lig, 'Nenhum agendamento ligado a esta autorização.')}${tabGuias(guiasDe(a.id))}</div>`; };
+          <div class="aut-proc"><code>${esc(a.procedimentos?.codigo)}</code> ${esc(a.procedimentos?.descricao || '')}</div>
+          <div class="aut-meta">
+            <span>📅 ${a.data_autorizacao ? data(a.data_autorizacao) : 'solicitada'} → <strong>${a.validade ? data(a.validade) : 'sem validade'}</strong></span>
+            <span class="aut-uso" title="${u} de ${q} realizadas"><span class="barra"><i style="width:${pct}%"></i></span> ${u}/${q || '?'} realizadas</span>
+            ${chipEnc(a)}
+          </div>
+          ${lig.length ? tabAts(lig, '') : ''}${tabGuias(guiasDe(a.id))}</div>`; };
 
       const desenha = () => {
         const ord = { recente: (k, y) => (y.data_autorizacao || y.solicitada_em || '').localeCompare(k.data_autorizacao || k.solicitada_em || ''),
@@ -459,6 +478,7 @@ export async function render(params) {
           if (e) return falha(e); toast('Guia cancelada.'); recarregar();
         }));
         q('[data-guiaop]').forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.guiaop)));
+        q('[data-abrir-enc]').forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.abrirEnc)));
         q('[data-anxguia]').forEach((b) => (b.onclick = async () => {
           const f = await escolherArquivo(); if (!f) return;
           const a = auts.find((k) => k.id === b.dataset.anxguia);
@@ -507,9 +527,20 @@ export async function render(params) {
           <label>Qtd. autorizada<input type="number" min="1" name="qa" value="${esc(a.qtd_autorizada)}"></label>
           <label>CID<input name="cid" value="${esc(a.cid)}"></label>
           <label>Situação<select name="status">${['pendente', 'autorizada', 'negada', 'cancelada'].map((k) => `<option ${k === a.status ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
+          <label style="grid-column:1/-1">Encaminhamento (pedido médico)<select name="enc"><option value="">— sem encaminhamento —</option>${opcoesEnc(a.area, a.encaminhamento_id)}</select></label>
           </form>${dias ? `<p class="muted">Este convênio dá ${dias} dias de validade: ao lançar a senha, a validade é sugerida.</p>` : ''}
-          <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="ok">Salvar</button></div>`, (m, fechar) => {
+          <div class="linha-acoes">${atsDe(a.id).some((k) => k.status === 'atendido') ? '' : '<button class="btn escuro" id="exaut" style="margin-right:auto">Excluir autorização</button>'}
+            <button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="ok">Salvar</button></div>`, (m, fechar) => {
           const fm = $('#fa', m);
+          $('#exaut', m)?.addEventListener('click', async () => {
+            const lig = atsDe(a.id).filter((k) => k.status !== 'cancelado');
+            if (!(await confirmar(`Excluir esta autorização?${lig.length ? ` Os ${lig.length} agendamento(s) ligados continuam na agenda, mas ficam SEM autorização.` : ''}`, 'Excluir'))) return;
+            const { error: e1 } = await sb.from('atendimentos').update({ autorizacao_id: null }).eq('autorizacao_id', a.id);
+            if (e1) return falha(e1);
+            const { error: er } = await sb.from('autorizacoes').delete().eq('id', a.id);
+            if (er) return falha(er, er.code === '23503' ? 'Esta autorização já tem guia gerada — cancele a guia antes' : 'Excluir');
+            toast('Autorização excluída.'); recarregar();
+          });
           fm.senha.addEventListener('change', () => { if (fm.senha.value.trim()) { if (fm.status.value === 'pendente') fm.status.value = 'autorizada'; if (dias && !fm.validade.value) fm.validade.value = somaDias(fm.data.value || hojeIso(), dias); } });
           $('#ok', m).onclick = async () => {
             const f = Object.fromEntries(new FormData(fm)), senha = f.senha.trim() || null;
@@ -517,7 +548,13 @@ export async function render(params) {
             if (!Number(f.qa)) return toast('Informe a quantidade autorizada.', true);
             const { error: er } = await sb.from('autorizacoes').update({ senha, numero_guia_operadora: f.guia.trim() || null, data_autorizacao: f.data || null,
               validade: f.validade || null, qtd_solicitada: f.qs ? Number(f.qs) : null, qtd_autorizada: Number(f.qa), cid: normCid(f.cid) || null, status: f.status }).eq('id', a.id);
-            if (er) return falha(er, 'Salvar'); fechar(); toast('Autorização atualizada.'); recarregar();
+            if (er) return falha(er, 'Salvar');
+            if ((f.enc || null) !== (a.encaminhamento_id || null)) {
+              const { data: rv, error: e2 } = await sb.rpc('vincular_encaminhamento', { p_autorizacao: a.id, p_encaminhamento: f.enc || null });
+              if (e2) return falha(e2, 'Vincular encaminhamento');
+              (rv?.avisos || []).forEach((k) => toast(k, true));
+            }
+            fechar(); toast('Autorização atualizada.'); recarregar();
           };
         });
       }
@@ -600,9 +637,9 @@ export async function render(params) {
     });
   }
 
-  function opcoesEnc(area) {
-    return (encs || []).filter((en) => en.status === 'ativo' && (!area || en.area === area))
-      .map((en) => `<option value="${en.id}">${esc(AREAS[en.area])} · ${data(en.data_pedido)}${en.cid ? ' · ' + esc(en.cid) : ''}${en.validade && en.validade < hojeIso() ? ' (vencido)' : ''}</option>`).join('');
+  function opcoesEnc(area, sel) {
+    return (encs || []).filter((en) => en.id === sel || (en.status === 'ativo' && (!area || en.area === area)))
+      .map((en) => `<option value="${en.id}" ${en.id === sel ? 'selected' : ''}>${esc(AREAS[en.area])} · ${data(en.data_pedido)}${en.cid ? ' · ' + esc(en.cid) : ''}${en.validade && en.validade < hojeIso() ? ' (vencido)' : ''}</option>`).join('');
   }
   function celulaEnc(a) {
     const en = (encs || []).find((x) => x.id === a.encaminhamento_id);
