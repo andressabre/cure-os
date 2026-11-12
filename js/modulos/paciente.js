@@ -355,7 +355,9 @@ export async function render(params) {
               <span>${esc(a.paciente_planos?.contratos?.nome)} · ${esc(a.procedimentos?.codigo)} ${esc((a.procedimentos?.descricao || '').slice(0, 70))}</span><br>
               <span class="muted">${a.data_autorizacao ? 'autorizada em ' + data(a.data_autorizacao) : 'solicitada'} · validade ${a.validade ? data(a.validade) : '—'}
                 · <strong>${u} / ${a.qtd_autorizada ?? '?'}</strong> realizadas</span></div>
-            <div class="aut-acoes">${celulaEnc(a)}${gestao ? ` <button class="btn pequeno" data-edaut="${a.id}">Editar</button>` : ''}
+            <div class="aut-acoes">${a.guia_arquivo ? `<button class="btn pequeno primario" data-guiaop="${esc(a.guia_arquivo)}" title="Guia autorizada pela operadora (abrir/imprimir)">📄 Guia da operadora</button>` : ''}
+              ${gestao ? `<button class="btn pequeno" data-anxguia="${a.id}">${a.guia_arquivo ? 'Trocar guia' : '📎 Anexar guia'}</button>` : ''}
+              ${celulaEnc(a)}${gestao ? ` <button class="btn pequeno" data-edaut="${a.id}">Editar</button>` : ''}
               ${gestao && !travada ? ` <button class="btn pequeno escuro" data-excaut="${a.id}" title="Só sem atendimento realizado">Excluir</button>` : ''}</div>
           </div>
           ${tabAts(lig, 'Nenhum agendamento ligado a esta autorização.')}${tabGuias(guiasDe(a.id))}</div>`; };
@@ -455,6 +457,18 @@ export async function render(params) {
           if (!(await confirmar('Cancelar esta guia? Ela não será enviada no lote.', 'Cancelar guia'))) return;
           const { error: e } = await sb.rpc('cancelar_guia', { p_guia: b.dataset.cancg });
           if (e) return falha(e); toast('Guia cancelada.'); recarregar();
+        }));
+        q('[data-guiaop]').forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.guiaop)));
+        q('[data-anxguia]').forEach((b) => (b.onclick = async () => {
+          const f = await escolherArquivo(); if (!f) return;
+          const a = auts.find((k) => k.id === b.dataset.anxguia);
+          try {
+            const up = await enviarArquivo(f, `pacientes/${id}/autorizacoes`);
+            const { error: er } = await sb.from('autorizacoes').update({ guia_arquivo: up.arquivo, guia_arquivo_nome: up.arquivo_nome }).eq('id', a.id);
+            if (er) throw er;
+            if (a.guia_arquivo) await removerArquivo(a.guia_arquivo).catch(() => {});
+            toast('Guia anexada.'); recarregar();
+          } catch (e) { falha(e, 'Anexar guia'); }
         }));
         q('[data-edaut]').forEach((b) => (b.onclick = () => editarAut(auts.find((k) => k.id === b.dataset.edaut))));
         q('[data-excaut]').forEach((b) => (b.onclick = async () => {
