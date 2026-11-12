@@ -243,3 +243,4 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 .sit-pendente .barra i{background:var(--amarelo)}.sit-vencida .barra i{background:var(--vermelho)}
 .chip-link{font:inherit;font-size:12.5px;border:1px solid var(--linha);background:var(--azul-claro);border-radius:14px;padding:2px 10px;cursor:pointer;color:var(--texto)}
 .chip-link:disabled{cursor:default;opacity:.7}
+.icone-check{white-space:nowrap;flex-direction:row}
