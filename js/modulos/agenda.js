@@ -5,6 +5,7 @@ import { sb, estado, $, $$, esc, tela, toast, falha, modal, confirmar } from '..
 const SERVICOS = ['Fisioterapia', 'Nutrição', 'Psicologia', 'Palmilha / Baropodometria', 'Terapia Ocupacional', 'Avaliação'];
 const STATUS = { agendado: 'Agendado', confirmado: 'Confirmado', presente: 'Presente', atendido: 'Atendido', faltou: 'Faltou', cancelado: 'Cancelado' };
 const PX_MIN = 1.4; // altura em pixels por minuto
+const SALDO_AVISO = 2, DIAS_AVISO = 7; // item 31: selo laranja nas 2 sessões antes da última ou senha vencendo em ≤ 7 dias
 const ICS = (t) => `https://paipxhfhwiztznvbxawz.supabase.co/functions/v1/agenda-ics?t=${t}`;
 const hojeIso = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 const hm = (d) => new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -87,6 +88,9 @@ export async function render() {
   if (vis.prof) q = q.eq('profissional_id', vis.prof);
   const { data: ats, error } = await q;
   if (error) return falha(error);
+  // Item 31 (db/043): "sessão N de X" de cada atendimento ligado a senha — uma chamada para a tela inteira
+  const ids = ats.filter((a) => a.autorizacao_id).map((a) => a.id), num = {};
+  if (ids.length) { const { data: ns } = await sb.rpc('numeracao_sessoes', { p_atendimentos: ids }); (ns || []).forEach((x) => (num[x.atendimento_id] = x)); }
 
   const ini = minDe(cfg.abre), fimMin = minDe(cfg.fecha), altura = (fimMin - ini) * PX_MIN;
   const horas = []; for (let m = Math.ceil(ini / 60) * 60; m < fimMin; m += 60) horas.push(m);
@@ -109,7 +113,7 @@ export async function render() {
         const s = new Date(a.inicio), e = new Date(a.fim), top = (s.getHours() * 60 + s.getMinutes() - ini) * PX_MIN;
         const h = Math.max(22, ((e - s) / 6e4) * PX_MIN - 2);
         return `<div class="ag-ev st-${a.status}" data-id="${a.id}" style="top:${top}px;height:${h}px;border-left-color:${corDe(a.profissional_id)}">
-          <b>${hm(a.inicio)} ${esc(a.pacientes?.nome || '')}</b><span>${esc(a.servico || '')}${a.sala ? ' · ' + esc(a.sala) : ''} · ${STATUS[a.status]}</span></div>`;
+          <b>${hm(a.inicio)} ${esc(a.pacientes?.nome || '')}${seloSessao(num[a.id])}</b><span>${esc(a.servico || '')}${a.sala ? ' · ' + esc(a.sala) : ''} · ${STATUS[a.status]}</span></div>`;
       }).join('')}</div>`).join('')}
   </div></div>`;
 
@@ -129,7 +133,7 @@ export async function render() {
     const hora = a ? hm(a.inicio) : `${String(Math.floor(novo.min / 60)).padStart(2, '0')}:${String(novo.min % 60).padStart(2, '0')}`;
     const dur = a ? Math.round((new Date(a.fim) - new Date(a.inicio)) / 6e4) : p?.duracao_padrao_min || 45;
     let pacienteId = a?.paciente_id || null;
-    modal(`<h3>${a ? 'Agendamento' : 'Novo agendamento'}</h3>
+    modal(`<h3>${a ? 'Agendamento' : 'Novo agendamento'}</h3>${a ? linhaSessao(num[a.id]) : ''}
       ${a ? `<div class="linha-acoes" style="justify-content:flex-start;margin:0 0 12px">${Object.entries(STATUS).filter(([k]) => k !== 'cancelado')
         .map(([k, v]) => `<button class="btn pequeno ${a.status === k ? 'primario' : ''}" data-st="${k}">${v}</button>`).join('')}</div>` : ''}
       <form class="grade-form" id="f">
@@ -413,4 +417,23 @@ export function mostrarCalendario(p) {
     <div class="linha-acoes"><button class="btn" data-fechar>Fechar</button></div>`, (m) => {
     $('#cp', m).onclick = async () => { try { await navigator.clipboard.writeText(url); toast('Link copiado.'); } catch { $('#lnk', m).select(); toast('Selecione e copie com Ctrl+C.'); } };
   });
+}
+
+// Item 31: selo da sessão (cinza normal · laranja acabando · vermelho última/vencida)
+function nivelSessao(x, dia) {
+  if (!x || !x.n) return '';
+  const vence = x.validade ? Math.round((new Date(x.validade + 'T12:00') - new Date((dia || new Date().toLocaleDateString('sv')) + 'T12:00')) / 864e5) : null;
+  if ((x.total && x.n >= x.total) || (vence !== null && vence < 0)) return 'fim';
+  if ((x.total && x.total - x.n <= SALDO_AVISO) || (vence !== null && vence <= DIAS_AVISO)) return 'acabando'; // pela posição: série toda agendada não pinta tudo de laranja
+  return 'ok';
+}
+function seloSessao(x) {
+  if (!x || !x.n) return '';
+  return ` <em class="ses ses-${nivelSessao(x)}" title="${x.base === 'encaminhamento' ? 'Sessão do encaminhamento (1 senha por sessão)' : 'Sessão da senha'}">S ${x.n}${x.total ? '/' + x.total : ''}</em>`;
+}
+function linhaSessao(x, senha) {
+  if (!x || !x.n) return '';
+  const val = x.validade ? ' · vence ' + new Date(x.validade + 'T12:00').toLocaleDateString('pt-BR') : '';
+  const resta = x.restam !== null && x.total ? ` · restam ${x.restam}` : '';
+  return `<p class="ses-linha ses-${nivelSessao(x)}">${senha ? 'Senha ' + esc(senha) + ' · ' : ''}${x.base === 'encaminhamento' ? 'sessão do encaminhamento ' : 'sessão '}${x.n}${x.total ? ' de ' + x.total : ''}${resta}${val}</p>`;
 }

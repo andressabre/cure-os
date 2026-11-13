@@ -363,6 +363,10 @@ export async function render(params) {
         return `<button class="chip-link" ${en.arquivo ? `data-abrir-enc="${esc(en.arquivo)}"` : 'disabled'} title="${en.arquivo ? 'Abrir o pedido médico' : 'Pedido sem arquivo'}">📋 Pedido ${esc(AREAS[en.area])} · ${data(en.data_pedido)}${en.cid ? ' · ' + esc(en.cid) : ''}</button>${en.arquivo ? '' : ' <span class="selo alerta">sem arquivo</span>'}`; };
       const bloco = (a) => { const u = usadas[a.id] || 0, sit = situ(a), lig = atsDe(a.id), q = a.qtd_autorizada || 0;
         const pct = q ? Math.min(100, Math.round((u / q) * 100)) : 0;
+        // Item 31: feitas | agendadas | livres
+        const ag = lig.filter((x) => ['agendado', 'confirmado', 'presente'].includes(x.status)).length, livres = q - u - ag;
+        const pctAg = q ? Math.min(100 - pct, Math.round((ag / q) * 100)) : 0;
+        const acabando = sit === 'ativa' && q > 1 && (livres <= 2 || (a.validade && (new Date(a.validade + 'T12:00') - new Date()) / 864e5 <= 7));
         return `<div class="aut-bloco sit-${sit}">
           <div class="aut-cab">
             <div class="aut-tit"><span class="selo ${SIT[sit][1]}">${SIT[sit][0]}</span>
@@ -376,7 +380,8 @@ export async function render(params) {
           <div class="aut-proc"><code>${esc(a.procedimentos?.codigo)}</code> ${esc(a.procedimentos?.descricao || '')}</div>
           <div class="aut-meta">
             <span>📅 ${a.data_autorizacao ? data(a.data_autorizacao) : 'solicitada'} → <strong>${a.validade ? data(a.validade) : 'sem validade'}</strong></span>
-            <span class="aut-uso" title="${u} de ${q} realizadas"><span class="barra"><i style="width:${pct}%"></i></span> ${u}/${q || '?'} realizadas</span>
+            <span class="aut-uso" title="${u} feitas · ${ag} agendadas · ${Math.max(0, livres)} livres de ${q}"><span class="barra"><i style="width:${pct}%"></i><i class="ag" style="width:${pctAg}%"></i></span> ${u} feitas · ${ag} agend. · ${q ? Math.max(0, livres) + ' livres de ' + q : '?'}</span>
+            ${acabando ? '<span class="selo pendente">senha acabando — pedir nova</span>' : ''}
             ${chipEnc(a)}
           </div>
           ${lig.length ? tabAts(lig, '') : ''}${tabGuias(guiasDe(a.id))}</div>`; };

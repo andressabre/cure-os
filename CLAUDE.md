@@ -65,6 +65,9 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   "cancelar esta e as próximas"); **lembretes** por link wa.me com texto `config.lembrete_texto` (placeholders {nome} {servico} {profissional}
   {dia} {hora} {sala}) e `atendimentos.lembrete_enviado_em`. Sem API paga.
 
+- **Saldo de sessões (db/043, item 31):** `numeracao_sessoes(ids[])` (INVOKER, 1 chamada por tela) → selo "S N/X" no bloco da agenda e linha no modal
+  (laranja nas 2 sessões antes da última ou senha vencendo em ≤ 7 dias; vermelho na última/vencida); senha de 1 sessão conta pelo encaminhamento.
+  Ficha: barra feitas | agendadas | livres + selo "senha acabando". `pendencias` ganhou "Autorizações — senha acabando" (link `paciente-<id>`).
 - **Particular (db/030, `particular.js`):** tabela `recebimentos` (procedimento da tabela PARTICULAR, desconto decidido pelo profissional,
   forma/parcelas, nº da NFS-e emitida no Emissor Nacional gov.br); gatilho lança em `lancamentos` (origem 'particular', categoria/área pelo código).
 - **Relacionamento (db/030, `relacionamento.js`):** função `relacionamento(clinica, dias)` → aniversários + reavaliações (`config.relacionamento.reavaliacoes`:

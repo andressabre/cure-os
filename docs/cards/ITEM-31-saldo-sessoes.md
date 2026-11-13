@@ -1,7 +1,9 @@
 # Item 31 — Saldo de sessões visível + aviso de fim  `[S] Sonnet` · Fable revisa a migração
 
 > Origem: comparação com o ZenFisio (pacotes de atendimento com sessões contratadas), 13/11/2026.
-> Entra no **Lote 1 — Piloto fluido** (gatilho: o primeiro atendimento Amil fechado). Esforço: baixo/médio.
+> **Status: feito em 13/11/2026 (db/043).** A gestora decidiu não esperar o piloto Amil para este item.
+> Ajuste na execução: o laranja da agenda é pela **posição** da sessão (2 antes da última), não pelo saldo livre — senão uma série toda agendada pintaria tudo de laranja.
+> Pendência "Senha acabando" só para senhas com mais de 1 sessão (senha por sessão já gera solicitação pendente pela db/029).
 > Leia `CLAUDE.md` e a skill `cure-os-dev` antes. 1 card = 1 commit. Próxima migração livre: **db/043**.
 
 ## Objetivo (1 frase)
