@@ -97,6 +97,12 @@ Legenda: **Eixo** F = fluidez · A = automação · I = inovação · S = segura
 | 29 | **Portal do paciente mínimo**: próximos agendamentos, documentos timbrados emitidos, confirmar/cancelar, exportar meus dados (liga com 7 e 22) | I | M | [S] | Paciente resolve o básico sem WhatsApp |
 | 30 | **Eventos para outros apps**: database webhooks do Supabase → Make/n8n (agendamento criado, lote enviado, glosa identificada) + sync de agenda com Outlook/Google além do ICS | I | B | [H] | Um evento novo chega no Make em < 1 min |
 
+### Acréscimos depois da v1
+
+| # | Melhoria | Eixo | Esf. | Quem | Pronto quando |
+|---|---|---|---|---|---|
+| 31 | **Saldo de sessões visível + aviso de fim** (vindo do ZenFisio, 13/11/2026): selo "S 7/10" na agenda, linha no modal, barra na ficha e pendência "Senha acabando" no Painel; 1 senha por sessão conta pelo encaminhamento. Card: `docs/cards/ITEM-31-saldo-sessoes.md` | F/A | B-M | [S] · Fable revisa db/043 | A recepção vê na agenda quem precisa de nova senha na semana |
+
 ## 3. Ordem de execução (lotes)
 
 A regra da necropsia continua: **nada de módulo novo antes do piloto Amil fechar um ciclo** (agendar → autorizar → atender → guia → lote → XML → envio → retorno). Os lotes abaixo respeitam isso.
@@ -104,7 +110,7 @@ A regra da necropsia continua: **nada de módulo novo antes do piloto Amil fecha
 | Lote | Itens | Gatilho para começar | Quem |
 |---|---|---|---|
 | **0 — Base** (não muda comportamento) | 1, 2, 6, 3 | Agora, em paralelo ao piloto | Haiku (1, 2, 6) · Sonnet (3) · Fable revisa 3 |
-| **1 — Piloto fluido** | 8, 9, 10, 23, 20 | Primeiro atendimento Amil fechado | Sonnet · Fable revisa 20 |
+| **1 — Piloto fluido** | 31, 8, 9, 10, 23, 20 | Primeiro atendimento Amil fechado | Sonnet · Fable revisa 20 |
 | **2 — Dinheiro de volta** | 17, 18, 19, 4, 5, 26 | Primeiro retorno real recebido | Fable spec 17 · Sonnet · Haiku script de 4 |
 | **3 — Fluidez** | 11, 12, 13, 14, 15, 16 | Lote 2 em uso por 2 semanas | Haiku (11, 16) · Sonnet · Fable spec 15 |
 | **4 — Relacionamento e inovação** | 21, 22, 24, 25, 27, 28, 29, 30, 7 | Equipe inteira usando o sistema | Mistura; Fable em 7 e 28 |
