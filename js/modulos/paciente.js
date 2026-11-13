@@ -374,6 +374,17 @@ export async function render(params) {
       const chipEnc = (a) => { const en = (encs || []).find((k) => k.id === a.encaminhamento_id);
         if (!en) return '<span class="selo alerta">sem encaminhamento</span>';
         return `<button class="chip-link" ${en.arquivo ? `data-abrir-enc="${esc(en.arquivo)}"` : 'disabled'} title="${en.arquivo ? 'Abrir o pedido médico' : 'Pedido sem arquivo'}">📋 Pedido ${esc(AREAS[en.area])} · ${data(en.data_pedido)}${en.cid ? ' · ' + esc(en.cid) : ''}</button>${en.arquivo ? '' : ' <span class="selo alerta">sem arquivo</span>'}`; };
+      // Agendar da ficha (13/11/2026): leva à agenda com paciente/convênio/senha preenchidos (a agenda continua mostrando horários e conflitos)
+      const porSessao = (a) => !!(planos || []).find((pl) => pl.id === a.paciente_plano_id)?.contratos?.regras?.senha_por_sessao;
+      const podeAgendar = (a, livres) => estado.perfil !== 'profissional' && !['negada', 'cancelada', 'pendente'].includes(a.status) && !(a.validade && a.validade < hojeIso())
+        && (livres > 0 || porSessao(a));
+      const irAgendar = (a) => { const lig = atsDe(a.id), q = a.qtd_autorizada || 0;
+        const livres = q - lig.filter((x) => ['agendado', 'confirmado', 'presente', 'atendido'].includes(x.status)).length;
+        const nova = livres <= 0 && porSessao(a);   // 1 senha por sessão: próxima sessão = nova solicitação do mesmo procedimento
+        const prof = a.profissional_id || [...lig].reverse().find((x) => x.profissional_id)?.profissional_id || '';
+        sessionStorage.setItem('agendar_para', JSON.stringify({ paciente: id, nome: x.nome, plano: a.paciente_plano_id, aut: nova ? 'nova' : a.id, proc: a.procedimento_id,
+          porSessao: porSessao(a), prof, resumo: `${a.paciente_planos?.contratos?.nome || ''} · ${nova ? 'nova senha (1 por sessão)' : 'senha ' + (a.senha || '—')}` }));
+        location.hash = 'agenda'; };
       const bolinhas = (a, lig, q) => { const vivos = lig.filter((x) => x.status !== 'cancelado');
         const cls = (x) => x.status === 'atendido' ? 'f' : x.status === 'faltou' ? 'x' : 'a';
         if (q > 20) return '';
@@ -388,7 +399,7 @@ export async function render(params) {
         return `<details class="aut-bloco sit-${sit}" data-aut="${a.id}" ${aberto ? 'open' : ''}>
           <summary class="aut-linha">
             <span class="aut-l1"><strong>${a.senha ? 'Senha ' + esc(a.senha) : 'Sem senha'}</strong><span class="selo ${SIT[sit][1]}">${SIT[sit][0]}</span>${alertas}
-              <span class="aut-vence">${a.validade ? 'vence ' + data(a.validade).slice(0, 5) : ''}</span></span>
+              <span class="aut-vence">${a.validade ? 'vence ' + data(a.validade).slice(0, 5) : ''}</span>${podeAgendar(a, livres) ? `<button class="btn pequeno" data-agendar="${a.id}" title="Abrir a agenda do profissional com este paciente e esta senha já preenchidos">📅 Agendar</button>` : ''}</span>
             <span class="aut-l2 muted">${esc(a.paciente_planos?.contratos?.nome)} · <code>${esc(a.procedimentos?.codigo)}</code> · ${u} de ${q || '?'}${ag ? ` (+${ag} agend.)` : ''} ${bolinhas(a, lig, q)}</span>
           </summary>
           <div class="aut-corpo">
@@ -422,6 +433,7 @@ export async function render(params) {
           .map(([k, v]) => `<button class="chip-filtro ${filtro.sit === k ? 'on' : ''}" data-chip="${k}">${v} <b>${conta(k)}</b></button>`).join('');
         $$('[data-chip]', $('#chips-aut')).forEach((b) => (b.onclick = () => { filtro.sit = b.dataset.chip; sessionStorage.setItem('aut_sit', filtro.sit); desenha(); }));
         $('#abrir-todas') && ($('#abrir-todas').textContent = filtro.todasAbertas ? 'Fechar todas' : 'Abrir todas');
+        $$('[data-agendar]', $('#lista-aut')).forEach((b) => (b.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); irAgendar((auts || []).find((k) => k.id === b.dataset.agendar)); }));
         ligaBotoes($('#lista-aut'));
       };
 

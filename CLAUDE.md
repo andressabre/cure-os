@@ -52,6 +52,9 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   Autorização sem senha = `pendente` (exceto Particular); guias aparecem dentro da autorização (imprimir/cancelar); filtro por situação/convênio/ordem.
   **13/11/2026:** cada autorização é uma sanfona (`<details>`): linha com senha, situação, alertas (acabando, sem encaminhamento, guia segurada), validade,
   "N de X" e bolinhas por sessão; aberta por padrão só a da próxima sessão agendada (+ botão Abrir todas). Chips exclusivas (`categoria()`):
+  **Agendar da ficha:** botão 📅 na linha da senha (não profissional; senha ativa com saldo, ou contrato `senha_por_sessao` → `aut:'nova'` do mesmo procedimento)
+  grava `sessionStorage.agendar_para` e abre `#agenda` na semana do profissional; faixa laranja no topo; o modal vem com paciente/plano/senha preenchidos.
+  A faixa fica até "Cancelar" ou "Voltar à ficha" (permite marcar várias sessões).
   Abertas · Pendentes · Realizadas · Liberadas p/ faturar (só gestão; aproximação no cliente: guia sem envio, não segurada e no lote/liberada à mão/cheia/vencida) · Histórico · Todas.
 - **Cadastro (db/041):** `pacientes.observacao` e `pacientes.alerta` (alerta em destaque na ficha e ao escolher o paciente na agenda);
   boas-vindas por mailto/wa.me com textos `clinicas.config.boas_vindas_texto` (particular) e `boas_vindas_convenio` ({nome} {clinica}).

@@ -135,6 +135,8 @@ tr.clicavel{cursor:pointer} tr.clicavel:hover td{background:#F6F7F5}
 .ses-acabando{color:#A44B07}.ag-ev em.ses-acabando{background:var(--laranja-claro)}.ses-fim{color:var(--vermelho)}.ag-ev em.ses-fim{background:var(--vermelho-claro)}
 .ses-linha{margin:-4px 0 10px;font-size:13px;font-weight:600}
 .ag-ev.st-faltou{background:var(--vermelho-claro)}.ag-ev.st-faltou b{text-decoration:line-through}
+.faixa-agendar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--laranja-claro);border:1px solid var(--laranja);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:14px}
+.faixa-agendar span{flex:1;min-width:200px}
 .ag-pausa{position:absolute;left:0;right:0;background:repeating-linear-gradient(-45deg,var(--papel),var(--papel) 5px,#E4E7E3 5px,#E4E7E3 10px);
   color:var(--texto-3);font-size:12px;font-weight:500;display:grid;place-items:center;pointer-events:none}
 .sugestoes{border:1px solid var(--linha);border-radius:var(--raio);max-height:200px;overflow:auto;background:var(--branco);margin-top:2px}

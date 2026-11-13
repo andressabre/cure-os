@@ -46,6 +46,9 @@ export async function render() {
     ${souProf ? '' : '<select id="prof"><option value="">Todos os profissionais</option></select>'}
     ${souProf ? '<button class="btn" id="cal">Ligar ao Google/Outlook</button>' : '<button class="btn" id="lemb">📲 Lembretes</button><button class="btn" id="relac">💬 Relacionamento</button><button class="btn primario" id="novo">+ Agendamento</button>'}`);
   if (souProf) vis.prof = estado.profissionalId;
+  // Agendar a partir da ficha (13/11/2026): contexto em sessionStorage 'agendar_para'
+  let pre = null; try { pre = !souProf && JSON.parse(sessionStorage.getItem('agendar_para') || 'null'); } catch { pre = null; }
+  if (pre && !pre.aplicado) { if (pre.prof) { vis.prof = pre.prof; vis.modo = 'semana'; } vis.dia = hojeIso(); pre.aplicado = true; sessionStorage.setItem('agendar_para', JSON.stringify(pre)); }
 
   const cfg = estado.clinica.config || (await sb.from('clinicas').select('config').eq('id', estado.clinica.id).single()).data?.config
     || { abre: '07:30', fecha: '19:30', intervalo_min: 15, pausas: [] };
@@ -103,7 +106,8 @@ export async function render() {
   const corDe = (pid) => profs.find((p) => p.id === pid)?.cor || '#F8781D';
 
   import('./guia.js').then((g) => g.alertaSemSenha($('#alerta-senha'), render)).catch(() => {});
-  c.innerHTML = `<div id="alerta-senha"></div><div class="cartao agenda-wrap"><div class="agenda" style="grid-template-columns:56px repeat(${colunas.length}, minmax(150px,1fr))">
+  c.innerHTML = `${pre ? `<div class="faixa-agendar"><span>📅 Agendando <strong>${esc(pre.nome)}</strong> · ${esc(pre.resumo || '')} — clique num horário livre</span>
+    <a href="#paciente-${pre.paciente}-autorizacoes" id="pre-voltar">Voltar à ficha</a><button class="btn pequeno" id="pre-canc">Cancelar</button></div>` : ''}<div id="alerta-senha"></div><div class="cartao agenda-wrap"><div class="agenda" style="grid-template-columns:56px repeat(${colunas.length}, minmax(150px,1fr))">
     <div></div>${colunas.map((col) => `<div class="ag-tit">${esc(col.titulo)}</div>`).join('')}
     <div class="ag-horas" style="height:${altura}px">${horas.map((m) => `<span style="top:${(m - ini) * PX_MIN}px">${String(m / 60).padStart(2, '0')}:00</span>`).join('')}</div>
     ${colunas.map((col, ci) => `<div class="ag-col" data-ci="${ci}" style="height:${altura}px">
@@ -117,12 +121,14 @@ export async function render() {
       }).join('')}</div>`).join('')}
   </div></div>`;
 
+  $('#pre-canc')?.addEventListener('click', () => { sessionStorage.removeItem('agendar_para'); render(); });
+  $('#pre-voltar')?.addEventListener('click', () => sessionStorage.removeItem('agendar_para'));
   $$('.ag-col', c).forEach((el) => (el.onclick = (e) => {
     if (e.target.closest('.ag-ev') || souProf) return;
     const col = colunas[el.dataset.ci], y = e.clientY - el.getBoundingClientRect().top;
     const passo = cfg.intervalo_min || 10, min = ini + Math.floor(y / PX_MIN / passo) * passo;
     if (naPausa(min, col.dia)) return toast('Fora do expediente. Para encaixe, use + Agendamento e ajuste a hora.');
-    editar(null, { dia: col.dia, min, prof: col.prof });
+    editar(null, { dia: col.dia, min, prof: col.prof, pre });
   }));
   $$('.ag-ev', c).forEach((el) => (el.onclick = () => editar(ats.find((a) => a.id === el.dataset.id))));
 
@@ -132,13 +138,13 @@ export async function render() {
     const dia = a ? new Date(a.inicio).toLocaleDateString('sv') : novo.dia;
     const hora = a ? hm(a.inicio) : `${String(Math.floor(novo.min / 60)).padStart(2, '0')}:${String(novo.min % 60).padStart(2, '0')}`;
     const dur = a ? Math.round((new Date(a.fim) - new Date(a.inicio)) / 6e4) : p?.duracao_padrao_min || 45;
-    let pacienteId = a?.paciente_id || null;
+    let pacienteId = a?.paciente_id || novo.pre?.paciente || null;
     modal(`<h3>${a ? 'Agendamento' : 'Novo agendamento'}</h3>${a ? linhaSessao(num[a.id]) : ''}
       ${a ? `<div class="linha-acoes" style="justify-content:flex-start;margin:0 0 12px">${Object.entries(STATUS).filter(([k]) => k !== 'cancelado')
         .map(([k, v]) => `<button class="btn pequeno ${a.status === k ? 'primario' : ''}" data-st="${k}">${v}</button>`).join('')}</div>` : ''}
       <form class="grade-form" id="f">
         <label style="grid-column:1/-1">Paciente${souProf ? `<input value="${esc(a?.pacientes?.nome)}" disabled>` : `
-          <input id="pbusca" placeholder="Digite o nome" value="${esc(a?.pacientes?.nome || '')}" autocomplete="off"><div id="psug" class="sugestoes"></div>`}</label>
+          <input id="pbusca" placeholder="Digite o nome" value="${esc(a?.pacientes?.nome || novo.pre?.nome || '')}" autocomplete="off"><div id="psug" class="sugestoes"></div>`}</label>
         <label>Profissional<select name="profissional_id" ${souProf ? 'disabled' : ''}>${profs.map((x) => `<option value="${x.id}" ${x.id === p?.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label>
         <label>Serviço<select name="servico">${SERVICOS.map((s) => `<option ${s === (a?.servico || p?.especialidade) ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
         <label>Data<input type="date" name="dia" value="${dia}" ${souProf ? 'disabled' : ''}></label>
@@ -198,7 +204,7 @@ export async function render() {
         if (e) return falha(e); toast(`${cs.length} agendamento(s) cancelado(s).`); render();
       });
       // Convênio e autorização: agendar convênio exige vínculo com autorização (existente ou solicitação pendente)
-      const conv = $('#conv', m); let planos = [], planoId = a?.paciente_plano_id || '', autId = a?.autorizacao_id || '';
+      const conv = $('#conv', m); let planos = [], planoId = a?.paciente_plano_id || novo.pre?.plano || '', autId = a?.autorizacao_id || novo.pre?.aut || '';
       const travado = a && ['atendido', 'cancelado'].includes(a.status); let carregado = false;
       async function carregarConv() {
         if (!pacienteId) { conv.innerHTML = ''; return; }
@@ -228,6 +234,7 @@ export async function render() {
             <label>Validade<input id="c-val" type="date"></label>
             <p class="muted" style="grid-column:1/-1">Sem senha, a solicitação fica <strong>pendente</strong> e vira tarefa "Autorizar guia" para recepção, gestão e o profissional.</p>` : ''}`
           : pl ? '<p class="muted" style="grid-column:1/-1">Este contrato não exige senha.</p>' : ''}</div>`;
+        if (autId === 'nova' && novo.pre?.proc && $('#c-proc', conv)) { $('#c-proc', conv).value = novo.pre.proc; if (novo.pre.porSessao && $('#c-qtd', conv)) $('#c-qtd', conv).value = 1; }
         $('#c-plano', conv)?.addEventListener('change', (e) => { planoId = e.target.value; autId = ''; desenharConv(); });
         $('#c-aut', conv)?.addEventListener('change', (e) => { autId = e.target.value; desenharConv(); });
       }
@@ -344,7 +351,9 @@ export async function render() {
           : await sb.from('atendimentos').insert(criar.map((o, i) => ({ ...base, ...(serie && porSessao && pl?.exige ? { autorizacao_id: autDe[i] } : {}),
             clinica_id: estado.clinica.id, status: 'agendado', serie_id: serieId,
             inicio: o.ini.toISOString(), fim: o.fim.toISOString() })));
-        if (e) return falha(e); fechar(); toast(serie ? `${criar.length} agendamentos criados.` : 'Agendamento salvo.'); vis.dia = f.dia; render();
+        if (e) return falha(e); fechar(); toast(serie ? `${criar.length} agendamentos criados.` : 'Agendamento salvo.'); vis.dia = f.dia;
+        if (!a && novo.pre) toast('Agendado. A faixa continua para marcar outra sessão; use "Voltar à ficha" quando terminar.');
+        render();
       });
     });
   }
