@@ -68,7 +68,9 @@ export const foneFmt = (v) => { const d = foneDig(v); const m = d.match(/^55(\d{
 export const foneValido = (v, cel = false) => { const d = foneDig(v); return !d || (cel ? /^55\d{2}9\d{8}$/ : /^55\d{10,11}$/).test(d); };
 export function mascaraFone(inp) {
   if (!inp) return;
-  const aplica = () => { const d = inp.value.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '').slice(0, 11);
+  // O "+55" que a própria máscara escreve não pode ser lido como dígito digitado (bug "55…" de 13/11/2026)
+  const aplica = () => { const v = inp.value.trim();
+    const d = (v.startsWith('+55') ? v.slice(3).replace(/\D/g, '') : v.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')).replace(/^0+/, '').slice(0, 11);
     inp.value = !d ? '' : d.length <= 2 ? `+55 (${d}` : d.length <= 6 ? `+55 (${d.slice(0, 2)}) ${d.slice(2)}`
       : `+55 (${d.slice(0, 2)}) ${d.slice(2, d.length - 4)}-${d.slice(-4)}`; };
   inp.addEventListener('input', aplica); inp.inputMode = 'numeric'; inp.placeholder = '+55 (47) 99999-9999';

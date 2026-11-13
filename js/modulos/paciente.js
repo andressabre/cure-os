@@ -382,8 +382,10 @@ export async function render(params) {
         const livres = q - lig.filter((x) => ['agendado', 'confirmado', 'presente', 'atendido'].includes(x.status)).length;
         const nova = livres <= 0 && porSessao(a);   // 1 senha por sessão: próxima sessão = nova solicitação do mesmo procedimento
         const prof = a.profissional_id || [...lig].reverse().find((x) => x.profissional_id)?.profissional_id || '';
-        sessionStorage.setItem('agendar_para', JSON.stringify({ paciente: id, nome: x.nome, plano: a.paciente_plano_id, aut: nova ? 'nova' : a.id, proc: a.procedimento_id,
-          porSessao: porSessao(a), prof, resumo: `${a.paciente_planos?.contratos?.nome || ''} · ${nova ? 'nova senha (1 por sessão)' : 'senha ' + (a.senha || '—')}` }));
+        const proc = a.procedimentos?.descricao ? ` (${a.procedimentos.descricao})` : '';
+        const saldo = nova ? 'nova senha (1 por sessão)' : `senha ${a.senha || '—'}${proc} · ${livres} de ${q} disponíve${livres === 1 ? 'l' : 'is'} para agendar`;
+        sessionStorage.setItem('agendar_para', JSON.stringify({ paciente: id, nome: p.nome, plano: a.paciente_plano_id, aut: nova ? 'nova' : a.id, proc: a.procedimento_id,
+          porSessao: porSessao(a), prof, resumo: `${a.paciente_planos?.contratos?.nome || ''} · ${nova ? 'nova senha (1 por sessão)' + proc : saldo}` }));
         location.hash = 'agenda'; };
       const bolinhas = (a, lig, q) => { const vivos = lig.filter((x) => x.status !== 'cancelado');
         const cls = (x) => x.status === 'atendido' ? 'f' : x.status === 'faltou' ? 'x' : 'a';
