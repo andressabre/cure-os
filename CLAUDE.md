@@ -50,6 +50,9 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   CID-10 local em `dados/cid10.json` (DATASUS via pacote MIT @br-health-kit/cid10) → indicação clínica automática (`descricaoCid` no core).
 - **Ficha do paciente (12/11/2026):** abas Resumo · Cadastro e encaminhamentos · Autorizações e guias · Prontuário · Documentos.
   Autorização sem senha = `pendente` (exceto Particular); guias aparecem dentro da autorização (imprimir/cancelar); filtro por situação/convênio/ordem.
+  **13/11/2026:** cada autorização é uma sanfona (`<details>`): linha com senha, situação, alertas (acabando, sem encaminhamento, guia segurada), validade,
+  "N de X" e bolinhas por sessão; aberta por padrão só a da próxima sessão agendada (+ botão Abrir todas). Chips exclusivas (`categoria()`):
+  Abertas · Pendentes · Realizadas · Liberadas p/ faturar (só gestão; aproximação no cliente: guia sem envio, não segurada e no lote/liberada à mão/cheia/vencida) · Histórico · Todas.
 - **Cadastro (db/041):** `pacientes.observacao` e `pacientes.alerta` (alerta em destaque na ficha e ao escolher o paciente na agenda);
   boas-vindas por mailto/wa.me com textos `clinicas.config.boas_vindas_texto` (particular) e `boas_vindas_convenio` ({nome} {clinica}).
 - **Documentos:** botão único ★ Favoritos (seletor de modelo no editor: salvar edição / excluir modelo / salvar / imprimir).

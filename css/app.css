@@ -212,12 +212,29 @@ p.ok{color:var(--verde);font-weight:600} p.aviso{background:var(--amarelo-claro)
 .form-linha small{font-weight:400;font-size:12px;line-height:1.2}
 @media (max-width:1100px){.form-linha{grid-template-columns:repeat(6,minmax(0,1fr))} .form-linha>label.larga2{grid-column:span 6}}
 .filtros-aut{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:12px}
-.filtros-aut label{min-width:170px} #resumo-aut{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:8px} #abrir-aut{margin-left:auto}
+.filtros-aut label{min-width:170px} #abrir-aut{margin-left:auto}
 .aut-bloco{border:1px solid var(--linha);border-left:5px solid var(--linha);border-radius:8px;padding:10px 12px;margin:10px 0;background:var(--branco)}
 .aut-bloco.sit-ativa{border-left-color:var(--verde)} .aut-bloco.sit-pendente{border-left-color:var(--amarelo)}
-.aut-bloco.sit-vencida{border-left-color:var(--vermelho)} .aut-bloco.sit-esgotada,.aut-bloco.sit-encerrada{border-left-color:var(--texto-3);opacity:.85}
+.aut-bloco.sit-vencida{border-left-color:var(--vermelho)} .aut-bloco.sit-esgotada,.aut-bloco.sit-encerrada{border-left-color:var(--texto-3)}
 .aut-cab{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap} .aut-acoes{display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap}
 .aut-bloco .sub-ats{margin-top:8px}
+.chips-aut{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chip-filtro{border:1px solid var(--linha);background:var(--branco);border-radius:999px;padding:4px 11px;font:inherit;font-size:13px;color:var(--texto-2);cursor:pointer}
+.chip-filtro b{font-weight:600;margin-left:2px}.chip-filtro.on{background:var(--laranja-claro);border-color:var(--laranja);color:#A44B07}
+details.aut-bloco{padding:0;margin:6px 0}
+.aut-linha{list-style:none;cursor:pointer;padding:8px 12px;display:flex;flex-direction:column;gap:2px}
+.aut-linha::-webkit-details-marker{display:none}
+.aut-linha{position:relative;padding-left:22px}.aut-linha::before{content:"▸";position:absolute;left:8px;top:9px;color:var(--texto-3);font-size:12px}
+details[open]>.aut-linha::before{content:"▾"}
+.aut-l1{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.aut-vence{margin-left:auto;font-size:12.5px;color:var(--texto-2)}
+.aut-l2{font-size:12.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.aut-l2 code{background:var(--papel);padding:0 5px;border-radius:3px;font-size:12px}
+.bolas{display:inline-flex;gap:3px;margin-left:4px}.bolas i{width:8px;height:8px;border-radius:50%;background:var(--linha)}
+.bolas i.f{background:var(--verde)}.bolas i.a{background:#5B8DEF}.bolas i.x{background:var(--vermelho)}
+.aut-corpo{border-top:1px solid var(--linha-fraca);padding:8px 12px 10px}
+.aut-datas{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}.aut-datas .dt{font-size:12px;padding:1px 7px;border-radius:4px;background:var(--papel);color:var(--texto-2)}
+.aut-datas .dt-atendido{background:var(--verde-claro);color:var(--verde)}.aut-datas .dt-faltou{background:var(--vermelho-claro);color:var(--vermelho)}
+.aut-datas .dt-agendado,.aut-datas .dt-confirmado,.aut-datas .dt-presente{background:var(--azul-claro)}
+.aut-sub{margin-top:8px}.aut-sub>summary{cursor:pointer;font-size:13px;color:var(--texto-2)}
 details.cartao>summary{cursor:pointer;list-style:revert}
 /* Cadastro do paciente: grade de 12 colunas e alerta */
 .form-dados{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px 14px;align-items:start}
