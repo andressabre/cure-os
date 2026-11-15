@@ -43,7 +43,8 @@ let vis = { dia: hojeIso(), modo: 'dia', prof: '', f: { ...FILTRO0 } };
 try { const v = JSON.parse(sessionStorage.getItem('agenda_vis') || 'null'); if (v && MODOS[v.modo]) vis = { ...vis, modo: v.modo, prof: v.prof || '', f: { ...FILTRO0, ...(v.f || {}) } }; } catch { /* sem storage */ }
 const guardarVis = () => { try { sessionStorage.setItem('agenda_vis', JSON.stringify({ modo: vis.modo, prof: vis.prof, f: vis.f })); } catch { /* sem storage */ } };
 const segundaDe = (dia) => somaDias(dia, -((new Date(dia + 'T12:00').getDay() + 6) % 7));
-const nomeConv = (a) => (a.paciente_plano_id ? a.paciente_planos?.contratos?.nome || 'Convênio' : 'Particular');
+let CONV = {};   // atendimento → nome do contrato (db/045, convenio_atendimentos)
+const nomeConv = (a) => (a.paciente_plano_id ? (CONV[a.id] ? `Convênio (${CONV[a.id]})` : 'Convênio') : 'Particular');
 const primeiroNome = (n) => String(n || '').trim().split(/\s+/)[0] || '';
 let pop = null;   // cartão rápido aberto
 function fecharCartao() { pop?.remove(); pop = null; }
@@ -121,7 +122,7 @@ export async function render() {
     de = ate = vis.dia;
   }
 
-  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, paciente_plano_id, autorizacao_id, serie_id, lembrete_enviado_em, pacientes(nome, telefone, celular), paciente_planos(contratos(nome))')
+  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, paciente_plano_id, autorizacao_id, serie_id, lembrete_enviado_em, pacientes(nome, telefone, celular)')
     .eq('clinica_id', estado.clinica.id).gte('inicio', new Date(de + 'T00:00').toISOString()).lt('inicio', new Date(somaDias(ate, 1) + 'T00:00').toISOString())
     .order('inicio');
   if (vis.prof) q = q.eq('profissional_id', vis.prof);
@@ -130,7 +131,12 @@ export async function render() {
   // Item 31 (db/043): "sessão N de X" de cada atendimento ligado a senha — uma chamada para a tela inteira (fora do mês)
   const num = {};
   const ids = vis.modo === 'mes' ? [] : todos.filter((a) => a.autorizacao_id && a.status !== 'cancelado').map((a) => a.id);
-  if (ids.length) { const { data: ns } = await sb.rpc('numeracao_sessoes', { p_atendimentos: ids }); (ns || []).forEach((x) => (num[x.atendimento_id] = x)); }
+  const idsConv = todos.filter((a) => a.paciente_plano_id).map((a) => a.id);
+  const [rNum, rConv] = await Promise.all([
+    ids.length ? sb.rpc('numeracao_sessoes', { p_atendimentos: ids }) : { data: [] },
+    idsConv.length ? sb.rpc('convenio_atendimentos', { p_atendimentos: idsConv }) : { data: [] }]);
+  (rNum.data || []).forEach((x) => (num[x.atendimento_id] = x));
+  CONV = {}; (rConv.data || []).forEach((x) => (CONV[x.atendimento_id] = x.convenio));
 
   const ini = minDe(cfg.abre), fimMin = minDe(cfg.fecha), altura = (fimMin - ini) * PX_MIN;
   const horas = []; for (let m = Math.ceil(ini / 60) * 60; m < fimMin; m += 60) horas.push(m);
@@ -221,7 +227,68 @@ export async function render() {
       if (naPausa(min, col.dia)) return toast('Fora do expediente. Para encaixe, use + Agendamento e ajuste a hora.');
       editar(null, { dia: col.dia, min, prof: col.prof || '', pre });
     }));
-    $$('.ag-ev', corpo).forEach((el) => (el.onclick = (e) => { e.stopPropagation(); cartao(ats.find((a) => a.id === el.dataset.id), el); }));
+    $$('.ag-ev', corpo).forEach((el) => {
+      el.onclick = (e) => { e.stopPropagation(); if (el._arrastou) { el._arrastou = false; return; } cartao(ats.find((a) => a.id === el.dataset.id), el); };
+      if (!souProf) el.addEventListener('pointerdown', (e) => arrastar(e, el));
+    });
+  }
+
+  // ---------- Arrastar para remarcar (dia e semana; mouse/caneta — no toque, use Detalhes) ----------
+  function arrastar(e, el) {
+    if (e.button !== 0 || e.pointerType === 'touch') return;
+    const a = ats.find((x) => x.id === el.dataset.id);
+    if (!a || travado0(a) || a.status === 'faltou') return;
+    const passo = cfg.intervalo_min || 10, dur = Math.round((new Date(a.fim) - new Date(a.inicio)) / 6e4);
+    const x0 = e.clientX, y0 = e.clientY, pega = e.clientY - el.getBoundingClientRect().top;
+    const colOrig = el.parentElement, tituloOrig = $('b', el).innerHTML;
+    let movendo = false, alvo = null;
+    const mover = (ev) => {
+      if (!movendo && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      if (!movendo) { movendo = true; fecharCartao(); el.classList.add('arrastando'); el.style.pointerEvents = 'none'; }
+      const col = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.ag-col');
+      if (!col) return;
+      const ci = Number(col.dataset.ci), r = col.getBoundingClientRect();
+      let min = ini + Math.round((ev.clientY - r.top - pega) / PX_MIN / passo) * passo;
+      min = Math.max(ini, Math.min(fimMin - dur, min));
+      if (el.parentElement !== col) col.appendChild(el);
+      Object.assign(el.style, { top: (min - ini) * PX_MIN + 'px', left: '3px', right: '3px', width: 'auto' });
+      const hh = `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+      $('b', el).textContent = `→ ${hh} ${a.pacientes?.nome || ''}`;
+      alvo = { col: colunas[ci], min, hh };
+    };
+    const cancelar = () => { colOrig.appendChild(el); render(); };
+    const soltar = async () => {
+      document.removeEventListener('pointermove', mover); document.removeEventListener('pointerup', soltar); document.removeEventListener('keydown', tecla);
+      if (!movendo) return;
+      el._arrastou = true; setTimeout(() => (el._arrastou = false), 50);
+      if (!alvo) return cancelar();
+      const prof = alvo.col.prof || a.profissional_id, dia = alvo.col.dia;
+      const ini2 = new Date(`${dia}T${alvo.hh}:00`), fim2 = new Date(ini2.getTime() + dur * 6e4);
+      if (+ini2 === +new Date(a.inicio) && prof === a.profissional_id) { $('b', el).innerHTML = tituloOrig; return render(); }
+      // Conflitos: expediente/pausa, profissional ocupado e sala ocupada por outro profissional
+      const { data: ocup, error: eo } = await sb.from('atendimentos').select('id, inicio, fim, sala, profissional_id').eq('clinica_id', estado.clinica.id)
+        .neq('status', 'cancelado').lt('inicio', fim2.toISOString()).gt('fim', ini2.toISOString())
+        .or(`profissional_id.eq.${prof}${a.sala ? `,sala.eq."${a.sala.replace(/"/g, '')}"` : ''}`);
+      if (eo) { falha(eo, 'Conflitos'); return cancelar(); }
+      const outros = (ocup || []).filter((x) => x.id !== a.id), mi = alvo.min;
+      const motivos = [
+        ...(pausasDoDia(dia).some((x) => mi < x.ate && mi + dur > x.de) || mi + dur > fimMin ? ['fora do expediente'] : []),
+        ...(outros.some((x) => x.profissional_id === prof) ? ['profissional ocupado'] : []),
+        ...outros.filter((x) => a.sala && x.sala === a.sala && x.profissional_id !== prof).map((x) => `${a.sala} ocupada por ${nomeProf(x.profissional_id)}`)];
+      const fmt = (d) => d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }) + ' ' + hm(d);
+      const trocaProf = prof !== a.profissional_id;
+      const ok = await confirmar(`Remarcar ${a.pacientes?.nome || 'atendimento'} de ${fmt(new Date(a.inicio))} para ${fmt(ini2)}`
+        + `${trocaProf ? ` com ${nomeProf(prof)}` : ''}?${motivos.length ? ` Atenção: ${motivos.join(', ')}.` : ''}`
+        + `${trocaProf && a.autorizacao_id ? ' A autorização (senha) continua a mesma; confira se ela vale para o novo profissional.' : ''}`
+        + `${a.lembrete_enviado_em ? ' O lembrete já enviado fica desmarcado para você reenviar.' : ''}`, motivos.length ? 'Remarcar mesmo assim' : 'Remarcar');
+      if (!ok) return render();
+      const { error: e2 } = await sb.from('atendimentos').update({ inicio: ini2.toISOString(), fim: fim2.toISOString(), profissional_id: prof,
+        ...(a.status === 'confirmado' ? { status: 'agendado' } : {}), lembrete_enviado_em: null, atualizado_em: new Date().toISOString() }).eq('id', a.id);
+      if (e2) { falha(e2, 'Remarcar'); return render(); }
+      toast(`Remarcado para ${fmt(ini2)}.${a.status === 'confirmado' ? ' Status voltou para Agendado (confirmar de novo).' : ''}`); render();
+    };
+    const tecla = (ev) => { if (ev.key === 'Escape' && movendo) { document.removeEventListener('pointermove', mover); document.removeEventListener('pointerup', soltar); document.removeEventListener('keydown', tecla); cancelar(); } };
+    document.addEventListener('pointermove', mover); document.addEventListener('pointerup', soltar); document.addEventListener('keydown', tecla);
   }
 
   function desenharMes(corpo) {

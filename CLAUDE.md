@@ -9,7 +9,8 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 ## Infra
 - **Front:** HTML + JS (ES modules, sem build), GitHub Pages (push na `main` publica). Commits com autor "Andressa Brenneisen".
 - **Banco/Auth:** Supabase (plano gratuito — não gerar custos). Chave publicável no `js/core.js` é pública por desenho; a segurança está na RLS.
-- **Edge Function:** `agenda-ics` (calendário iCal por profissional, token em `profissionais.agenda_token`, só iniciais do paciente).
+- **Edge Functions:** `agenda-ics` (calendário iCal por profissional, token em `profissionais.agenda_token`, só iniciais do paciente) e
+  `gerir-acesso` (código em `supabase/functions/gerir-acesso/`; só gestor ativo da clínica; cria/edita login, senha, perfil, vínculo e ativo; audita sem a senha).
 - E-mail do Supabase gratuito tem limite muito baixo: configurar SMTP próprio antes de convidar a equipe.
 - **Conta nova só com convite** (db/025, trigger `antes_criar_usuario` em `auth.users`): e-mail sem convite pendente é recusado.
 
@@ -83,11 +84,18 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   Lista do dia · Lista da semana; filtros no cliente (status — inclui ver cancelados —, sala, convênio/Particular, serviço, paciente sem acento) guardados em
   `sessionStorage.agenda_vis`. Clique no atendimento abre o **cartão rápido** (`.ag-pop`): dados, sessão N/X, status rápido (Confirmado/Chegou/Faltou),
   **▶ Iniciar atendimento** (só o profissional do atendimento: marca `presente` e abre `#paciente-<id>-prontuario:<at>`), ✓ Atendido (fecha guia), WhatsApp, Detalhes (modal antigo).
-  Nome do convênio vem do embed `paciente_planos(contratos(nome))`; quem não lê contratos pela RLS vê só "Convênio". Arrastar e soltar (resto do item 12) ainda não.
+  Convênio aparece como "Convênio (Amil)" via `convenio_atendimentos(ids[])` (db/045, DEFINER: só o nome do contrato; equipe vê a clínica, profissional só os seus).
+  **Arrastar para remarcar** (dia/semana, mouse ou caneta; no toque usar Detalhes): encaixa no intervalo da agenda, troca de profissional ao soltar em outra coluna
+  na visão do dia, checa expediente/pausa, profissional e sala, pede confirmação; confirmado volta a agendado e o lembrete fica desmarcado. Esc cancela.
 - **Avaliação por cliques (db/044, item 15, `avaliacao-cliques.js`):** roteiros em chips por modelo — `fisio_avaliacao`, `fisio_esportiva` (novo: modalidade e carga,
   agachamento unipodal, hop test LSI), `soapn` (anamnese → S, última linha AF), `psico_registro`, `medica_consulta` (novo, área `medicina`, CRM). Bandeiras vermelhas
   com aviso, testes especiais por região (1 clique +, 2 −, 3 limpa; teste de região desmarcada sai do texto), PSFS com média. Cada clique regenera o texto nos campos;
   texto digitado à mão não é apagado (`_g` guarda o último texto gerado por campo). Escolhas salvas em `conteudo.cliques`.
+
+- **Acessos (15/11/2026):** **a gestora tem acesso total** a todas as telas (exceto ler prontuário de outro profissional — sigilo por autor).
+  Na tela `#acessos` cria acesso com nome, e-mail (= login), senha provisória (botão Gerar), perfil e profissional vinculado; edita e-mail/senha/perfil/vínculo;
+  desativa (bloqueia o login na hora via ban do Auth, se a pessoa não tiver outro vínculo). Não pode rebaixar nem desativar a si mesma.
+  Convite por e-mail continua como alternativa; convite pendente pode virar acesso com senha ou ser excluído.
 
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
