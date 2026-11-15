@@ -7,6 +7,7 @@ import { enviarArquivo, abrirArquivo, escolherArquivo } from './documentos.js';
 import { montarPainel, temRoteiro, ROTEIROS } from './avaliacao-cliques.js';
 import { montarSapo, laudoPostural } from './avaliacao-postural.js';
 import { montarDina, laudoDina, idade } from './avaliacao-dinamometria.js';
+import { montarPalmilha } from './palmilha3d.js';
 
 const OBS = ['obs', 'Observações (campo livre)'];
 export const MODELOS = {
@@ -35,6 +36,9 @@ export const MODELOS = {
   fisio_postural: { nome: 'Avaliação postural por foto (SAPO)', area: 'fisioterapia', campos: [
     ['queixa', 'Motivo e queixa'], ['anterior', 'Vista anterior'], ['posterior', 'Vista posterior'], ['lateral', 'Vistas laterais'],
     ['conclusao', 'Conclusão (mini laudo)'], ['plano', 'Conduta e reavaliação'], OBS] },
+  fisio_palmilha3d: { nome: 'Projeto de palmilha 3D (escaneamento)', area: 'fisioterapia', campos: [
+    ['indicacao', 'Indicação e objetivo da palmilha'], ['prescricao', 'Prescrição da palmilha', 'Gerada pelo projeto 3D (molde, número, ajustes, alertas)'],
+    ['orientacoes', 'Orientações, adaptação e reavaliação'], OBS] },
   dinamometria: { nome: 'Avaliação por dinamometria (preensão palmar + segmentar)', area: null, medidas: ['peso', 'altura'], campos: [
     ['queixa', 'Motivo da avaliação e contexto'], ['preensao', 'Força de preensão palmar'], ['segmentar', 'Dinamometria segmentar e assimetria'],
     ['conclusao', 'Conclusão'], ['plano', 'Conduta e reavaliação'], OBS] },
@@ -80,7 +84,7 @@ const ABERTOS = new Set();   // registros expandidos (sobrevive ao recarregar a 
 
 // Aba "Avaliações" da ficha (15/11/2026): avaliações com instrumento/laudo próprio saem do prontuário para não poluir a linha do tempo.
 // Os registros continuam na mesma tabela (prontuario_registros, mesma RLS por autor); só a tela separa.
-export const AVALIACOES = new Set(['dinamometria', 'fisio_postural', 'fisio_podo']);
+export const AVALIACOES = new Set(['dinamometria', 'fisio_postural', 'fisio_podo', 'fisio_palmilha3d']);
 export const abaAvaliacoes = (alvo, p, ats) => abaProntuario(alvo, p, ats, null, 'avaliacoes');
 
 export async function abaProntuario(alvo, p, ats, extra, grupo = 'prontuario') {
@@ -226,6 +230,7 @@ function editor(p, r, meusAts, aoSalvar) {
       </div>
       ${temRoteiro(r.modelo) ? `<details class="ck-painel" ${r.id ? '' : 'open'}><summary>⚡ ${esc(ROTEIROS[r.modelo].rotulo || 'Avaliação por cliques')} <span class="muted">— cada clique escreve o texto nos campos abaixo; o que você digitar não é apagado</span></summary><div id="ck"></div></details>` : ''}
       ${r.modelo === 'dinamometria' ? `<details class="ck-painel" open><summary>💪 Dinamometria <span class="muted">— os valores calculam assimetria, classificação e escrevem o texto abaixo</span></summary><div id="dina"></div></details>` : ''}
+      ${r.modelo === 'fisio_palmilha3d' ? `<details class="ck-painel" open><summary>👣 Palmilha 3D <span class="muted">— escaneamento, molde, ajustes e STL; o processamento é feito neste computador</span></summary><div id="pal3d"></div></details>` : ''}
       ${r.modelo === 'fisio_postural' ? `<details class="ck-painel" open><summary>📷 Fotos e pontos (protocolo SAPO) <span class="muted">— as medidas escrevem o texto abaixo; a foto fica só no seu prontuário</span></summary><div id="sapo"></div></details>` : ''}
       ${m.campos.filter((x) => x[3] !== 'num').map(([k, rot, dica]) => `<label class="pr-area">${esc(rot)}
         <textarea name="c_${k}" rows="${k === 'obs' ? 2 : 4}" placeholder="${esc(dica || '')}">${esc(c[k] || '')}</textarea></label>`).join('')}
@@ -247,6 +252,7 @@ function editor(p, r, meusAts, aoSalvar) {
         aoLaudo: () => { const fd = Object.fromEntries(new FormData(f)), cc = {}; m.campos.forEach(([k]) => { if (fd['c_' + k]) cc[k] = fd['c_' + k]; });
           laudoPostural(p, { data_registro: fd.data_registro, conteudo: { ...cc, sapo: sapo.estado() || { vistas: {} } } }, _eu); } });
     }
+    const pal3d = $('#pal3d', box) ? montarPalmilha($('#pal3d', box), f, structuredClone(c.palmilha || {}), { paciente: p }) : null;
     let dina = null;
     if ($('#dina', box)) {
       const anterior = dinaAnterior(_regsPac, { id: r.id, data_registro: r.data_registro || hojeIso() });
@@ -265,6 +271,7 @@ function editor(p, r, meusAts, aoSalvar) {
         if (Object.keys(mm).length) conteudo.medidas = mm;
       }
       const sp = sapo?.estado(); if (sp) conteudo.sapo = sp;
+      const pl = pal3d?.estado(); if (pl) conteudo.palmilha = pl;
       const dn = dina?.estado(); if (dn) conteudo.dina = dn;
       if (!Object.keys(conteudo).length) return toast('O registro está vazio.', true);
       const ck = painel?.estado(); if (ck) conteudo.cliques = ck; else if (c.cliques && painel) delete conteudo.cliques;

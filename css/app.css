@@ -367,3 +367,14 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 .dn-mapa svg{width:100%;max-width:720px;height:auto;display:block;margin:6px auto 0}
 .dn-leg{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;font-size:12px;color:var(--texto-2);margin:4px 0}
 .dn-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+/* Palmilha 3D (palmilha3d.js) */
+.ck-painel #pal3d{padding:0 12px 10px}
+.p3-pes{display:flex;gap:18px;flex-wrap:wrap;margin:6px 0 10px}.p3-pe{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.p3-cab{margin:10px 0 4px}.p3-aj{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:6px 0;border-bottom:1px dashed var(--linha)}
+.p3-aj label{display:flex;flex-direction:column;font-size:.8em;color:#555}.p3-aj input{width:74px}.p3-aj select{max-width:260px}
+.p3-det{margin:10px 0}.p3-det>summary{cursor:pointer;font-weight:600}
+.p3-abas{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.p3-alertas{background:#FDECEA;border:1px solid #F5C2C0;border-radius:8px;padding:8px 8px 8px 26px;color:#8E1C1C;margin:6px 0}
+.p3-ok{color:#2E7D32;margin:6px 0}.p3-telas{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+#p3-mapa{max-height:440px;width:auto;max-width:100%;border:1px solid var(--linha);border-radius:8px;background:#fff;touch-action:none;cursor:grab}
+#p3-3d canvas{border:1px solid var(--linha);border-radius:8px;touch-action:none;cursor:grab;max-width:100%}.p3-leg{font-size:.8em;margin-top:4px}

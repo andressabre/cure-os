@@ -50,7 +50,7 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 - **Encaminhamentos** por área com validade (padrão pedido + 180 dias), vinculados à autorização sem misturar áreas; anexos ANS por guia; Storage privado `documentos`.
   CID-10 local em `dados/cid10.json` (DATASUS via pacote MIT @br-health-kit/cid10) → indicação clínica automática (`descricaoCid` no core).
 - **Ficha do paciente (12/11/2026):** abas Resumo · Cadastro e encaminhamentos · Autorizações e guias · Prontuário · Documentos.
-  **15/11/2026:** nova aba **Avaliações** (`abaAvaliacoes`, mesmo `prontuario.js`, conjunto `AVALIACOES`): dinamometria, avaliação postural (SAPO) e podoposturológica
+  **15/11/2026:** nova aba **Avaliações** (`abaAvaliacoes`, mesmo `prontuario.js`, conjunto `AVALIACOES`): dinamometria, avaliação postural (SAPO), podoposturológica e projeto de palmilha 3D
   saem da aba Prontuário (mesma tabela e RLS por autor; só a tela separa). Atendimento com avaliação ligada não conta como "sem evolução".
   Autorização sem senha = `pendente` (exceto Particular); guias aparecem dentro da autorização (imprimir/cancelar); filtro por situação/convênio/ordem.
   **13/11/2026:** cada autorização é uma sanfona (`<details>`): linha com senha, situação, alertas (acabando, sem encaminhamento, guia segurada), validade,
@@ -129,6 +129,17 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   Estado em `conteudo.dina`; texto gerado nos campos preensao/segmentar/conclusao. "🖨 Laudo premium" (A4 timbrado). Mapa = **atlas anatômico vetorial próprio**
   (`anatomia.js`: masculino/feminino pelo `pacientes.sexo`, vistas anterior/posterior; músculo → máscara colorida pela pior classe; profundos tracejados;
   mapa movimento→músculos em `MUSCULOS`). Anterior: D do paciente à esquerda de quem olha; posterior: D à direita.
+- **Projeto de palmilha 3D (db/055, `palmilha3d.js` + `palmilha3d-motor.js`, modelo `fisio_palmilha3d`, aba Avaliações):** escaneamento .obj do Sense por pé
+  → processado **no navegador** (PCA, mapa plantar 1 mm, nivelamento pelos apoios, medial +y) e guardado compactado (`.obj.gz`) no bucket `prontuario`
+  (pasta do autor); `conteudo.palmilha` = { pes{dir,esq: arquivo/nome/medidas}, proj{molde, numero_br, largura, parametros, ajustes[], borda_arredondada_mm},
+  resultado }. Reabrir o registro gera de novo a mesma palmilha. **Contorno = moldes próprios** (curva contínua por Fourier; tênis feminino/masculino,
+  infantil, chinelo +8 mm) escalados pelo nº BR (comprimento = (BR+2)/1,5 cm), largura estreita/normal/larga (−4/+6% no antepé), alinhados ao eixo do pé.
+  **Espessura** = base (calcanhar→antepé→ponta) + preenchimento do arco × fator, com tetos por região (calibrado em 21 pares escaneamento × palmilha aprovada:
+  erro ≈ 1,1 mm no interior; contorno ≈ 97% do desenho aprovado). 19 ajustes posicionados pelos pontos anatômicos automáticos (1º/5º meta, calcâneo) e
+  **arrastáveis no mapa 2D** (dx/dy); preenchimento % por ajuste → STL de zona para usar como modificador no fatiador. **Alertas em vermelho:** elemento invade
+  a planta > 4 mm, espessura < 2 mm (TPU bico 0,6), pé fora do contorno > 6 mm, cunha > 6°, calço > 10 mm. Malha fechada (poly2tri via jsdelivr) checada
+  antes do download; visualização 3D com three.js (jsdelivr). Protocolos de partida no código + protocolos da clínica em `clinicas.config.palmilha_protocolos`
+  (só a gestão grava). Texto gerado no campo `prescricao` (mantém o que foi digitado).
 - **Solicitação de exame (db/047, `emissao.js`, tipo `solicitacao`):** escanometria pelo método de Farill (medidas em checkbox), RX dos pés em AP com altura
   base–tibiotársica e RX panorâmico da coluna; CID padrão M21.7 com descrição do `cid10.json`; justificativa opcional; texto editável, timbrado e com código.
 - **Relacionamento + e-mail (db/048):** `relacionamento()` devolve `email`; botão ✉ E-mail por paciente (mailto) e "E-mail em lote" por item de reavaliação
