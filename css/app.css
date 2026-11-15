@@ -354,3 +354,16 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 .carteiras a.ativa{background:var(--grafite,#2b3236);color:#fff;border-color:transparent}
 .carteiras a.pessoal.ativa{background:var(--laranja-esc)}
 .chips-resp{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px}.rotulo-campo{font-weight:600;font-size:13.5px}
+/* Dinamometria (db/054) */
+.ck-painel #dina{padding:0 12px 10px}
+.dn-topo{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:4px 0 8px}
+.dn-linha{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:4px 0 8px}.dn-linha label{display:flex;gap:6px;align-items:center;font-size:13px}
+.dn-art{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:5px 0}.dn-art .ck-rot{min-width:72px;margin:0}
+.dn-tab{border-collapse:collapse;margin:6px 0}.dn-tab th,.dn-tab td{padding:3px 6px;text-align:left;font-size:13px}.dn-tab th{font-weight:600;color:var(--texto-2)}
+.dn-in{width:76px;text-align:right}.dn-max{font-weight:700;min-width:48px}
+.dn-res{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;margin:4px 0 6px}
+.dn-selo{border-radius:999px;padding:1px 9px;font-size:12px;background:var(--azul-claro)}.dn-selo.bom{background:var(--verde-claro);color:var(--verde)}.dn-selo.ruim{background:var(--vermelho-claro);color:var(--vermelho)}
+.dn-pct{border-radius:999px;padding:1px 8px;font-weight:700;font-size:12px}
+.dn-mapa svg{width:100%;max-width:720px;height:auto;display:block;margin:6px auto 0}
+.dn-leg{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;font-size:12px;color:var(--texto-2);margin:4px 0}
+.dn-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}

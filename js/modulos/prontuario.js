@@ -6,6 +6,7 @@ import { sb, estado, $, $$, esc, data, tela, toast, falha, modal, confirmar, des
 import { enviarArquivo, abrirArquivo, escolherArquivo } from './documentos.js';
 import { montarPainel, temRoteiro, ROTEIROS } from './avaliacao-cliques.js';
 import { montarSapo, laudoPostural } from './avaliacao-postural.js';
+import { montarDina, laudoDina, idade } from './avaliacao-dinamometria.js';
 
 const OBS = ['obs', 'Observações (campo livre)'];
 export const MODELOS = {
@@ -34,6 +35,9 @@ export const MODELOS = {
   fisio_postural: { nome: 'Avaliação postural por foto (SAPO)', area: 'fisioterapia', campos: [
     ['queixa', 'Motivo e queixa'], ['anterior', 'Vista anterior'], ['posterior', 'Vista posterior'], ['lateral', 'Vistas laterais'],
     ['conclusao', 'Conclusão (mini laudo)'], ['plano', 'Conduta e reavaliação'], OBS] },
+  dinamometria: { nome: 'Avaliação por dinamometria (preensão palmar + segmentar)', area: null, medidas: ['peso', 'altura'], campos: [
+    ['queixa', 'Motivo da avaliação e contexto'], ['preensao', 'Força de preensão palmar'], ['segmentar', 'Dinamometria segmentar e assimetria'],
+    ['conclusao', 'Conclusão'], ['plano', 'Conduta e reavaliação'], OBS] },
   fisio_evolucao: { nome: 'Evolução de sessão (fisioterapia)', area: 'fisioterapia', campos: [
     ['diag', 'Diagnóstico / CID', 'Vem do encaminhamento ou da avaliação'],
     ['sessao', 'Sessão nº', '', 'num'], ['eva_pre', 'EVA antes', '', 'num'], ['eva_pos', 'EVA depois', '', 'num'],
@@ -51,6 +55,13 @@ const areaDoConselho = (c) => ({ CRN: 'nutricao', CREFITO: 'fisioterapia', CRP: 
 const hojeIso = () => new Date().toISOString().slice(0, 10);
 const dh = (d) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const imc = (m) => (m?.peso && m?.altura ? (m.peso / (m.altura / 100) ** 2).toFixed(1) : null);
+const medidasDo = (m) => (Array.isArray(m.medidas) ? m.medidas : ['peso', 'altura', 'cc', 'gordura']);
+// Dinamometria anterior do mesmo paciente (só do autor, pela RLS) — comparação e MDC no painel e no laudo
+const dinaAnterior = (regs, r) => {
+  const a = (regs || []).filter((x) => x.modelo === 'dinamometria' && x.id !== r.id && x.conteudo?.dina && (!r.data_registro || String(x.data_registro) <= String(r.data_registro)))
+    .sort((x, y) => String(y.data_registro).localeCompare(String(x.data_registro)) || String(y.criado_em).localeCompare(String(x.criado_em)))[0];
+  return a ? { dina: a.conteudo.dina, data: data(a.data_registro) } : null;
+};
 
 let _eu;   // cadastro do profissional logado (nome, conselho)
 let _regsPac = [];   // registros do paciente aberto (contexto da evolução rápida)
@@ -67,34 +78,41 @@ const SEM_ACESSO = `<div class="cartao vazio">🔒 O prontuário é sigiloso: ca
 const LIDOS = new Set();
 const ABERTOS = new Set();   // registros expandidos (sobrevive ao recarregar a aba)
 
-export async function abaProntuario(alvo, p, ats, extra) {
+// Aba "Avaliações" da ficha (15/11/2026): avaliações com instrumento/laudo próprio saem do prontuário para não poluir a linha do tempo.
+// Os registros continuam na mesma tabela (prontuario_registros, mesma RLS por autor); só a tela separa.
+export const AVALIACOES = new Set(['dinamometria', 'fisio_postural', 'fisio_podo']);
+export const abaAvaliacoes = (alvo, p, ats) => abaProntuario(alvo, p, ats, null, 'avaliacoes');
+
+export async function abaProntuario(alvo, p, ats, extra, grupo = 'prontuario') {
   if (!estado.profissionalId) { alvo.innerHTML = SEM_ACESSO; return; }
   const cid = estado.clinica.id, me = await eu();
   const minhaArea = areaDoConselho(me?.conselho);
-  const [{ data: regs, error }, { data: ads }, { data: anx }] = await Promise.all([
+  const [{ data: todos, error }, { data: ads }, { data: anx }] = await Promise.all([
     sb.from('prontuario_registros').select('*').eq('paciente_id', p.id).order('data_registro', { ascending: false }).order('criado_em', { ascending: false }),
     sb.from('prontuario_adendos').select('*').eq('clinica_id', cid).order('criado_em'),
     sb.from('prontuario_anexos').select('*').eq('clinica_id', cid).order('criado_em'),
   ]);
   if (error) return falha(error, 'Prontuário');
-  (regs || []).filter((r) => !LIDOS.has(r.id)).forEach((r) => { LIDOS.add(r.id); sb.rpc('registrar_leitura_prontuario', { p_registro: r.id }); }); // auditoria de leitura (1x por sessão)
+  const aval = grupo === 'avaliacoes', doGrupo = (k) => AVALIACOES.has(k) === aval;
+  const regs = (todos || []).filter((r) => doGrupo(r.modelo));
+  regs.filter((r) => !LIDOS.has(r.id)).forEach((r) => { LIDOS.add(r.id); sb.rpc('registrar_leitura_prontuario', { p_registro: r.id }); }); // auditoria de leitura (1x por sessão)
   const meusAts = (ats || []).filter((a) => a.profissional_id === estado.profissionalId && ['atendido', 'presente'].includes(a.status));
-  const semRegistro = meusAts.filter((a) => !(regs || []).some((r) => r.atendimento_id === a.id));
-  _regsPac = regs || [];
-  const recarregar = () => abaProntuario(alvo, p, ats);
-  const modelosArea = Object.entries(MODELOS).filter(([, m]) => !m.area || m.area === minhaArea || minhaArea === 'outra');
+  const semRegistro = aval ? [] : meusAts.filter((a) => !(todos || []).some((r) => r.atendimento_id === a.id));
+  _regsPac = todos || [];
+  const recarregar = () => abaProntuario(alvo, p, ats, null, grupo);
+  const modelosArea = Object.entries(MODELOS).filter(([k, m]) => doGrupo(k) && (!m.area || m.area === minhaArea || minhaArea === 'outra'));
 
   alvo.innerHTML = `
     <div class="cartao"><div class="linha-acoes" style="justify-content:space-between;margin:0">
-      <span class="muted">🔒 Só você vê · ${esc(me?.nome)} ${esc(me?.conselho || '')} ${esc(me?.numero_conselho || '')} · ${(regs || []).length} registro(s)</span>
+      <span class="muted">🔒 Só você vê · ${esc(me?.nome)} ${esc(me?.conselho || '')} ${esc(me?.numero_conselho || '')} · ${regs.length} ${aval ? 'avaliação(ões)' : 'registro(s)'}</span>
       <span>${modelosArea.length > 1 ? `<select id="mod" title="Modelo do novo registro">${modelosArea.map(([k, m]) => `<option value="${k}">${esc(m.nome)}${temRoteiro(k) ? ' ⚡' : ''}</option>`).join('')}</select>` : ''}
-        <button class="btn primario" id="novo">+ Novo registro</button>
-        ${(regs || []).length ? '<button class="btn" id="imp">Imprimir prontuário</button>' : ''}</span></div>
+        <button class="btn primario" id="novo">+ ${aval ? 'Nova avaliação' : 'Novo registro'}</button>
+        ${regs.length ? `<button class="btn" id="imp">Imprimir ${aval ? 'avaliações' : 'prontuário'}</button>` : ''}</span></div>
       ${semRegistro.length ? `<div class="dica" style="margin:10px 0 0">⚠️ ${semRegistro.length} atendimento(s) seu(s) sem evolução:
         ${semRegistro.slice(0, 6).map((a) => `<a href="#" data-evol="${a.id}">${dh(a.inicio)}</a>`).join(' · ')}</div>` : ''}
     </div>
     ${(regs || []).length ? `<div class="cartao pr-lista">${regs.map((r) => linhaRegistro(r, ads, anx, ats, me)).join('')}</div>`
-      : '<div class="cartao vazio">Nenhum registro seu para este paciente.</div>'}`;
+      : `<div class="cartao vazio">${aval ? 'Nenhuma avaliação sua para este paciente. Dinamometria, avaliação postural (SAPO) e podoposturológica ficam aqui.' : 'Nenhum registro seu para este paciente.'}</div>`}`;
 
   const modeloEscolhido = () => $('#mod', alvo)?.value || modelosArea[0]?.[0] || 'livre';
   $('#novo', alvo).onclick = () => editor(p, { modelo: modeloEscolhido() }, meusAts, recarregar);
@@ -127,11 +145,12 @@ export async function abaProntuario(alvo, p, ats, extra) {
   }));
   $$('[data-abrir]', alvo).forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.abrir, 'prontuario')));
   $$('[data-imp1]', alvo).forEach((b) => (b.onclick = () => imprimir(p, regs.filter((r) => r.id === b.dataset.imp1), ads, me)));
-  $$('[data-laudo]', alvo).forEach((b) => (b.onclick = () => laudoPostural(p, regs.find((r) => r.id === b.dataset.laudo), me)));
+  $$('[data-laudo]', alvo).forEach((b) => (b.onclick = () => { const r = regs.find((x) => x.id === b.dataset.laudo);
+    if (r.modelo === 'dinamometria') laudoDina(p, r, me, dinaAnterior(regs, r)); else laudoPostural(p, r, me); }));
 
   // Vindo da agenda (#paciente-<id>-prontuario:<atendimento>): abre a evolução já ligada ao atendimento
-  if (extra) {
-    const ja = (regs || []).find((r) => r.atendimento_id === extra);
+  if (extra && !aval) {
+    const ja = (todos || []).find((r) => r.atendimento_id === extra);
     const at = meusAts.find((a) => a.id === extra);
     if (ja) editor(p, ja, meusAts, recarregar);
     else if (at) editor(p, { modelo: modeloSessao(minhaArea, regs), atendimento_id: at.id, data_registro: at.inicio.slice(0, 10) }, meusAts, recarregar);
@@ -184,7 +203,8 @@ function linhaRegistro(r, ads, anx, ats, me) {
         ${r.status === 'rascunho' ? `<button class="btn pequeno" data-apagar="${r.id}">Apagar</button>` : `<button class="btn pequeno" data-adendo="${r.id}">Adendo</button>`}
         <button class="btn pequeno" data-anexar="${r.id}">Anexar</button>
         <button class="btn pequeno" data-imp1="${r.id}">Imprimir</button>
-        ${r.modelo === 'fisio_postural' ? `<button class="btn pequeno" data-laudo="${r.id}">🖨 Laudo com fotos</button>` : ''}</div>
+        ${r.modelo === 'fisio_postural' ? `<button class="btn pequeno" data-laudo="${r.id}">🖨 Laudo com fotos</button>` : ''}
+        ${r.modelo === 'dinamometria' && r.conteudo?.dina ? `<button class="btn pequeno" data-laudo="${r.id}">🖨 Laudo premium</button>` : ''}</div>
     </div></div>`;
 }
 
@@ -200,11 +220,12 @@ function editor(p, r, meusAts, aoSalvar) {
         ${m.medidas ? `<label>Peso (kg)<input name="m_peso" type="number" step="0.1" value="${esc(med.peso)}"></label>
           <label>Altura (cm)<input name="m_altura" type="number" step="0.1" value="${esc(med.altura)}"></label>
           <label>IMC<input id="imc" disabled value="${esc(imc(med) || '')}"></label>
-          <label>CC (cm)<input name="m_cc" type="number" step="0.1" value="${esc(med.cc)}"></label>
-          <label>% gordura<input name="m_gordura" type="number" step="0.1" value="${esc(med.gordura)}"></label>` : ''}
+          ${medidasDo(m).includes('cc') ? `<label>CC (cm)<input name="m_cc" type="number" step="0.1" value="${esc(med.cc)}"></label>` : ''}
+          ${medidasDo(m).includes('gordura') ? `<label>% gordura<input name="m_gordura" type="number" step="0.1" value="${esc(med.gordura)}"></label>` : ''}` : ''}
         ${m.campos.filter((x) => x[3] === 'num').map(([k, rot]) => `<label>${esc(rot)}<input name="c_${k}" type="number" step="1" value="${esc(c[k])}"></label>`).join('')}
       </div>
       ${temRoteiro(r.modelo) ? `<details class="ck-painel" ${r.id ? '' : 'open'}><summary>⚡ ${esc(ROTEIROS[r.modelo].rotulo || 'Avaliação por cliques')} <span class="muted">— cada clique escreve o texto nos campos abaixo; o que você digitar não é apagado</span></summary><div id="ck"></div></details>` : ''}
+      ${r.modelo === 'dinamometria' ? `<details class="ck-painel" open><summary>💪 Dinamometria <span class="muted">— os valores calculam assimetria, classificação e escrevem o texto abaixo</span></summary><div id="dina"></div></details>` : ''}
       ${r.modelo === 'fisio_postural' ? `<details class="ck-painel" open><summary>📷 Fotos e pontos (protocolo SAPO) <span class="muted">— as medidas escrevem o texto abaixo; a foto fica só no seu prontuário</span></summary><div id="sapo"></div></details>` : ''}
       ${m.campos.filter((x) => x[3] !== 'num').map(([k, rot, dica]) => `<label class="pr-area">${esc(rot)}
         <textarea name="c_${k}" rows="${k === 'obs' ? 2 : 4}" placeholder="${esc(dica || '')}">${esc(c[k] || '')}</textarea></label>`).join('')}
@@ -226,16 +247,25 @@ function editor(p, r, meusAts, aoSalvar) {
         aoLaudo: () => { const fd = Object.fromEntries(new FormData(f)), cc = {}; m.campos.forEach(([k]) => { if (fd['c_' + k]) cc[k] = fd['c_' + k]; });
           laudoPostural(p, { data_registro: fd.data_registro, conteudo: { ...cc, sapo: sapo.estado() || { vistas: {} } } }, _eu); } });
     }
+    let dina = null;
+    if ($('#dina', box)) {
+      const anterior = dinaAnterior(_regsPac, { id: r.id, data_registro: r.data_registro || hojeIso() });
+      const ctxD = { area, sexo: p.sexo, idade: idade(p.data_nascimento, r.data_registro || hojeIso()), anterior };
+      dina = montarDina($('#dina', box), f, structuredClone(c.dina || {}), { ...ctxD,
+        aoLaudo: () => { const fd = Object.fromEntries(new FormData(f)), cc = {}; m.campos.forEach(([k]) => { if (fd['c_' + k]) cc[k] = fd['c_' + k]; });
+          laudoDina(p, { data_registro: fd.data_registro, conteudo: { ...cc, medidas: { peso: fd.m_peso, altura: fd.m_altura }, dina: dina.estado() || {} } }, _eu, anterior); } });
+    }
     const recalc = () => { const v = imc({ peso: +f.m_peso?.value, altura: +f.m_altura?.value }); if ($('#imc', box)) $('#imc', box).value = v || ''; };
     f.m_peso?.addEventListener('input', recalc); f.m_altura?.addEventListener('input', recalc);
     const salvar = async () => {
       const fd = Object.fromEntries(new FormData(f)), conteudo = {};
       m.campos.forEach(([k, , , t]) => { const v = fd['c_' + k]; if (v !== '' && v != null) conteudo[k] = t === 'num' ? Number(v) : v; });
       if (m.medidas) {
-        const mm = {}; ['peso', 'altura', 'cc', 'gordura'].forEach((k) => { if (fd['m_' + k]) mm[k] = Number(fd['m_' + k]); });
+        const mm = {}; medidasDo(m).forEach((k) => { if (fd['m_' + k]) mm[k] = Number(fd['m_' + k]); });
         if (Object.keys(mm).length) conteudo.medidas = mm;
       }
       const sp = sapo?.estado(); if (sp) conteudo.sapo = sp;
+      const dn = dina?.estado(); if (dn) conteudo.dina = dn;
       if (!Object.keys(conteudo).length) return toast('O registro está vazio.', true);
       const ck = painel?.estado(); if (ck) conteudo.cliques = ck; else if (c.cliques && painel) delete conteudo.cliques;
       const linha = { data_registro: fd.data_registro, atendimento_id: fd.atendimento_id || null, conteudo, status: 'assinado' };   // 'assinado' = status final (db/039); sem etapa de assinatura na tela

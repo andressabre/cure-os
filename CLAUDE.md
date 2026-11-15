@@ -50,6 +50,8 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 - **Encaminhamentos** por área com validade (padrão pedido + 180 dias), vinculados à autorização sem misturar áreas; anexos ANS por guia; Storage privado `documentos`.
   CID-10 local em `dados/cid10.json` (DATASUS via pacote MIT @br-health-kit/cid10) → indicação clínica automática (`descricaoCid` no core).
 - **Ficha do paciente (12/11/2026):** abas Resumo · Cadastro e encaminhamentos · Autorizações e guias · Prontuário · Documentos.
+  **15/11/2026:** nova aba **Avaliações** (`abaAvaliacoes`, mesmo `prontuario.js`, conjunto `AVALIACOES`): dinamometria, avaliação postural (SAPO) e podoposturológica
+  saem da aba Prontuário (mesma tabela e RLS por autor; só a tela separa). Atendimento com avaliação ligada não conta como "sem evolução".
   Autorização sem senha = `pendente` (exceto Particular); guias aparecem dentro da autorização (imprimir/cancelar); filtro por situação/convênio/ordem.
   **13/11/2026:** cada autorização é uma sanfona (`<details>`): linha com senha, situação, alertas (acabando, sem encaminhamento, guia segurada), validade,
   "N de X" e bolinhas por sessão; aberta por padrão só a da próxima sessão agendada (+ botão Abrir todas). Chips exclusivas (`categoria()`):
@@ -121,6 +123,12 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   Sem ponto de corte normal/anormal (só direção em palavras). Texto vai para anterior/posterior/lateral/conclusão (mantém texto digitado); conclusão lista os 5 maiores
   desvios + comparação com a avaliação postural anterior (`conteudo.sapo.med`). "🖨 Laudo com fotos" (editor e registro) monta PDF com fotos anotadas, tabela e referências.
   Foto trocada/cancelada fica órfã no Storage (sem política de delete no bucket); backup ZIP não leva as fotos.
+- **Avaliação por dinamometria (db/054, `avaliacao-dinamometria.js` + `anatomia.js`, modelo `dinamometria`, todas as áreas):** preensão palmar (3 tentativas/mão,
+  maior valor entre as mãos; EWGSOP2 < 27/16 kgf e AWGS2 < 28/18; MDC95 por aparelho de Akgün 2026 — sem MDC próprio usa 5,87 kg; outro aparelho = não compara) e
+  segmentar isométrica (assimetria = (maior − menor)/maior, faixas pelo % arredondado ≤ 10 leve / 11–14 moderada / ≥ 15 alta; LSI do lado acometido; I/Q do joelho sem corte).
+  Estado em `conteudo.dina`; texto gerado nos campos preensao/segmentar/conclusao. "🖨 Laudo premium" (A4 timbrado). Mapa = **atlas anatômico vetorial próprio**
+  (`anatomia.js`: masculino/feminino pelo `pacientes.sexo`, vistas anterior/posterior; músculo → máscara colorida pela pior classe; profundos tracejados;
+  mapa movimento→músculos em `MUSCULOS`). Anterior: D do paciente à esquerda de quem olha; posterior: D à direita.
 - **Solicitação de exame (db/047, `emissao.js`, tipo `solicitacao`):** escanometria pelo método de Farill (medidas em checkbox), RX dos pés em AP com altura
   base–tibiotársica e RX panorâmico da coluna; CID padrão M21.7 com descrição do `cid10.json`; justificativa opcional; texto editável, timbrado e com código.
 - **Relacionamento + e-mail (db/048):** `relacionamento()` devolve `email`; botão ✉ E-mail por paciente (mailto) e "E-mail em lote" por item de reavaliação

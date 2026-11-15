@@ -1,15 +1,15 @@
 // Módulo Ficha do paciente: tudo que se liga ao paciente num lugar só.
-// Abas: Resumo · Cadastro (dados, convênio, encaminhamentos) · Autorizações e guias · Prontuário · Documentos
+// Abas: Resumo · Cadastro (dados, convênio, encaminhamentos) · Autorizações e guias · Prontuário · Avaliações · Documentos
 import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir, areasDaEspecialidade,
   foneFmt, foneDig, foneValido, mascaraFone, soNumeros, descricaoCid, normCid } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo, removerArquivo, ACEITA } from './documentos.js';
 import { imprimirGuia } from './guia-impressa.js';
-import { abaProntuario } from './prontuario.js';
+import { abaProntuario, abaAvaliacoes } from './prontuario.js';
 import { abaDocumentos } from './emissao.js';
 import { registrarPagamento, seloPagamento, excluirPagamento, fazerNota } from './particular.js';
 
 const ABAS = [['resumo', 'Resumo'], ['cadastro', 'Cadastro e encaminhamentos'], ['autorizacoes', 'Autorizações e guias'],
-  ['prontuario', 'Prontuário'], ['documentos', 'Documentos']];
+  ['prontuario', 'Prontuário'], ['avaliacoes', 'Avaliações'], ['documentos', 'Documentos']];
 const ALIAS = { dados: 'cadastro', convenios: 'cadastro', encaminhamentos: 'cadastro', atendimentos: 'autorizacoes', guias: 'autorizacoes' };   // links antigos continuam valendo
 // Situação de faturamento do atendimento, pela guia em que ele entrou
 const FIN = { rascunho: ['a faturar', 'pendente'], pronta: ['a faturar', 'pendente'], enviada: ['faturado', 'clinica'], paga: ['pago', 'ok'],
@@ -615,6 +615,7 @@ export async function render(params) {
     },
 
     prontuario() { return abaProntuario(alvo, p, ats, abaExtra); },
+    avaliacoes() { return abaAvaliacoes(alvo, p, ats); },
     documentos() { return abaDocumentos(alvo, p, ats); },
   };
 
