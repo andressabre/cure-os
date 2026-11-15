@@ -121,6 +121,9 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   desativa (bloqueia o login na hora via ban do Auth, se a pessoa não tiver outro vínculo). Não pode rebaixar nem desativar a si mesma.
   Convite por e-mail continua como alternativa; convite pendente pode virar acesso com senha ou ser excluído.
 
+- **Trava de senha (db/050, 15/11/2026):** gatilho `trava_autorizada_sem_senha` em `autorizacoes`: status `autorizada` em contrato que exige senha
+  (`contrato_exige_senha`) precisa de senha, data da autorização e validade (validade ≥ data). Particular/sem_tiss isentos; só checa quando status/senha/data/validade mudam.
+
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).
