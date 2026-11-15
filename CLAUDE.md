@@ -91,6 +91,9 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   agachamento unipodal, hop test LSI), `soapn` (anamnese → S, última linha AF), `psico_registro`, `medica_consulta` (novo, área `medicina`, CRM). Bandeiras vermelhas
   com aviso, testes especiais por região (1 clique +, 2 −, 3 limpa; teste de região desmarcada sai do texto), PSFS com média. Cada clique regenera o texto nos campos;
   texto digitado à mão não é apagado (`_g` guarda o último texto gerado por campo). Escolhas salvas em `conteudo.cliques`.
+  **Evolução rápida (`fisio_evolucao`, 15/11/2026):** campos novos `diag` e `estado`; nº da sessão automático (última evolução + 1); diagnóstico/CID preenchido
+  do encaminhamento ativo de fisioterapia (CID + descrição do `cid10.json`) + diagnóstico da última avaliação; região/lado herdados; botão "↻ Repetir condutas da
+  última sessão" (região, lado, condutas e detalhes); chips de como chegou / o que foi feito / resposta / próxima, EVA antes→depois.
 
 - **Acessos (15/11/2026):** **a gestora tem acesso total** a todas as telas (exceto ler prontuário de outro profissional — sigilo por autor).
   Na tela `#acessos` cria acesso com nome, e-mail (= login), senha provisória (botão Gerar), perfil e profissional vinculado; edita e-mail/senha/perfil/vínculo;

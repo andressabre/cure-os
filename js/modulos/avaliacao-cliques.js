@@ -5,8 +5,9 @@
 import { $, $$, esc } from '../core.js';
 
 // ---------- utilitários de texto ----------
-const lista = (a) => { a = (a || []).filter(Boolean); return a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' e ' + a.at(-1); };
-const min1 = (s) => String(s || '').replace(/^./, (c) => c.toLowerCase());
+// min1: minúscula só na 1ª letra de palavra comum (preserva siglas como HAS, ADM, FADIR)
+const min1 = (s) => String(s || '').replace(/^(.)(?=[a-zà-ú\s(/-]|$)/, (c) => c.toLowerCase());
+const lista = (a) => { a = (a || []).filter(Boolean).map((x, i) => (i ? min1(x) : x)); return a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' e ' + a.at(-1); };
 const frase = (s) => { s = String(s || '').trim(); return s ? s.replace(/^./, (c) => c.toUpperCase()).replace(/([^.!?])$/, '$1.') : ''; };
 const junta = (...p) => p.map(frase).filter(Boolean).join(' ');
 const tem = (v) => (Array.isArray(v) ? v.length > 0 : v !== undefined && v !== null && String(v).trim() !== '');
@@ -245,6 +246,39 @@ function gerarMedica(st) {
   };
 }
 
+// ---------- Evolução de sessão (fisioterapia) — modo rápido: ~5 min entre abrir e salvar ----------
+const blocosEvolucao = [
+  { titulo: 'Como chegou', perguntas: [
+    { k: 'chegou', rot: 'Desde a última sessão', tipo: 'um', ops: ['Melhor', 'Igual', 'Pior'] },
+    { k: 'relato', rot: 'Relato', tipo: 'varios', ops: ['Dor menor', 'Dor maior', 'Mais mobilidade', 'Rigidez', 'Edema', 'Cansaço/fadiga', 'Fez os exercícios de casa', 'Não fez os exercícios de casa', 'Treinou/competiu desde a última sessão'] },
+    { k: 'relato_txt', rot: 'Relato do paciente (opcional)', tipo: 'texto' },
+    { k: 'eva_pre', rot: 'Dor ao chegar (EVA)', tipo: 'eva' },
+  ] },
+  { titulo: 'O que foi feito', perguntas: [
+    { k: 'regiao', rot: 'Região tratada', tipo: 'varios', ops: Object.keys(TESTES) },
+    { k: 'lado', rot: 'Lado', tipo: 'um', ops: ['Direito', 'Esquerdo', 'Bilateral'] },
+    { k: 'cond', rot: 'Condutas', tipo: 'varios', ops: ['Terapia manual', 'Mobilização articular', 'Liberação miofascial', 'Agulhamento a seco', 'Alongamento', 'Fortalecimento',
+      'Treino proprioceptivo/equilíbrio', 'Treino funcional/gesto esportivo', 'Pliometria', 'Treino de corrida', 'Eletroterapia', 'Crioterapia', 'Termoterapia', 'Bandagem', 'Orientações e exercícios para casa'] },
+    { k: 'cond_txt', rot: 'Detalhes (exercícios, cargas, séries)', tipo: 'texto' },
+  ] },
+  { titulo: 'Como respondeu e próxima sessão', perguntas: [
+    { k: 'eva_pos', rot: 'Dor ao sair (EVA)', tipo: 'eva' },
+    { k: 'resp', rot: 'Resposta', tipo: 'varios', ops: ['Tolerou bem', 'Dor reduziu ao final', 'Melhora da ADM', 'Melhora da força/controle', 'Fadiga', 'Dor durante o exercício', 'Sem intercorrências'] },
+    { k: 'resp_txt', rot: 'Intercorrência ou observação', tipo: 'texto' },
+    { k: 'prox', rot: 'Próxima sessão', tipo: 'varios', ops: ['Manter conduta', 'Progredir carga', 'Reduzir carga', 'Introduzir exercício novo', 'Reavaliar na próxima sessão', 'Alta prevista'] },
+  ] },
+];
+function gerarEvolucao(st) {
+  const pre = num(st.eva_pre), pos = num(st.eva_pos);
+  return {
+    eva_pre: pre ?? '', eva_pos: pos ?? '',
+    estado: junta(st.chegou ? `refere estar ${min1(st.chegou)} desde a última sessão` : '', tem(st.relato) ? lista(st.relato) : '', st.relato_txt, pre !== null ? `EVA ao chegar ${pre}/10` : ''),
+    condutas: junta(regiaoLado(st) ? `região tratada: ${regiaoLado(st)}` : '', tem(st.cond) ? lista(st.cond) : '', st.cond_txt),
+    resposta: junta(tem(st.resp) ? lista(st.resp) : '', pre !== null && pos !== null ? `EVA ${pre} → ${pos}/10` : pos !== null ? `EVA ao sair ${pos}/10` : '', st.resp_txt),
+    proxima: tem(st.prox) ? frase(lista(st.prox)) : '',
+  };
+}
+
 // ---------- registro por modelo do prontuário ----------
 export const ROTEIROS = {
   fisio_avaliacao: { blocos: [blocoQueixa(false), blocoBandeiras, blocoExame(false), blocoPSFS, blocoPlanoFisio(false)], gerar: (s) => gerarFisio(s, false) },
@@ -252,13 +286,16 @@ export const ROTEIROS = {
   soapn: { blocos: blocosNutri, gerar: gerarNutri, rotulo: 'Anamnese por cliques (preenche o S)' },
   psico_registro: { blocos: blocosPsico, gerar: gerarPsico },
   medica_consulta: { blocos: blocosMedica, gerar: gerarMedica },
+  fisio_evolucao: { blocos: blocosEvolucao, gerar: gerarEvolucao, rotulo: 'Evolução rápida por cliques', repetir: ['regiao', 'lado', 'cond', 'cond_txt'] },
 };
 
 // ---------- interface ----------
 // alvo: contêiner do painel · form: formulário do editor (campos c_<k>) · st: estado salvo (conteudo.cliques) ou {}
-export function montarPainel(alvo, modelo, form, st) {
+// ctx (opcional): { ultima: cliques da última evolução, avaliacao: cliques da avaliação } → "Repetir da última sessão" e região herdada.
+export function montarPainel(alvo, modelo, form, st, ctx = {}) {
   const R = ROTEIROS[modelo]; if (!R) return null;
-  st._g ||= {};
+  const novo = !st._g; st._g ||= {};
+  if (novo && R.repetir && !tem(st.regiao)) { const base = ctx.ultima || ctx.avaliacao; if (base?.regiao) { st.regiao = [...base.regiao]; if (base.lado) st.lado = base.lado; } }
   const desenhar = () => {
     const regs = st.regiao || [];
     const testes = [...new Set(regs.flatMap((r) => TESTES[r] || []))];
@@ -275,6 +312,11 @@ export function montarPainel(alvo, modelo, form, st) {
           : '<small class="muted">Escolha a região na queixa para ver os testes.</small>'}</div>`;
         return `<label class="ck-q ck-campo"><span class="ck-rot">${esc(p.rot)}</span><input data-k="${p.k}" ${p.tipo === 'num' ? `type="number" min="${p.min ?? ''}" max="${p.max ?? ''}" step="${p.passo || 1}"` : ''} value="${esc(v ?? '')}"></label>`;
       }).join('')}</fieldset>`).join('');
+    if (R.repetir && ctx.ultima) {
+      alvo.insertAdjacentHTML('afterbegin', `<div class="ck-repetir"><button type="button" class="btn pequeno" id="ck-rep">↻ Repetir condutas da última sessão</button>
+        <span class="muted">${esc(lista((ctx.ultima.cond || []).slice(0, 4)))}${(ctx.ultima.cond || []).length > 4 ? '…' : ''}</span></div>`);
+      $('#ck-rep', alvo).onclick = () => { R.repetir.forEach((k) => { if (tem(ctx.ultima[k])) st[k] = structuredClone(ctx.ultima[k]); }); aplicar(); desenhar(); };
+    }
     const bv = bandeiras(st);
     if (bv.length) alvo.insertAdjacentHTML('afterbegin', `<div class="ck-aviso">⚠ Bandeira vermelha marcada (${esc(lista(bv))}): considerar encaminhamento médico antes de prosseguir.</div>`);
     $$('button.ck[data-k]', alvo).forEach((b) => (b.onclick = () => {
@@ -309,6 +351,7 @@ export function montarPainel(alvo, modelo, form, st) {
     }
   };
   desenhar();
+  if (novo && tem(st.regiao)) aplicar();
   return { estado: () => { const { _g, ...resto } = st; return Object.keys(resto).some((k) => tem(resto[k]) && !(typeof resto[k] === 'object' && !Array.isArray(resto[k]) && !Object.keys(resto[k]).length)) ? st : null; } };
 }
 

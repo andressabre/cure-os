@@ -2,7 +2,7 @@
 // Modelos por área + campo livre; modelos com ⚡ têm avaliação por cliques (avaliacao-cliques.js, item 15). Sem etapa de assinatura (db/039): salvar grava o registro como final e ele pode ser editado depois
 // (versão anterior guardada em prontuario_versoes pelo gatilho); adendos e anexos (bucket "prontuario") ficam dentro do registro expandido.
 // Duas entradas: aba "Prontuário" da ficha do paciente (abaProntuario) e rota #prontuarios (meus pacientes + importação dos .txt antigos).
-import { sb, estado, $, $$, esc, data, tela, toast, falha, modal, confirmar } from '../core.js';
+import { sb, estado, $, $$, esc, data, tela, toast, falha, modal, confirmar, descricaoCid } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo } from './documentos.js';
 import { montarPainel, temRoteiro, ROTEIROS } from './avaliacao-cliques.js';
 
@@ -27,8 +27,9 @@ export const MODELOS = {
     ['diagnostico', 'Diagnóstico e prognóstico fisioterapêutico', 'Cinético-funcional'],
     ['objetivos', 'Objetivos terapêuticos'], ['plano', 'Plano terapêutico e retorno ao esporte', 'Condutas, frequência, nº de sessões, critérios de retorno'], OBS] },
   fisio_evolucao: { nome: 'Evolução de sessão (fisioterapia)', area: 'fisioterapia', campos: [
+    ['diag', 'Diagnóstico / CID', 'Vem do encaminhamento ou da avaliação'],
     ['sessao', 'Sessão nº', '', 'num'], ['eva_pre', 'EVA antes', '', 'num'], ['eva_pos', 'EVA depois', '', 'num'],
-    ['condutas', 'Condutas realizadas'], ['resposta', 'Resposta do paciente / intercorrências'], ['proxima', 'Ajuste para a próxima sessão'], OBS] },
+    ['estado', 'Como o paciente chegou'], ['condutas', 'Condutas realizadas'], ['resposta', 'Resposta do paciente / intercorrências'], ['proxima', 'Ajuste para a próxima sessão'], OBS] },
   psico_registro: { nome: 'Registro documental (psicologia)', area: 'psicologia', campos: [
     ['demanda', 'Avaliação de demanda'], ['objetivos', 'Objetivos do trabalho'], ['evolucao', 'Registro da evolução'],
     ['procedimentos', 'Procedimentos técnico-científicos adotados'], ['encaminhamento', 'Encaminhamento ou encerramento'], OBS] },
@@ -44,6 +45,7 @@ const dh = (d) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '
 const imc = (m) => (m?.peso && m?.altura ? (m.peso / (m.altura / 100) ** 2).toFixed(1) : null);
 
 let _eu;   // cadastro do profissional logado (nome, conselho)
+let _regsPac = [];   // registros do paciente aberto (contexto da evolução rápida)
 async function eu() {
   if (_eu?.id === estado.profissionalId) return _eu;
   const { data: p } = await sb.from('profissionais').select('id, nome, conselho, numero_conselho, uf_conselho').eq('id', estado.profissionalId).single();
@@ -70,6 +72,7 @@ export async function abaProntuario(alvo, p, ats, extra) {
   (regs || []).filter((r) => !LIDOS.has(r.id)).forEach((r) => { LIDOS.add(r.id); sb.rpc('registrar_leitura_prontuario', { p_registro: r.id }); }); // auditoria de leitura (1x por sessão)
   const meusAts = (ats || []).filter((a) => a.profissional_id === estado.profissionalId && ['atendido', 'presente'].includes(a.status));
   const semRegistro = meusAts.filter((a) => !(regs || []).some((r) => r.atendimento_id === a.id));
+  _regsPac = regs || [];
   const recarregar = () => abaProntuario(alvo, p, ats);
   const modelosArea = Object.entries(MODELOS).filter(([, m]) => !m.area || m.area === minhaArea || minhaArea === 'outra');
 
@@ -200,7 +203,9 @@ function editor(p, r, meusAts, aoSalvar) {
   (box, fechar) => {
     box.classList.add('largo');
     const f = $('#fr', box);
-    const painel = $('#ck', box) ? montarPainel($('#ck', box), r.modelo, f, structuredClone(c.cliques || {})) : null;
+    const ctx = contextoEvolucao(r);
+    const painel = $('#ck', box) ? montarPainel($('#ck', box), r.modelo, f, structuredClone(c.cliques || {}), ctx) : null;
+    if (r.modelo === 'fisio_evolucao' && !r.id) prepararEvolucao(p, r, f, ctx, meusAts);
     const recalc = () => { const v = imc({ peso: +f.m_peso?.value, altura: +f.m_altura?.value }); if ($('#imc', box)) $('#imc', box).value = v || ''; };
     f.m_peso?.addEventListener('input', recalc); f.m_altura?.addEventListener('input', recalc);
     const salvar = async () => {
@@ -221,6 +226,31 @@ function editor(p, r, meusAts, aoSalvar) {
     };
     $('#salvar', box).onclick = salvar;
   });
+}
+
+// Evolução rápida: última evolução e avaliação do mesmo paciente (só registros do próprio autor, pela RLS)
+function contextoEvolucao(r) {
+  const outros = _regsPac.filter((x) => x.id !== r.id);
+  const ultEvol = outros.filter((x) => x.modelo === 'fisio_evolucao').sort((a, b) => String(b.data_registro).localeCompare(String(a.data_registro)) || String(b.criado_em).localeCompare(String(a.criado_em)))[0];
+  const aval = outros.filter((x) => ['fisio_avaliacao', 'fisio_esportiva'].includes(x.modelo)).sort((a, b) => String(b.data_registro).localeCompare(String(a.data_registro)))[0];
+  return { ultima: ultEvol?.conteudo?.cliques || null, avaliacao: aval?.conteudo?.cliques || null, ultEvol, aval, nEvol: outros.filter((x) => x.modelo === 'fisio_evolucao').length };
+}
+// Nº da sessão e diagnóstico/CID preenchidos sozinhos (encaminhamento ativo de fisioterapia > diagnóstico da avaliação > última evolução)
+async function prepararEvolucao(p, r, f, ctx, meusAts) {
+  if (f.elements.c_sessao && !f.elements.c_sessao.value) f.elements.c_sessao.value = (Number(ctx.ultEvol?.conteudo?.sessao) || ctx.nEvol) + 1;
+  const campo = f.elements.c_diag; if (!campo || campo.value) return;
+  let txt = '';
+  const { data: encs } = await sb.from('encaminhamentos').select('cid, indicacao_clinica, data_pedido, validade').eq('paciente_id', p.id)
+    .eq('area', 'fisioterapia').eq('status', 'ativo').order('data_pedido', { ascending: false }).limit(1);
+  const en = encs?.[0];
+  if (en?.cid || en?.indicacao_clinica) {
+    const desc = en.indicacao_clinica || (en.cid ? await descricaoCid(en.cid).catch(() => '') : '');
+    txt = `${en.cid ? 'CID ' + en.cid : ''}${en.cid && desc ? ' — ' : ''}${desc || ''} (encaminhamento de ${data(en.data_pedido)})`;
+  }
+  const dAval = ctx.aval?.conteudo?.diagnostico;
+  if (dAval) txt = [txt, `Fisioterapêutico (avaliação de ${data(ctx.aval.data_registro)}): ${dAval}`].filter(Boolean).join('\n');
+  if (!txt) txt = ctx.ultEvol?.conteudo?.diag || '';
+  if (txt && !campo.value) campo.value = txt;
 }
 
 function adendo(registroId, aoSalvar) {

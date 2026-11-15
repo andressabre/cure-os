@@ -321,3 +321,4 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 .ck-aviso{background:var(--vermelho-claro);color:var(--vermelho);border-left:3px solid var(--vermelho);padding:8px 12px;border-radius:0 6px 6px 0;margin:8px 0;font-weight:600;font-size:13.5px}
 .ag-ev{user-select:none;touch-action:manipulation}
 .ag-ev.arrastando{opacity:.9;z-index:5;box-shadow:0 6px 18px rgba(0,0,0,.2);cursor:grabbing;outline:2px dashed var(--laranja)}
+.ck-repetir{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--laranja-claro);border-radius:6px;padding:8px 10px;margin:8px 0}
