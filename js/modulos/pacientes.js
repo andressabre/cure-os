@@ -7,7 +7,7 @@ const ORIGEM = 'motivar_2012';
 export async function render() {
   const gestor = estado.perfil === 'gestor';
   const c = tela('Pacientes', `${gestor ? '<button class="btn" id="imp">Importar do sistema antigo</button>' : ''}
-    <button class="btn primario" id="novo">+ Paciente</button>`);
+    ${estado.perfil === 'profissional' ? '' : '<button class="btn primario" id="novo">+ Paciente</button>'}`);
   c.innerHTML = `<div class="cartao"><div class="grade-form">
       <label>Buscar (nome, CPF ou telefone)<input id="busca" placeholder="Digite ao menos 2 letras"></label>
       <label>Situação<select id="sit"><option value="1">Ativos</option><option value="0">Inativos</option><option value="">Todos</option></select></label>
@@ -34,7 +34,7 @@ export async function render() {
   };
   $('#busca').oninput = () => { clearTimeout(t); t = setTimeout(buscar, 300); };
   $('#sit').onchange = buscar;
-  $('#novo').onclick = () => ficha(null);
+  $('#novo')?.addEventListener('click', () => ficha(null));
   $('#imp')?.addEventListener('click', importar);
   buscar();
 

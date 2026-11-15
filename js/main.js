@@ -22,7 +22,7 @@ const ROTAS = [
   { id: 'painel', nome: 'Painel', mod: painel, perfis: ['gestor', 'financeiro'] },
   { id: 'estatisticas', nome: 'Estatísticas', mod: estatisticas, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'prontuarios', nome: 'Meus prontuários', mod: prontuarios, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'], precisaProf: true },
-  { id: 'pacientes', nome: 'Pacientes', mod: pacientes, perfis: ['gestor', 'financeiro', 'recepcao'] },
+  { id: 'pacientes', nome: 'Pacientes', mod: pacientes, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'paciente', nome: 'Paciente', mod: paciente, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'], oculto: true },
   { id: 'financeiro', nome: 'Financeiro', mod: financeiro, perfis: ['gestor', 'financeiro'] },
   { id: 'lotes', nome: 'Lotes TISS', mod: lotes, perfis: ['gestor', 'financeiro'] },

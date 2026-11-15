@@ -1,6 +1,6 @@
 // Módulo Ficha do paciente: tudo que se liga ao paciente num lugar só.
 // Abas: Resumo · Cadastro (dados, convênio, encaminhamentos) · Autorizações e guias · Prontuário · Documentos
-import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir,
+import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir, areasDaEspecialidade,
   foneFmt, foneDig, foneValido, mascaraFone, soNumeros, descricaoCid, normCid } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo, removerArquivo, ACEITA } from './documentos.js';
 import { imprimirGuia } from './guia-impressa.js';
@@ -40,6 +40,13 @@ export async function render(params) {
     sb.from('solicitantes').select('id, nome, conselho, numero_conselho').eq('clinica_id', cid).eq('ativo', true).order('nome'),
   ]);
   if (error) return falha(error);
+  // Profissional (ou sócio no modo profissional): só autorizações/guias da sua área ou feitas em seu nome; encaminhamentos de todas
+  const souProf = estado.perfil === 'profissional';
+  if (souProf && auts) {
+    const { data: eu } = await sb.from('profissionais').select('especialidade').eq('id', estado.profissionalId).maybeSingle();
+    const minhas = areasDaEspecialidade(eu?.especialidade);
+    auts.splice(0, auts.length, ...auts.filter((a) => minhas.includes(a.area) || a.profissional_id === estado.profissionalId));
+  }
   const x = p.campos_extras || {}, e = p.endereco || {};
 
   // Pendências do cadastro que travam a guia TISS
@@ -376,7 +383,7 @@ export async function render(params) {
         return `<button class="chip-link" ${en.arquivo ? `data-abrir-enc="${esc(en.arquivo)}"` : 'disabled'} title="${en.arquivo ? 'Abrir o pedido médico' : 'Pedido sem arquivo'}">📋 Pedido ${esc(AREAS[en.area])} · ${data(en.data_pedido)}${en.cid ? ' · ' + esc(en.cid) : ''}</button>${en.arquivo ? '' : ' <span class="selo alerta">sem arquivo</span>'}`; };
       // Agendar da ficha (13/11/2026): leva à agenda com paciente/convênio/senha preenchidos (a agenda continua mostrando horários e conflitos)
       const porSessao = (a) => !!(planos || []).find((pl) => pl.id === a.paciente_plano_id)?.contratos?.regras?.senha_por_sessao;
-      const podeAgendar = (a, livres) => estado.perfil !== 'profissional' && !['negada', 'cancelada', 'pendente'].includes(a.status) && !(a.validade && a.validade < hojeIso())
+      const podeAgendar = (a, livres) => !['negada', 'cancelada', 'pendente'].includes(a.status) && !(a.validade && a.validade < hojeIso())
         && (livres > 0 || porSessao(a));
       const irAgendar = (a) => { const lig = atsDe(a.id), q = a.qtd_autorizada || 0;
         const livres = q - lig.filter((x) => ['agendado', 'confirmado', 'presente', 'atendido'].includes(x.status)).length;
@@ -385,7 +392,7 @@ export async function render(params) {
         const proc = a.procedimentos?.descricao ? ` (${a.procedimentos.descricao})` : '';
         const saldo = nova ? 'nova senha (1 por sessão)' : `senha ${a.senha || '—'}${proc} · ${livres} de ${q} disponíve${livres === 1 ? 'l' : 'is'} para agendar`;
         sessionStorage.setItem('agendar_para', JSON.stringify({ paciente: id, nome: p.nome, plano: a.paciente_plano_id, aut: nova ? 'nova' : a.id, proc: a.procedimento_id,
-          porSessao: porSessao(a), prof, resumo: `${a.paciente_planos?.contratos?.nome || ''} · ${nova ? 'nova senha (1 por sessão)' + proc : saldo}` }));
+          porSessao: porSessao(a), prof: souProf ? estado.profissionalId : prof, resumo: `${a.paciente_planos?.contratos?.nome || ''} · ${nova ? 'nova senha (1 por sessão)' + proc : saldo}` }));
         location.hash = 'agenda'; };
       const bolinhas = (a, lig, q) => { const vivos = lig.filter((x) => x.status !== 'cancelado');
         const cls = (x) => x.status === 'atendido' ? 'f' : x.status === 'faltou' ? 'x' : 'a';

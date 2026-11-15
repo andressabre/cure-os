@@ -69,6 +69,14 @@ export function tela(titulo, acoesHtml = '') {
   return c;
 }
 
+// Área de atuação pela especialidade (igual a areas_da_especialidade no banco; fisio também cobre palmilha)
+export const areasDaEspecialidade = (t) => { t = String(t || '').toLowerCase();
+  return /^fisio/.test(t) ? ['fisioterapia', 'palmilha'] : /^nutri/.test(t) ? ['nutricao'] : /^psic/.test(t) ? ['psicologia']
+    : /(palmilha|podo|baro)/.test(t) ? ['palmilha'] : []; };
+// Serviços da agenda que cada área pode marcar
+export const SERVICOS_DA_AREA = { fisioterapia: ['Fisioterapia', 'Avaliação'], palmilha: ['Palmilha / Baropodometria'],
+  nutricao: ['Nutrição', 'Avaliação'], psicologia: ['Psicologia', 'Avaliação'] };
+
 export const podeGerir = () => ['gestor', 'financeiro'].includes(estado.perfil);
 
 // Telefones: grava só dígitos com 55 na frente; mostra +55 (DD) 9XXXX-XXXX. Exige DDD.

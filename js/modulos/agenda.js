@@ -1,6 +1,6 @@
 // Módulo Agenda: dia (colunas = profissionais), semana (dias; 1 ou todos os profissionais), mês e listas do dia/semana, com filtros e cartão rápido.
 // Salas (config.salas; padrão = última sala usada pelo profissional), agendamento em série (serie_id) e lembretes por WhatsApp (link wa.me, sem custo).
-import { sb, estado, $, $$, esc, tela, toast, falha, modal, confirmar } from '../core.js';
+import { sb, estado, $, $$, esc, tela, toast, falha, modal, confirmar, areasDaEspecialidade, SERVICOS_DA_AREA } from '../core.js';
 
 const SERVICOS = ['Fisioterapia', 'Nutrição', 'Psicologia', 'Palmilha / Baropodometria', 'Terapia Ocupacional', 'Avaliação'];
 const STATUS = { agendado: 'Agendado', confirmado: 'Confirmado', presente: 'Presente', atendido: 'Atendido', faltou: 'Faltou', cancelado: 'Cancelado' };
@@ -73,10 +73,10 @@ export async function render() {
     <button class="btn" id="hoje">Hoje</button>
     <select id="modo">${Object.entries(MODOS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
     ${souProf ? '' : '<select id="prof"><option value="">Todos os profissionais</option></select>'}
-    ${souProf ? '<button class="btn" id="cal">Ligar ao Google/Outlook</button>' : '<button class="btn" id="lemb">📲 Lembretes</button><button class="btn" id="relac">💬 Relacionamento</button><button class="btn primario" id="novo">+ Agendamento</button>'}`);
+    ${souProf ? '<button class="btn" id="cal">Ligar ao Google/Outlook</button>' : '<button class="btn" id="lemb">📲 Lembretes</button><button class="btn" id="relac">💬 Relacionamento</button>'}<button class="btn primario" id="novo">+ Agendamento</button>`);
   if (souProf) vis.prof = estado.profissionalId;
   // Agendar a partir da ficha (13/11/2026): contexto em sessionStorage 'agendar_para'
-  let pre = null; try { pre = !souProf && JSON.parse(sessionStorage.getItem('agendar_para') || 'null'); } catch { pre = null; }
+  let pre = null; try { pre = JSON.parse(sessionStorage.getItem('agendar_para') || 'null'); } catch { pre = null; }
   if (pre && !pre.aplicado) { if (pre.prof) { vis.prof = pre.prof; vis.modo = 'semana'; } vis.dia = hojeIso(); pre.aplicado = true; sessionStorage.setItem('agendar_para', JSON.stringify(pre)); }
   guardarVis();
 
@@ -221,7 +221,7 @@ export async function render() {
       }).join('')}</div>`; }).join('')}
   </div></div>`;
     $$('.ag-col', corpo).forEach((el) => (el.onclick = (e) => {
-      if (e.target.closest('.ag-ev') || souProf) return;
+      if (e.target.closest('.ag-ev')) return;
       const col = colunas[el.dataset.ci], y = e.clientY - el.getBoundingClientRect().top;
       const passo = cfg.intervalo_min || 10, min = ini + Math.floor(y / PX_MIN / passo) * passo;
       if (naPausa(min, col.dia)) return toast('Fora do expediente. Para encaixe, use + Agendamento e ajuste a hora.');
@@ -385,20 +385,25 @@ export async function render() {
     const hora = a ? hm(a.inicio) : `${String(Math.floor(novo.min / 60)).padStart(2, '0')}:${String(novo.min % 60).padStart(2, '0')}`;
     const dur = a ? Math.round((new Date(a.fim) - new Date(a.inicio)) / 6e4) : p?.duracao_padrao_min || 45;
     let pacienteId = a?.paciente_id || novo.pre?.paciente || null;
+    // Profissional: agenda só para si e só nos serviços da sua área; agendamento existente continua só leitura (exceto observação/status)
+    const bloq = souProf && !!a;
+    const eu = profs.find((x) => x.id === estado.profissionalId);
+    const meusServ = souProf ? [...new Set(areasDaEspecialidade(eu?.especialidade).flatMap((k) => SERVICOS_DA_AREA[k] || []))] : SERVICOS;
+    const servOpcoes = [...new Set([...(meusServ.length ? meusServ : SERVICOS), ...(a?.servico ? [a.servico] : [])])];
     modal(`<h3>${a ? 'Agendamento' : 'Novo agendamento'}</h3>${a ? linhaSessao(num[a.id]) : ''}
       ${a ? `<div class="linha-acoes" style="justify-content:flex-start;margin:0 0 12px">${Object.entries(STATUS).filter(([k]) => k !== 'cancelado')
         .map(([k, v]) => `<button class="btn pequeno ${a.status === k ? 'primario' : ''}" data-st="${k}">${v}</button>`).join('')}</div>` : ''}
       <form class="grade-form" id="f">
-        <label style="grid-column:1/-1">Paciente${souProf ? `<input value="${esc(a?.pacientes?.nome)}" disabled>` : `
+        <label style="grid-column:1/-1">Paciente${bloq ? `<input value="${esc(a?.pacientes?.nome)}" disabled>` : `
           <input id="pbusca" placeholder="Digite o nome" value="${esc(a?.pacientes?.nome || novo.pre?.nome || '')}" autocomplete="off"><div id="psug" class="sugestoes"></div>`}</label>
-        <label>Profissional<select name="profissional_id" ${souProf ? 'disabled' : ''}>${profs.map((x) => `<option value="${x.id}" ${x.id === p?.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label>
-        <label>Serviço<select name="servico">${SERVICOS.map((s) => `<option ${s === (a?.servico || p?.especialidade) ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
-        <label>Data<input type="date" name="dia" value="${dia}" ${souProf ? 'disabled' : ''}></label>
-        <label>Hora<input type="time" name="hora" value="${hora}" step="300" ${souProf ? 'disabled' : ''}></label>
-        <label>Duração (min)<input type="number" name="dur" value="${dur}" min="5" step="5" ${souProf ? 'disabled' : ''}></label>
-        <label>Sala<select name="sala" ${souProf ? 'disabled' : ''}><option value="">—</option>
+        <label>Profissional<select name="profissional_id" ${souProf ? 'disabled' : ''}>${(souProf && !a ? profs.filter((x) => x.id === estado.profissionalId) : profs).map((x) => `<option value="${x.id}" ${x.id === (souProf && !a ? estado.profissionalId : p?.id) ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label>
+        <label>Serviço<select name="servico" ${bloq ? 'disabled' : ''}>${servOpcoes.map((s) => `<option ${s === (a?.servico || p?.especialidade) ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
+        <label>Data<input type="date" name="dia" value="${dia}" ${bloq ? 'disabled' : ''}></label>
+        <label>Hora<input type="time" name="hora" value="${hora}" step="300" ${bloq ? 'disabled' : ''}></label>
+        <label>Duração (min)<input type="number" name="dur" value="${dur}" min="5" step="5" ${bloq ? 'disabled' : ''}></label>
+        <label>Sala<select name="sala" ${bloq ? 'disabled' : ''}><option value="">—</option>
           ${[...new Set([...SALAS, ...(a?.sala ? [a.sala] : [])])].map((s) => `<option ${s === a?.sala ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
-        ${!a && !souProf ? `<div style="grid-column:1/-1" class="serie-box">
+        ${!a ? `<div style="grid-column:1/-1" class="serie-box">
           <label><span><input type="checkbox" id="rep"> Repetir — agendamento em série</span></label>
           <div id="rep-op" hidden>
             <div class="linha-acoes" style="justify-content:flex-start;margin:6px 0">${DIAS_SEM.map((d, i) => (cfg.dias || [1, 2, 3, 4, 5, 6]).includes(i)
@@ -416,7 +421,7 @@ export async function render() {
         ? '<p><button class="btn pequeno" id="pgto">💲 Pagamento (particular)</button> <span id="pgto-st"></span></p>' : ''}
       ${a ? `<p class="muted">${(a.pacientes?.celular || a.pacientes?.telefone) ? 'Telefone: ' + esc(a.pacientes.celular || a.pacientes.telefone) + ' · ' : ''}<a href="#paciente-${a.paciente_id}" data-fechar>Abrir ficha do paciente →</a>${a.profissional_id === estado.profissionalId ? ` · <a href="#paciente-${a.paciente_id}-prontuario:${a.id}" data-fechar>Evoluir no prontuário →</a>` : ''}</p>` : ''}
       <div class="linha-acoes">${a && !souProf ? '<button class="btn escuro" id="canc">Cancelar agendamento</button>' : ''}${a?.serie_id && !souProf && !travado0(a) ? '<button class="btn escuro" id="canc-serie">Cancelar esta e as próximas da série</button>' : ''}
-        <button class="btn" data-fechar>Fechar</button>${souProf && !a ? '' : '<button class="btn primario" id="s">Salvar</button>'}</div>`,
+        <button class="btn" data-fechar>Fechar</button><button class="btn primario" id="s">Salvar</button></div>`,
     (m, fechar) => {
       const busca = $('#pbusca', m), sug = $('#psug', m); let t;
       // Sala padrão: a do agendamento; senão a última usada pelo profissional; senão config.sala_padrao
@@ -457,6 +462,9 @@ export async function render() {
         const { data: ps, error: e } = await sb.rpc('autorizacoes_paciente', { p_paciente: pacienteId });
         if (e) return falha(e, 'Convênios');
         planos = ps || []; carregado = true;
+        // sócio no modo profissional: o banco devolve tudo (perfil real é gestão) → mostra só as senhas da sua área
+        if (souProf) { const minhas = areasDaEspecialidade(eu?.especialidade);
+          planos.forEach((pl) => (pl.autorizacoes = (pl.autorizacoes || []).filter((x) => !x.area || minhas.includes(x.area) || x.id === autId))); }
         if (!a && !planoId) planoId = '';
         desenharConv();
       }
@@ -464,10 +472,10 @@ export async function render() {
         const pl = planos.find((x) => x.id === planoId);
         const saldo = (x) => Number(x.qtd) - Number(x.usadas) - Number(x.agendadas) + (a && a.autorizacao_id === x.id ? 1 : 0);
         conv.innerHTML = `<div class="grade-form" style="margin-top:12px">
-          <label style="grid-column:1/-1">Convênio<select id="c-plano" ${souProf || travado ? 'disabled' : ''}><option value="">Particular / sem convênio</option>
+          <label style="grid-column:1/-1">Convênio<select id="c-plano" ${bloq || travado ? 'disabled' : ''}><option value="">Particular / sem convênio</option>
             ${planos.map((x) => `<option value="${x.id}" ${x.id === planoId ? 'selected' : ''}>${esc(x.contrato)} · cart. ${esc(x.carteirinha)}</option>`).join('')}</select>
             ${!planos.length ? '<small class="muted">Paciente sem convênio vinculado. Vincule na ficha do paciente.</small>' : ''}</label>
-          ${pl && pl.exige ? `<label style="grid-column:1/-1">Autorização (senha)<select id="c-aut" ${souProf || travado ? 'disabled' : ''}>
+          ${pl && pl.exige ? `<label style="grid-column:1/-1">Autorização (senha)<select id="c-aut" ${bloq || travado ? 'disabled' : ''}>
             <option value="">Escolha…</option>
             ${pl.autorizacoes.map((x) => `<option value="${x.id}" ${x.id === autId ? 'selected' : ''} ${saldo(x) <= 0 && x.id !== autId ? 'disabled' : ''}>
               ${x.status === 'pendente' ? '⏳ PENDENTE' : 'senha ' + esc(x.senha)} · ${esc(x.codigo)} · ${x.usadas} feitas + ${x.agendadas} agendadas de ${x.qtd}${x.validade ? ' · val. ' + new Date(x.validade + 'T12:00').toLocaleDateString('pt-BR') : ''}</option>`).join('')}
@@ -511,7 +519,8 @@ export async function render() {
       });
       $('#s', m)?.addEventListener('click', async () => {
         const f = Object.fromEntries(new FormData($('#f', m)));
-        if (souProf) {
+        if (souProf && !a) f.profissional_id = estado.profissionalId;   // select desabilitado não entra no FormData
+        if (souProf && a) {
           const { error: e } = await sb.from('atendimentos').update({ observacao: f.observacao || null, atualizado_em: new Date().toISOString() }).eq('id', a.id);
           if (e) return falha(e); fechar(); return render();
         }
@@ -544,7 +553,10 @@ export async function render() {
         } else datas.push(f.dia);
         const ocorr = datas.map((d) => { const ini = new Date(`${d}T${f.hora}:00`); return { dia: d, ini, fim: new Date(ini.getTime() + dur * 6e4) }; });
         // Conflitos de profissional e de sala (uma consulta para o período todo)
-        const { data: ocup, error: eo } = await sb.from('atendimentos').select('id, inicio, fim, sala, profissional_id').eq('clinica_id', estado.clinica.id)
+        // Profissional não lê a agenda dos colegas: a ocupação de sala/horário vem de ocupacao_agenda (sem dados do paciente)
+        const { data: ocup, error: eo } = souProf
+          ? await sb.rpc('ocupacao_agenda', { p_clinica: estado.clinica.id, p_de: ocorr[0].ini.toISOString(), p_ate: ocorr.at(-1).fim.toISOString() })
+          : await sb.from('atendimentos').select('id, inicio, fim, sala, profissional_id').eq('clinica_id', estado.clinica.id)
           .neq('status', 'cancelado').lt('inicio', ocorr.at(-1).fim.toISOString()).gt('fim', ocorr[0].ini.toISOString())
           .or(`profissional_id.eq.${f.profissional_id}${sala ? `,sala.eq."${sala.replace(/"/g, '')}"` : ''}`);
         if (eo) return falha(eo, 'Conflitos');

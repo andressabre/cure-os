@@ -131,6 +131,12 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   desativa (bloqueia o login na hora via ban do Auth, se a pessoa não tiver outro vínculo). Não pode rebaixar nem desativar a si mesma.
   Convite por e-mail continua como alternativa; convite pendente pode virar acesso com senha ou ser excluído.
 
+- **Profissional por área (db/052, 15/11/2026):** profissional vê **todos os pacientes** da clínica (menu Pacientes, sem "+ Paciente"), todos os
+  encaminhamentos e os vínculos de convênio; **autorizações só da sua área** (`minhas_areas()` pela especialidade — fisio cobre palmilha —
+  ou feitas em seu nome) na RLS e em `autorizacoes_paciente`; o sócio no modo profissional recebe o mesmo filtro no cliente (`areasDaEspecialidade` no core).
+  **Agenda:** profissional cria agendamento só para si (`prof_cria_atendimentos`), com serviços de `SERVICOS_DA_AREA`, série e nova solicitação de senha
+  (`prof_cria_autorizacoes`, status pendente/autorizada); agendamento existente segue só leitura para ele (status e observação). Conflito de sala/horário
+  vem de `ocupacao_agenda()` (DEFINER, sem dados de paciente). Botão 📅 da ficha liberado para o profissional.
 - **Trava de senha (db/050, 15/11/2026):** gatilho `trava_autorizada_sem_senha` em `autorizacoes`: status `autorizada` em contrato que exige senha
   (`contrato_exige_senha`) precisa de senha, data da autorização e validade (validade ≥ data). Particular/sem_tiss isentos; só checa quando status/senha/data/validade mudam.
 
