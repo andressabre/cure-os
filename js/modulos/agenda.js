@@ -1,4 +1,4 @@
-// Módulo Agenda: visão do dia (colunas = profissionais) e da semana (colunas = dias de um profissional).
+// Módulo Agenda: dia (colunas = profissionais), semana (dias; 1 ou todos os profissionais), mês e listas do dia/semana, com filtros e cartão rápido.
 // Salas (config.salas; padrão = última sala usada pelo profissional), agendamento em série (serie_id) e lembretes por WhatsApp (link wa.me, sem custo).
 import { sb, estado, $, $$, esc, tela, toast, falha, modal, confirmar } from '../core.js';
 
@@ -35,20 +35,49 @@ function textoLembrete(cfg, a, nomeProf) {
 }
 const linkWhats = (cfg, a, nomeProf) => { const f = foneWhats(a.pacientes?.celular) || foneWhats(a.pacientes?.telefone); return f ? `https://wa.me/${f}?text=${encodeURIComponent(textoLembrete(cfg, a, nomeProf))}` : null; };
 
-let vis = { dia: hojeIso(), modo: 'dia', prof: '' };
+// Visões (15/11/2026, inspirado no ZenFisio): dia · semana (de 1 ou de todos os profissionais, em faixas lado a lado) · mês · lista do dia · lista da semana.
+// Filtros no cliente (status, sala, convênio, serviço, paciente) sem nova consulta; clique no bloco abre o cartão rápido (status, iniciar atendimento, WhatsApp).
+const MODOS = { dia: 'Dia', semana: 'Semana', mes: 'Mês', lista_dia: 'Lista do dia', lista_semana: 'Lista da semana' };
+const FILTRO0 = { status: '', sala: '', conv: '', serv: '', pac: '' };
+let vis = { dia: hojeIso(), modo: 'dia', prof: '', f: { ...FILTRO0 } };
+try { const v = JSON.parse(sessionStorage.getItem('agenda_vis') || 'null'); if (v && MODOS[v.modo]) vis = { ...vis, modo: v.modo, prof: v.prof || '', f: { ...FILTRO0, ...(v.f || {}) } }; } catch { /* sem storage */ }
+const guardarVis = () => { try { sessionStorage.setItem('agenda_vis', JSON.stringify({ modo: vis.modo, prof: vis.prof, f: vis.f })); } catch { /* sem storage */ } };
+const segundaDe = (dia) => somaDias(dia, -((new Date(dia + 'T12:00').getDay() + 6) % 7));
+const nomeConv = (a) => (a.paciente_plano_id ? a.paciente_planos?.contratos?.nome || 'Convênio' : 'Particular');
+const primeiroNome = (n) => String(n || '').trim().split(/\s+/)[0] || '';
+let pop = null;   // cartão rápido aberto
+function fecharCartao() { pop?.remove(); pop = null; }
+window.addEventListener('hashchange', fecharCartao);
+
+// Faixas lado a lado para atendimentos que se sobrepõem na mesma coluna
+function faixas(evs) {
+  const ord = [...evs].sort((x, y) => new Date(x.inicio) - new Date(y.inicio)), r = {};
+  let grupo = [], fimGrupo = 0, pistas = [];
+  const fechaGrupo = () => { const n = pistas.length || 1; grupo.forEach((id) => (r[id].n = n)); grupo = []; pistas = []; };
+  for (const a of ord) {
+    const s = +new Date(a.inicio), e = +new Date(a.fim);
+    if (grupo.length && s >= fimGrupo) fechaGrupo();
+    let i = pistas.findIndex((fim) => fim <= s); if (i < 0) { i = pistas.length; pistas.push(e); } else pistas[i] = e;
+    r[a.id] = { i, n: 1 }; grupo.push(a.id); fimGrupo = Math.max(fimGrupo, e);
+  }
+  fechaGrupo();
+  return r;
+}
 
 export async function render() {
+  fecharCartao();
   const souProf = estado.perfil === 'profissional';
   const c = tela('Agenda', `
     <button class="btn" id="ant">‹</button><input type="date" id="dia" value="${vis.dia}"><button class="btn" id="prox">›</button>
     <button class="btn" id="hoje">Hoje</button>
-    <select id="modo"><option value="dia">Dia</option><option value="semana">Semana</option></select>
+    <select id="modo">${Object.entries(MODOS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
     ${souProf ? '' : '<select id="prof"><option value="">Todos os profissionais</option></select>'}
     ${souProf ? '<button class="btn" id="cal">Ligar ao Google/Outlook</button>' : '<button class="btn" id="lemb">📲 Lembretes</button><button class="btn" id="relac">💬 Relacionamento</button><button class="btn primario" id="novo">+ Agendamento</button>'}`);
   if (souProf) vis.prof = estado.profissionalId;
   // Agendar a partir da ficha (13/11/2026): contexto em sessionStorage 'agendar_para'
   let pre = null; try { pre = !souProf && JSON.parse(sessionStorage.getItem('agendar_para') || 'null'); } catch { pre = null; }
   if (pre && !pre.aplicado) { if (pre.prof) { vis.prof = pre.prof; vis.modo = 'semana'; } vis.dia = hojeIso(); pre.aplicado = true; sessionStorage.setItem('agendar_para', JSON.stringify(pre)); }
+  guardarVis();
 
   const cfg = estado.clinica.config || (await sb.from('clinicas').select('config').eq('id', estado.clinica.id).single()).data?.config
     || { abre: '07:30', fecha: '19:30', intervalo_min: 15, pausas: [] };
@@ -58,7 +87,11 @@ export async function render() {
   if (!souProf) $('#prof').innerHTML += (profs || []).map((p) => `<option value="${p.id}">${esc(p.nome)}</option>`).join('');
   $('#modo').value = vis.modo; if ($('#prof')) $('#prof').value = vis.prof;
 
-  const ir = (n) => { vis.dia = somaDias(vis.dia, n * (vis.modo === 'semana' ? 7 : 1)); render(); };
+  const ir = (n) => {
+    if (vis.modo === 'mes') { const d = new Date(vis.dia + 'T12:00'); d.setDate(1); d.setMonth(d.getMonth() + n); vis.dia = d.toLocaleDateString('sv'); }
+    else vis.dia = somaDias(vis.dia, n * (['semana', 'lista_semana'].includes(vis.modo) ? 7 : 1));
+    render();
+  };
   $('#ant').onclick = () => ir(-1); $('#prox').onclick = () => ir(1);
   $('#hoje').onclick = () => { vis.dia = hojeIso(); render(); };
   $('#dia').onchange = (e) => { vis.dia = e.target.value; render(); };
@@ -69,30 +102,34 @@ export async function render() {
   $('#lemb')?.addEventListener('click', () => lembretes(cfg, profs, render));
   $('#relac')?.addEventListener('click', () => import('./relacionamento.js').then((r) => r.abrir()));
   const SALAS = cfg.salas?.length ? cfg.salas : [];
+  const DIAS_ABERTOS = cfg.dias || [1, 2, 3, 4, 5, 6];
+  if (!profs?.length) { c.innerHTML = '<div class="cartao vazio">Cadastre profissionais para usar a agenda.</div>'; return; }
 
-  // Colunas
-  let colunas, de, ate;
-  if (vis.modo === 'semana') {
-    if (!vis.prof) { c.innerHTML = '<div class="cartao vazio">Escolha um profissional para ver a semana.</div>'; return; }
-    const d0 = new Date(vis.dia + 'T12:00'); const seg = somaDias(vis.dia, -((d0.getDay() + 6) % 7));
-    colunas = Array.from({ length: 7 }, (_, i) => somaDias(seg, i)).filter((d) => (cfg.dias || [1, 2, 3, 4, 5, 6]).includes(new Date(d + 'T12:00').getDay()))
-      .map((d) => ({ titulo: new Date(d + 'T12:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }), dia: d, prof: vis.prof }));
-    de = colunas[0].dia; ate = colunas.at(-1).dia;
+  // Período e colunas conforme a visão
+  let colunas = [], de, ate;
+  if (vis.modo === 'semana' || vis.modo === 'lista_semana') {
+    const seg = segundaDe(vis.dia);
+    const dias = Array.from({ length: 7 }, (_, i) => somaDias(seg, i)).filter((d) => DIAS_ABERTOS.includes(new Date(d + 'T12:00').getDay()));
+    colunas = dias.map((d) => ({ titulo: new Date(d + 'T12:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }), dia: d, prof: vis.prof || null }));
+    de = dias[0]; ate = dias.at(-1);
+  } else if (vis.modo === 'mes') {
+    const d1 = vis.dia.slice(0, 8) + '01', ult = new Date(d1 + 'T12:00'); ult.setMonth(ult.getMonth() + 1); ult.setDate(0);
+    de = segundaDe(d1); ate = somaDias(segundaDe(ult.toLocaleDateString('sv')), 6);
   } else {
     const lista = vis.prof ? profs.filter((p) => p.id === vis.prof) : profs;
     colunas = lista.map((p) => ({ titulo: p.nome, dia: vis.dia, prof: p.id, cor: p.cor }));
     de = ate = vis.dia;
   }
-  if (!colunas.length) { c.innerHTML = '<div class="cartao vazio">Cadastre profissionais para usar a agenda.</div>'; return; }
 
-  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, paciente_plano_id, autorizacao_id, serie_id, lembrete_enviado_em, pacientes(nome, telefone, celular)')
+  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, paciente_plano_id, autorizacao_id, serie_id, lembrete_enviado_em, pacientes(nome, telefone, celular), paciente_planos(contratos(nome))')
     .eq('clinica_id', estado.clinica.id).gte('inicio', new Date(de + 'T00:00').toISOString()).lt('inicio', new Date(somaDias(ate, 1) + 'T00:00').toISOString())
-    .neq('status', 'cancelado').order('inicio');
+    .order('inicio');
   if (vis.prof) q = q.eq('profissional_id', vis.prof);
-  const { data: ats, error } = await q;
+  const { data: todos, error } = await q;
   if (error) return falha(error);
-  // Item 31 (db/043): "sessão N de X" de cada atendimento ligado a senha — uma chamada para a tela inteira
-  const ids = ats.filter((a) => a.autorizacao_id).map((a) => a.id), num = {};
+  // Item 31 (db/043): "sessão N de X" de cada atendimento ligado a senha — uma chamada para a tela inteira (fora do mês)
+  const num = {};
+  const ids = vis.modo === 'mes' ? [] : todos.filter((a) => a.autorizacao_id && a.status !== 'cancelado').map((a) => a.id);
   if (ids.length) { const { data: ns } = await sb.rpc('numeracao_sessoes', { p_atendimentos: ids }); (ns || []).forEach((x) => (num[x.atendimento_id] = x)); }
 
   const ini = minDe(cfg.abre), fimMin = minDe(cfg.fecha), altura = (fimMin - ini) * PX_MIN;
@@ -104,33 +141,175 @@ export async function render() {
   };
   const naPausa = (min, dia) => pausasDoDia(dia).some((x) => min >= x.de && min < x.ate);
   const corDe = (pid) => profs.find((p) => p.id === pid)?.cor || '#F8781D';
+  const nomeProf = (pid) => profs.find((p) => p.id === pid)?.nome || '';
+
+  // Filtros (no cliente)
+  const convs = [...new Set(todos.map(nomeConv))].sort();
+  const servs = [...new Set(todos.map((a) => a.servico).filter(Boolean))].sort();
+  const salasVistas = [...new Set([...SALAS, ...todos.map((a) => a.sala).filter(Boolean)])];
+  const passa = (a) => {
+    const f = vis.f;
+    if (f.status ? a.status !== f.status : a.status === 'cancelado') return false;
+    if (f.sala && a.sala !== f.sala) return false;
+    if (f.conv && (f.conv === '_conv' ? !a.paciente_plano_id : nomeConv(a) !== f.conv)) return false;
+    if (f.serv && a.servico !== f.serv) return false;
+    if (f.pac && !String(a.pacientes?.nome || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
+      .includes(f.pac.toLowerCase().normalize('NFD').replace(/\p{M}/gu, ''))) return false;
+    return true;
+  };
+  const filtrosAtivos = Object.values(vis.f).filter(Boolean).length;
 
   import('./guia.js').then((g) => g.alertaSemSenha($('#alerta-senha'), render)).catch(() => {});
   c.innerHTML = `${pre ? `<div class="faixa-agendar"><span>📅 Agendando <strong>${esc(pre.nome)}</strong> · ${esc(pre.resumo || '')} — clique num horário livre</span>
-    <a href="#paciente-${pre.paciente}-autorizacoes" id="pre-voltar">Voltar à ficha</a><button class="btn pequeno" id="pre-canc">Cancelar</button></div>` : ''}<div id="alerta-senha"></div><div class="cartao agenda-wrap"><div class="agenda" style="grid-template-columns:56px repeat(${colunas.length}, minmax(150px,1fr))">
-    <div></div>${colunas.map((col) => `<div class="ag-tit">${esc(col.titulo)}</div>`).join('')}
-    <div class="ag-horas" style="height:${altura}px">${horas.map((m) => `<span style="top:${(m - ini) * PX_MIN}px">${String(m / 60).padStart(2, '0')}:00</span>`).join('')}</div>
-    ${colunas.map((col, ci) => `<div class="ag-col" data-ci="${ci}" style="height:${altura}px">
-      ${horas.map((m) => `<i style="top:${(m - ini) * PX_MIN}px"></i>`).join('')}
-      ${pausasDoDia(col.dia).map((x) => `<div class="ag-pausa" style="top:${(x.de - ini) * PX_MIN}px;height:${(x.ate - x.de) * PX_MIN}px">${esc(x.nome)}</div>`).join('')}
-      ${ats.filter((a) => a.profissional_id === col.prof && new Date(a.inicio).toLocaleDateString('sv') === col.dia).map((a) => {
-        const s = new Date(a.inicio), e = new Date(a.fim), top = (s.getHours() * 60 + s.getMinutes() - ini) * PX_MIN;
-        const h = Math.max(22, ((e - s) / 6e4) * PX_MIN - 2);
-        return `<div class="ag-ev st-${a.status}" data-id="${a.id}" style="top:${top}px;height:${h}px;border-left-color:${corDe(a.profissional_id)}">
-          <b>${hm(a.inicio)} ${esc(a.pacientes?.nome || '')}${seloSessao(num[a.id])}</b><span>${esc(a.servico || '')}${a.sala ? ' · ' + esc(a.sala) : ''} · ${STATUS[a.status]}</span></div>`;
-      }).join('')}</div>`).join('')}
-  </div></div>`;
-
+    <a href="#paciente-${pre.paciente}-autorizacoes" id="pre-voltar">Voltar à ficha</a><button class="btn pequeno" id="pre-canc">Cancelar</button></div>` : ''}<div id="alerta-senha"></div>
+    <div class="cartao ag-filtros">
+      <input id="f-pac" placeholder="🔍 Paciente" value="${esc(vis.f.pac)}">
+      <select id="f-status"><option value="">Status: ativos</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+      ${salasVistas.length ? `<select id="f-sala"><option value="">Sala: todas</option>${salasVistas.map((s) => `<option>${esc(s)}</option>`).join('')}</select>` : ''}
+      <select id="f-conv"><option value="">Convênio: todos</option><option value="_conv">Só convênios</option>${convs.map((s) => `<option>${esc(s)}</option>`).join('')}</select>
+      <select id="f-serv"><option value="">Serviço: todos</option>${servs.map((s) => `<option>${esc(s)}</option>`).join('')}</select>
+      <button class="btn pequeno" id="f-limpar" ${filtrosAtivos ? '' : 'hidden'}>Limpar filtros</button>
+      <span class="muted" id="f-cont"></span>
+    </div>
+    <div id="ag-corpo"></div>`;
+  [['f-status', 'status'], ['f-sala', 'sala'], ['f-conv', 'conv'], ['f-serv', 'serv']].forEach(([id, k]) => {
+    const el = $('#' + id); if (!el) return;
+    if (vis.f[k] && ![...el.options].some((o) => o.value === vis.f[k])) el.add(new Option(vis.f[k], vis.f[k]));
+    el.value = vis.f[k]; el.onchange = () => { vis.f[k] = el.value; guardarVis(); desenhar(); };
+  });
+  let tp; $('#f-pac').oninput = (e) => { clearTimeout(tp); tp = setTimeout(() => { vis.f.pac = e.target.value.trim(); guardarVis(); desenhar(); }, 200); };
+  $('#f-limpar').onclick = () => { vis.f = { ...FILTRO0 }; guardarVis(); render(); };
   $('#pre-canc')?.addEventListener('click', () => { sessionStorage.removeItem('agendar_para'); render(); });
   $('#pre-voltar')?.addEventListener('click', () => sessionStorage.removeItem('agendar_para'));
-  $$('.ag-col', c).forEach((el) => (el.onclick = (e) => {
-    if (e.target.closest('.ag-ev') || souProf) return;
-    const col = colunas[el.dataset.ci], y = e.clientY - el.getBoundingClientRect().top;
-    const passo = cfg.intervalo_min || 10, min = ini + Math.floor(y / PX_MIN / passo) * passo;
-    if (naPausa(min, col.dia)) return toast('Fora do expediente. Para encaixe, use + Agendamento e ajuste a hora.');
-    editar(null, { dia: col.dia, min, prof: col.prof, pre });
-  }));
-  $$('.ag-ev', c).forEach((el) => (el.onclick = () => editar(ats.find((a) => a.id === el.dataset.id))));
+
+  let ats = [];
+  function desenhar() {
+    fecharCartao();
+    ats = todos.filter(passa);
+    const n = Object.values(vis.f).filter(Boolean).length;
+    $('#f-limpar').hidden = !n;
+    $('#f-cont').textContent = `${ats.length} atendimento(s)${n ? ' com os filtros' : ''}`;
+    const corpo = $('#ag-corpo');
+    if (vis.modo === 'mes') return desenharMes(corpo);
+    if (vis.modo.startsWith('lista')) return desenharLista(corpo);
+    desenharGrade(corpo);
+  }
+
+  function desenharGrade(corpo) {
+    const todosProfs = vis.modo === 'semana' && !vis.prof;
+    corpo.innerHTML = `<div class="cartao agenda-wrap"><div class="agenda" style="grid-template-columns:56px repeat(${colunas.length}, minmax(${todosProfs ? 170 : 150}px,1fr))">
+    <div></div>${colunas.map((col) => `<div class="ag-tit${col.dia === hojeIso() && vis.modo === 'semana' ? ' hoje' : ''}">${esc(col.titulo)}</div>`).join('')}
+    <div class="ag-horas" style="height:${altura}px">${horas.map((m) => `<span style="top:${(m - ini) * PX_MIN}px">${String(m / 60).padStart(2, '0')}:00</span>`).join('')}</div>
+    ${colunas.map((col, ci) => {
+      const evs = ats.filter((a) => (!col.prof || a.profissional_id === col.prof) && new Date(a.inicio).toLocaleDateString('sv') === col.dia);
+      const fx = faixas(evs);
+      return `<div class="ag-col" data-ci="${ci}" style="height:${altura}px">
+      ${horas.map((m) => `<i style="top:${(m - ini) * PX_MIN}px"></i>`).join('')}
+      ${pausasDoDia(col.dia).map((x) => `<div class="ag-pausa" style="top:${(x.de - ini) * PX_MIN}px;height:${(x.ate - x.de) * PX_MIN}px">${esc(x.nome)}</div>`).join('')}
+      ${evs.map((a) => {
+        const s = new Date(a.inicio), e = new Date(a.fim), top = (s.getHours() * 60 + s.getMinutes() - ini) * PX_MIN;
+        const h = Math.max(22, ((e - s) / 6e4) * PX_MIN - 2), { i, n } = fx[a.id];
+        const lado = n > 1 ? `left:calc(${(i / n) * 100}% + 2px);right:auto;width:calc(${100 / n}% - 4px);` : '';
+        return `<div class="ag-ev st-${a.status}" data-id="${a.id}" title="${esc(`${hm(a.inicio)}–${hm(a.fim)} ${a.pacientes?.nome || ''} · ${nomeProf(a.profissional_id)}`)}" style="top:${top}px;height:${h}px;${lado}border-left-color:${corDe(a.profissional_id)}">
+          <b>${hm(a.inicio)} ${esc(a.pacientes?.nome || '')}${seloSessao(num[a.id])}</b><span>${todosProfs ? esc(primeiroNome(nomeProf(a.profissional_id))) + ' · ' : ''}${esc(a.servico || '')}${a.sala ? ' · ' + esc(a.sala) : ''} · ${STATUS[a.status]}</span></div>`;
+      }).join('')}</div>`; }).join('')}
+  </div></div>`;
+    $$('.ag-col', corpo).forEach((el) => (el.onclick = (e) => {
+      if (e.target.closest('.ag-ev') || souProf) return;
+      const col = colunas[el.dataset.ci], y = e.clientY - el.getBoundingClientRect().top;
+      const passo = cfg.intervalo_min || 10, min = ini + Math.floor(y / PX_MIN / passo) * passo;
+      if (naPausa(min, col.dia)) return toast('Fora do expediente. Para encaixe, use + Agendamento e ajuste a hora.');
+      editar(null, { dia: col.dia, min, prof: col.prof || '', pre });
+    }));
+    $$('.ag-ev', corpo).forEach((el) => (el.onclick = (e) => { e.stopPropagation(); cartao(ats.find((a) => a.id === el.dataset.id), el); }));
+  }
+
+  function desenharMes(corpo) {
+    const mesRef = vis.dia.slice(0, 7), semanas = [];
+    for (let d = de; d <= ate; d = somaDias(d, 7)) semanas.push(Array.from({ length: 7 }, (_, i) => somaDias(d, i)).filter((x) => DIAS_ABERTOS.includes(new Date(x + 'T12:00').getDay())));
+    const porDia = {}; ats.forEach((a) => (porDia[new Date(a.inicio).toLocaleDateString('sv')] ||= []).push(a));
+    const cab = semanas[0].map((d) => DIAS_SEM[new Date(d + 'T12:00').getDay()]);
+    corpo.innerHTML = `<div class="cartao ag-mes" style="grid-template-columns:repeat(${cab.length},1fr)">
+      ${cab.map((t) => `<div class="ag-mes-cab">${t}</div>`).join('')}
+      ${semanas.flat().map((d) => { const l = porDia[d] || [];
+        return `<div class="ag-mes-dia${d.slice(0, 7) !== mesRef ? ' fora' : ''}${d === hojeIso() ? ' hoje' : ''}" data-dia="${d}">
+          <div class="ag-mes-n"><span>${Number(d.slice(8))}</span>${l.length ? `<em>${l.length}</em>` : ''}</div>
+          ${l.slice(0, 4).map((a) => `<div class="ag-mes-ev st-${a.status}" style="border-left-color:${corDe(a.profissional_id)}">${hm(a.inicio)} ${esc(primeiroNome(a.pacientes?.nome))}</div>`).join('')}
+          ${l.length > 4 ? `<div class="muted ag-mes-mais">+${l.length - 4}</div>` : ''}</div>`; }).join('')}
+    </div><p class="muted">Clique num dia para abrir a visão do dia.</p>`;
+    $$('.ag-mes-dia', corpo).forEach((el) => (el.onclick = () => { vis.dia = el.dataset.dia; vis.modo = 'dia'; render(); }));
+  }
+
+  function desenharLista(corpo) {
+    const porDia = {}; ats.forEach((a) => (porDia[new Date(a.inicio).toLocaleDateString('sv')] ||= []).push(a));
+    const dias = vis.modo === 'lista_dia' ? [vis.dia] : colunas.map((x) => x.dia);
+    corpo.innerHTML = dias.map((d) => { const l = porDia[d] || [];
+      if (!l.length && vis.modo === 'lista_semana') return '';
+      return `<div class="cartao"><h4 class="ag-lista-dia">${new Date(d + 'T12:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' })} <span class="muted">· ${l.length} atendimento(s)</span></h4>
+      ${l.length ? `<table class="tabela ag-lista"><thead><tr><th>Hora</th><th>Paciente</th><th>Profissional</th><th>Serviço · sala</th><th>Convênio</th><th>Status</th><th></th></tr></thead><tbody>
+      ${l.map((a) => `<tr data-id="${a.id}"><td style="white-space:nowrap">${hm(a.inicio)}–${hm(a.fim)}</td>
+        <td><a href="#paciente-${a.paciente_id}">${esc(a.pacientes?.nome || '')}</a>${seloSessao(num[a.id])}</td>
+        <td><span class="ag-bolinha" style="background:${corDe(a.profissional_id)}"></span>${esc(nomeProf(a.profissional_id))}</td>
+        <td>${esc(a.servico || '')}${a.sala ? ' · ' + esc(a.sala) : ''}</td><td>${esc(nomeConv(a))}</td>
+        <td><span class="ag-st st-${a.status}">${STATUS[a.status]}</span></td>
+        <td><button class="btn pequeno" data-abrir="${a.id}">Abrir</button></td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhum atendimento.</div>'}</div>`; }).join('')
+      || '<div class="cartao vazio">Nenhum atendimento nesta semana com os filtros escolhidos.</div>';
+    $$('[data-abrir]', corpo).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); cartao(ats.find((a) => a.id === b.dataset.abrir), b); }));
+  }
+
+  // ---------- Cartão rápido (clique no atendimento) ----------
+  function cartao(a, el) {
+    fecharCartao();
+    if (!a) return;
+    const meu = a.profissional_id === estado.profissionalId, aberto = !['atendido', 'cancelado', 'faltou'].includes(a.status);
+    const wpp = !souProf && ['agendado', 'confirmado'].includes(a.status) ? linkWhats(cfg, a, nomeProf(a.profissional_id)) : null;
+    const tel = a.pacientes?.celular || a.pacientes?.telefone;
+    pop = document.createElement('div'); pop.className = 'ag-pop'; pop.setAttribute('role', 'dialog');
+    pop.innerHTML = `<button class="ag-pop-x" aria-label="Fechar">×</button>
+      <div class="ag-pop-h" style="border-left-color:${corDe(a.profissional_id)}"><b>${hm(a.inicio)}–${hm(a.fim)}</b> · ${new Date(a.inicio).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</div>
+      <dl>
+        <dt>Paciente</dt><dd><a href="#paciente-${a.paciente_id}">${esc(a.pacientes?.nome || '')}</a></dd>
+        ${tel ? `<dt>Celular</dt><dd>${esc(tel)}</dd>` : ''}
+        <dt>Profissional</dt><dd>${esc(nomeProf(a.profissional_id))}</dd>
+        <dt>Serviço</dt><dd>${esc(a.servico || '—')}${a.sala ? ' · ' + esc(a.sala) : ''}</dd>
+        <dt>Convênio</dt><dd>${esc(nomeConv(a))}</dd>
+        <dt>Status</dt><dd><span class="ag-st st-${a.status}">${STATUS[a.status]}</span>${a.lembrete_enviado_em ? ' <span class="selo ok">lembrete enviado</span>' : ''}</dd>
+        ${a.observacao ? `<dt>Obs.</dt><dd>${esc(a.observacao)}</dd>` : ''}
+      </dl>${linhaSessao(num[a.id])}
+      ${!souProf && aberto ? `<div class="ag-pop-st">${['confirmado', 'presente', 'faltou'].filter((k) => k !== a.status).map((k) => `<button class="btn pequeno" data-pst="${k}">${k === 'presente' ? 'Chegou' : STATUS[k]}</button>`).join('')}</div>` : ''}
+      <div class="ag-pop-acoes">
+        ${meu && aberto ? '<button class="btn pequeno primario" data-pa="iniciar">▶ Iniciar atendimento</button>' : ''}
+        ${a.status !== 'atendido' && a.status !== 'cancelado' ? '<button class="btn pequeno" data-pa="atendido">✓ Atendido</button>' : ''}
+        ${meu && a.status === 'atendido' ? '<button class="btn pequeno" data-pa="evoluir">Evoluir</button>' : ''}
+        ${wpp ? `<a class="btn pequeno" target="_blank" rel="noopener" href="${esc(wpp)}" data-pa="wpp">📲 WhatsApp</a>` : ''}
+        <button class="btn pequeno" data-pa="editar">✎ Detalhes</button>
+      </div>`;
+    document.body.appendChild(pop);
+    const r = el.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    let left = r.right + 8; if (left + w > innerWidth - 8) left = Math.max(8, r.left - w - 8);
+    pop.style.left = left + 'px'; pop.style.top = Math.max(8, Math.min(r.top, innerHeight - h - 8)) + 'px';
+    const fora = (e) => { if (pop && !pop.contains(e.target)) { fecharCartao(); document.removeEventListener('mousedown', fora); } };
+    setTimeout(() => document.addEventListener('mousedown', fora), 0);
+    pop.onkeydown = (e) => { if (e.key === 'Escape') fecharCartao(); };
+    $('.ag-pop-x', pop).onclick = fecharCartao;
+    $$('[data-pst]', pop).forEach((b) => (b.onclick = async () => {
+      const { error: e } = await sb.from('atendimentos').update({ status: b.dataset.pst, atualizado_em: new Date().toISOString() }).eq('id', a.id);
+      if (e) return falha(e); toast(`Status: ${STATUS[b.dataset.pst]}.`); render();
+    }));
+    $$('[data-pa]', pop).forEach((b) => (b.onclick = async () => {
+      const acao = b.dataset.pa;
+      if (acao === 'editar') { fecharCartao(); return editar(a); }
+      if (acao === 'wpp') { await sb.from('atendimentos').update({ lembrete_enviado_em: new Date().toISOString() }).eq('id', a.id); return setTimeout(render, 800); }
+      if (acao === 'atendido') { fecharCartao(); const { fecharAtendimento } = await import('./guia.js'); return fecharAtendimento(a, render); }
+      if (acao === 'iniciar' && ['agendado', 'confirmado'].includes(a.status)) {
+        const { error: e } = await sb.from('atendimentos').update({ status: 'presente', atualizado_em: new Date().toISOString() }).eq('id', a.id);
+        if (e) return falha(e);
+      }
+      fecharCartao(); location.hash = `#paciente-${a.paciente_id}-prontuario:${a.id}`;   // iniciar/evoluir: abre o registro ligado ao atendimento
+    }));
+  }
+
+  desenhar();
 
   // ---------- Modal de agendamento ----------
   function editar(a, novo = {}) {

@@ -79,6 +79,16 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 - **Relacionamento (db/030, `relacionamento.js`):** função `relacionamento(clinica, dias)` → aniversários + reavaliações (`config.relacionamento.reavaliacoes`:
   nome, dias, códigos); modelo opt-out (`consentimento_comunicacao` padrão true, `comunicacao_optout_em` ao pedir para sair; rodapé "responda SAIR").
 
+- **Agenda visual (15/11/2026, inspirada no ZenFisio):** visões Dia · Semana (1 profissional ou todos, atendimentos sobrepostos em faixas lado a lado) · Mês ·
+  Lista do dia · Lista da semana; filtros no cliente (status — inclui ver cancelados —, sala, convênio/Particular, serviço, paciente sem acento) guardados em
+  `sessionStorage.agenda_vis`. Clique no atendimento abre o **cartão rápido** (`.ag-pop`): dados, sessão N/X, status rápido (Confirmado/Chegou/Faltou),
+  **▶ Iniciar atendimento** (só o profissional do atendimento: marca `presente` e abre `#paciente-<id>-prontuario:<at>`), ✓ Atendido (fecha guia), WhatsApp, Detalhes (modal antigo).
+  Nome do convênio vem do embed `paciente_planos(contratos(nome))`; quem não lê contratos pela RLS vê só "Convênio". Arrastar e soltar (resto do item 12) ainda não.
+- **Avaliação por cliques (db/044, item 15, `avaliacao-cliques.js`):** roteiros em chips por modelo — `fisio_avaliacao`, `fisio_esportiva` (novo: modalidade e carga,
+  agachamento unipodal, hop test LSI), `soapn` (anamnese → S, última linha AF), `psico_registro`, `medica_consulta` (novo, área `medicina`, CRM). Bandeiras vermelhas
+  com aviso, testes especiais por região (1 clique +, 2 −, 3 limpa; teste de região desmarcada sai do texto), PSFS com média. Cada clique regenera o texto nos campos;
+  texto digitado à mão não é apagado (`_g` guarda o último texto gerado por campo). Escolhas salvas em `conteudo.cliques`.
+
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).

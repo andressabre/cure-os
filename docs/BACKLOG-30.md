@@ -67,10 +67,10 @@ Legenda: **Eixo** F = fluidez · A = automação · I = inovação · S = segura
 | 9 | **Check-in de 1 tela**: ao marcar "chegou", painel com pendências do atendimento (dado faltando, senha/saldo, guia a assinar, pagamento particular) e botões de resolver ali | F | M | [S] | Atendimento de convênio fecha sem sair da tela |
 | 10 | **Painel de pendências por perfil**: recepção (autorizar guia, assinatura faltando), profissional (evolução sem assinar, senha vencendo, reavaliação), gestão (lote a enviar, retorno a conciliar, backup) | F | M | [S] | Cada perfil abre o app na sua lista do dia |
 | 11 | **Command palette (Ctrl+K)**: buscar paciente, pular de módulo, ações rápidas ("novo agendamento", "fechar lote") | F | B | [H] | Qualquer tela em ≤ 2 teclas |
-| 12 | **Agenda visual**: arrastar e soltar, visão dia/semana por profissional e por sala, cor por status, encaixe | F | M | [S] | Remarcar = arrastar; conflito de sala continua avisando |
+| 12 | **Agenda visual**: arrastar e soltar, visão dia/semana por profissional e por sala, cor por status, encaixe | F | M | [S] | Remarcar = arrastar; conflito de sala continua avisando — **parcial 15/11/2026**: mês, semana de todos, listas, filtros e cartão rápido feitos; falta arrastar |
 | 13 | **Lista de espera com oferta de vaga**: cancelou → sistema lista quem espera aquele profissional/horário e gera mensagem wa.me em 1 clique | F | M | [S] | Vaga cancelada preenchida sem ligação |
 | 14 | **Ficha do paciente como linha do tempo**: atendimentos, guias, pagamentos, documentos e (só do autor) prontuário em uma sequência filtrável | F | M | [S] | Histórico completo sem trocar de aba |
-| 15 | **Avaliação por cliques → texto** (padrão TocoGO): fisio completa, nutri, psico, com escalas validadas calculadas e parágrafo pronto no prontuário | F | A | [F] spec → [S] | Avaliação de fisio em < 5 min com laudo gerado |
+| 15 | **Avaliação por cliques → texto** (padrão TocoGO): fisio completa, nutri, psico, com escalas validadas calculadas e parágrafo pronto no prontuário | F | A | [F] spec → [S] | ✅ **Feito 15/11/2026** (db/044): fisio geral e esportiva, nutri, psico e consulta médica |
 | 16 | **PWA leve**: manifest + service worker cacheando só o shell (nunca dados), ícone no celular, abre offline na tela de login | F | B | [H] | Instalável no celular; Lighthouse PWA ok |
 
 ### Automação (tirar trabalho da recepção e da gestão)

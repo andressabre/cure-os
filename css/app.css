@@ -267,3 +267,55 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 .chip-link{font:inherit;font-size:12.5px;border:1px solid var(--linha);background:var(--azul-claro);border-radius:14px;padding:2px 10px;cursor:pointer;color:var(--texto)}
 .chip-link:disabled{cursor:default;opacity:.7}
 .icone-check{white-space:nowrap;flex-direction:row}
+
+/* ---------- Agenda: filtros, mês, listas e cartão rápido (15/11/2026) ---------- */
+.ag-filtros{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px}
+.ag-filtros input,.ag-filtros select{width:auto;min-width:130px;max-width:220px}
+.ag-filtros #f-cont{margin-left:auto;font-size:13px}
+.agenda-wrap{max-height:calc(100vh - 230px)}
+.ag-tit.hoje{color:var(--laranja-esc);box-shadow:inset 0 -3px 0 var(--laranja)}
+.ag-mes{display:grid;padding:0;overflow:hidden}
+.ag-mes-cab{padding:8px;font-weight:600;font-size:13px;text-align:center;border-bottom:1px solid var(--linha);background:var(--branco)}
+.ag-mes-dia{min-height:104px;border-right:1px solid var(--linha-fraca);border-bottom:1px solid var(--linha-fraca);padding:4px 6px;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
+.ag-mes-dia:hover{background:var(--laranja-claro)}
+.ag-mes-dia.fora{background:var(--papel);opacity:.65}
+.ag-mes-dia.hoje .ag-mes-n span{background:var(--laranja);color:#fff;border-radius:10px;padding:0 6px}
+.ag-mes-n{display:flex;justify-content:space-between;font-weight:600;font-size:13px}
+.ag-mes-n em{font-style:normal;font-size:11.5px;background:var(--papel);border-radius:8px;padding:0 6px;color:var(--texto-2)}
+.ag-mes-ev{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid var(--laranja);padding-left:4px;border-radius:2px}
+.ag-mes-ev.st-confirmado{background:var(--azul-claro)}.ag-mes-ev.st-presente{background:var(--amarelo-claro)}.ag-mes-ev.st-atendido{background:var(--verde-claro)}.ag-mes-ev.st-faltou{background:var(--vermelho-claro);text-decoration:line-through}.ag-mes-ev.st-cancelado{opacity:.5;text-decoration:line-through}
+.ag-mes-mais{font-size:11.5px}
+.ag-lista-dia{text-transform:capitalize;margin-bottom:8px}
+.ag-lista em.ses{font-style:normal;font-weight:600;font-size:11px;padding:0 4px;border-radius:3px;margin-left:6px;background:var(--papel)}
+.ag-bolinha{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.ag-st{display:inline-block;padding:1px 8px;border-radius:4px;font-size:12.5px;font-weight:600;background:var(--papel);color:var(--texto-2)}
+.ag-st.st-confirmado{background:var(--azul-claro);color:#2B5A85}.ag-st.st-presente{background:var(--amarelo-claro);color:var(--amarelo)}
+.ag-st.st-atendido{background:var(--verde-claro);color:var(--verde)}.ag-st.st-faltou,.ag-st.st-cancelado{background:var(--vermelho-claro);color:var(--vermelho)}
+.ag-pop{position:fixed;z-index:60;width:320px;max-width:calc(100vw - 16px);background:var(--branco);border:1px solid var(--linha);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px 14px;font-size:13.5px}
+.ag-pop-x{position:absolute;top:6px;right:8px;border:0;background:none;font-size:20px;line-height:1;cursor:pointer;color:var(--texto-3)}
+.ag-pop-h{border-left:4px solid var(--laranja);padding-left:8px;margin:0 22px 8px 0;font-size:14.5px}
+.ag-pop dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0 0 8px}
+.ag-pop dt{color:var(--texto-3);font-size:12.5px}.ag-pop dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.ag-pop-st,.ag-pop-acoes{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ag-pop-st{padding-top:8px;border-top:1px solid var(--linha-fraca)}
+@media (max-width:820px){.ag-filtros input,.ag-filtros select{flex:1 1 140px;max-width:none}.ag-filtros #f-cont{margin-left:0;width:100%}.ag-mes-dia{min-height:72px}.ag-mes-ev{display:none}}
+
+/* ---------- Avaliação por cliques (item 15) ---------- */
+.ck-painel{border:1px solid var(--linha);border-radius:8px;margin:10px 0 14px;background:#FBFBFA}
+.ck-painel>summary{cursor:pointer;padding:9px 12px;font-weight:600}
+.ck-painel #ck{padding:0 12px 10px}
+.ck-bloco{border:0;border-top:1px solid var(--linha-fraca);margin:0;padding:10px 0 4px}
+.ck-bloco legend{font-weight:600;font-size:13.5px;padding:0 6px 0 0;color:var(--laranja-esc)}
+.ck-q{display:block;margin:6px 0 8px}
+.ck-rot{display:block;font-size:12.5px;color:var(--texto-2);margin-bottom:4px}
+.ck-ops{display:flex;flex-wrap:wrap;gap:5px}
+.ck{border:1px solid var(--linha);background:var(--branco);border-radius:14px;padding:3px 10px;font:inherit;font-size:13px;cursor:pointer;line-height:1.4}
+.ck:hover{border-color:var(--laranja)}
+.ck.on{background:var(--laranja);border-color:var(--laranja);color:#fff}
+.ck.ck-alerta.on{background:var(--vermelho);border-color:var(--vermelho)}
+.ck.ck-ok.on{background:var(--verde);border-color:var(--verde)}
+.ck-eva .ck{min-width:32px;padding:3px 0;text-align:center}
+.ck-teste.pos{background:var(--vermelho-claro);border-color:var(--vermelho);color:var(--vermelho);font-weight:600}
+.ck-teste.neg{background:var(--verde-claro);border-color:var(--verde);color:var(--verde)}
+.ck-campo input{max-width:420px}
+.ck-aviso{background:var(--vermelho-claro);color:var(--vermelho);border-left:3px solid var(--vermelho);padding:8px 12px;border-radius:0 6px 6px 0;margin:8px 0;font-weight:600;font-size:13.5px}

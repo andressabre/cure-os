@@ -1,9 +1,10 @@
 // Módulo Prontuário (db/023). Sigilo: cada profissional lê e escreve SÓ os próprios registros (RLS por autor).
-// Modelos por área + campo livre. Sem etapa de assinatura (db/039): salvar grava o registro como final e ele pode ser editado depois
+// Modelos por área + campo livre; modelos com ⚡ têm avaliação por cliques (avaliacao-cliques.js, item 15). Sem etapa de assinatura (db/039): salvar grava o registro como final e ele pode ser editado depois
 // (versão anterior guardada em prontuario_versoes pelo gatilho); adendos e anexos (bucket "prontuario") ficam dentro do registro expandido.
 // Duas entradas: aba "Prontuário" da ficha do paciente (abaProntuario) e rota #prontuarios (meus pacientes + importação dos .txt antigos).
 import { sb, estado, $, $$, esc, data, tela, toast, falha, modal, confirmar } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo } from './documentos.js';
+import { montarPainel, temRoteiro, ROTEIROS } from './avaliacao-cliques.js';
 
 const OBS = ['obs', 'Observações (campo livre)'];
 export const MODELOS = {
@@ -19,16 +20,25 @@ export const MODELOS = {
     ['exame', 'Exame físico', 'Inspeção, palpação, ADM, força, testes especiais, marcha/pisada'],
     ['diagnostico', 'Diagnóstico e prognóstico fisioterapêutico', 'Cinético-funcional'],
     ['objetivos', 'Objetivos terapêuticos'], ['plano', 'Plano terapêutico', 'Condutas, frequência, nº de sessões previsto'], OBS] },
+  fisio_esportiva: { nome: 'Avaliação de fisioterapia esportiva', area: 'fisioterapia', campos: [
+    ['esporte', 'Modalidade e carga de treino'], ['queixa', 'Queixa principal'], ['hda', 'História da doença atual'],
+    ['historico', 'Antecedentes, medicamentos, exames de imagem'], ['eva', 'Dor (EVA 0–10)', '', 'num'],
+    ['exame', 'Exame físico e testes funcionais', 'Inspeção, palpação, ADM, força, testes especiais, agachamento unipodal, hop test'],
+    ['diagnostico', 'Diagnóstico e prognóstico fisioterapêutico', 'Cinético-funcional'],
+    ['objetivos', 'Objetivos terapêuticos'], ['plano', 'Plano terapêutico e retorno ao esporte', 'Condutas, frequência, nº de sessões, critérios de retorno'], OBS] },
   fisio_evolucao: { nome: 'Evolução de sessão (fisioterapia)', area: 'fisioterapia', campos: [
     ['sessao', 'Sessão nº', '', 'num'], ['eva_pre', 'EVA antes', '', 'num'], ['eva_pos', 'EVA depois', '', 'num'],
     ['condutas', 'Condutas realizadas'], ['resposta', 'Resposta do paciente / intercorrências'], ['proxima', 'Ajuste para a próxima sessão'], OBS] },
   psico_registro: { nome: 'Registro documental (psicologia)', area: 'psicologia', campos: [
     ['demanda', 'Avaliação de demanda'], ['objetivos', 'Objetivos do trabalho'], ['evolucao', 'Registro da evolução'],
     ['procedimentos', 'Procedimentos técnico-científicos adotados'], ['encaminhamento', 'Encaminhamento ou encerramento'], OBS] },
+  medica_consulta: { nome: 'Consulta médica', area: 'medicina', campos: [
+    ['queixa', 'Queixa principal e HDA'], ['antecedentes', 'Antecedentes pessoais e familiares'], ['medicamentos', 'Medicamentos em uso'],
+    ['exame', 'Exame físico (sinais vitais e sistemas)'], ['hipotese', 'Hipóteses diagnósticas'], ['conduta', 'Conduta e plano'], OBS] },
   livre: { nome: 'Registro livre', area: null, campos: [['texto', 'Texto']] },
 };
-const AREA_NOME = { nutricao: 'Nutrição', fisioterapia: 'Fisioterapia', psicologia: 'Psicologia', outra: 'Outra' };
-const areaDoConselho = (c) => ({ CRN: 'nutricao', CREFITO: 'fisioterapia', CRP: 'psicologia' }[String(c || '').toUpperCase()] || 'outra');
+const AREA_NOME = { nutricao: 'Nutrição', fisioterapia: 'Fisioterapia', psicologia: 'Psicologia', medicina: 'Medicina', outra: 'Outra' };
+const areaDoConselho = (c) => ({ CRN: 'nutricao', CREFITO: 'fisioterapia', CRP: 'psicologia', CRM: 'medicina' }[String(c || '').toUpperCase()] || 'outra');
 const hojeIso = () => new Date().toISOString().slice(0, 10);
 const dh = (d) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const imc = (m) => (m?.peso && m?.altura ? (m.peso / (m.altura / 100) ** 2).toFixed(1) : null);
@@ -66,7 +76,7 @@ export async function abaProntuario(alvo, p, ats, extra) {
   alvo.innerHTML = `
     <div class="cartao"><div class="linha-acoes" style="justify-content:space-between;margin:0">
       <span class="muted">🔒 Só você vê · ${esc(me?.nome)} ${esc(me?.conselho || '')} ${esc(me?.numero_conselho || '')} · ${(regs || []).length} registro(s)</span>
-      <span>${modelosArea.length > 1 ? `<select id="mod" title="Modelo do novo registro">${modelosArea.map(([k, m]) => `<option value="${k}">${esc(m.nome)}</option>`).join('')}</select>` : ''}
+      <span>${modelosArea.length > 1 ? `<select id="mod" title="Modelo do novo registro">${modelosArea.map(([k, m]) => `<option value="${k}">${esc(m.nome)}${temRoteiro(k) ? ' ⚡' : ''}</option>`).join('')}</select>` : ''}
         <button class="btn primario" id="novo">+ Novo registro</button>
         ${(regs || []).length ? '<button class="btn" id="imp">Imprimir prontuário</button>' : ''}</span></div>
       ${semRegistro.length ? `<div class="dica" style="margin:10px 0 0">⚠️ ${semRegistro.length} atendimento(s) seu(s) sem evolução:
@@ -118,8 +128,8 @@ export async function abaProntuario(alvo, p, ats, extra) {
 
 // Fisio: 1º registro = avaliação, depois evolução. Nutri = SOAPN. Psico = registro documental.
 function modeloSessao(area, regs) {
-  if (area === 'fisioterapia') return (regs || []).some((r) => r.modelo === 'fisio_avaliacao') ? 'fisio_evolucao' : 'fisio_avaliacao';
-  return { nutricao: 'soapn', psicologia: 'psico_registro' }[area] || 'livre';
+  if (area === 'fisioterapia') return (regs || []).some((r) => ['fisio_avaliacao', 'fisio_esportiva'].includes(r.modelo)) ? 'fisio_evolucao' : 'fisio_avaliacao';
+  return { nutricao: 'soapn', psicologia: 'psico_registro', medicina: 'medica_consulta' }[area] || 'livre';
 }
 
 // Prévia de uma linha: primeiros campos de texto preenchidos, em ordem do modelo
@@ -181,6 +191,7 @@ function editor(p, r, meusAts, aoSalvar) {
           <label>% gordura<input name="m_gordura" type="number" step="0.1" value="${esc(med.gordura)}"></label>` : ''}
         ${m.campos.filter((x) => x[3] === 'num').map(([k, rot]) => `<label>${esc(rot)}<input name="c_${k}" type="number" step="1" value="${esc(c[k])}"></label>`).join('')}
       </div>
+      ${temRoteiro(r.modelo) ? `<details class="ck-painel" ${r.id ? '' : 'open'}><summary>⚡ ${esc(ROTEIROS[r.modelo].rotulo || 'Avaliação por cliques')} <span class="muted">— cada clique escreve o texto nos campos abaixo; o que você digitar não é apagado</span></summary><div id="ck"></div></details>` : ''}
       ${m.campos.filter((x) => x[3] !== 'num').map(([k, rot, dica]) => `<label class="pr-area">${esc(rot)}
         <textarea name="c_${k}" rows="${k === 'obs' ? 2 : 4}" placeholder="${esc(dica || '')}">${esc(c[k] || '')}</textarea></label>`).join('')}
     </form>
@@ -189,6 +200,7 @@ function editor(p, r, meusAts, aoSalvar) {
   (box, fechar) => {
     box.classList.add('largo');
     const f = $('#fr', box);
+    const painel = $('#ck', box) ? montarPainel($('#ck', box), r.modelo, f, structuredClone(c.cliques || {})) : null;
     const recalc = () => { const v = imc({ peso: +f.m_peso?.value, altura: +f.m_altura?.value }); if ($('#imc', box)) $('#imc', box).value = v || ''; };
     f.m_peso?.addEventListener('input', recalc); f.m_altura?.addEventListener('input', recalc);
     const salvar = async () => {
@@ -199,6 +211,7 @@ function editor(p, r, meusAts, aoSalvar) {
         if (Object.keys(mm).length) conteudo.medidas = mm;
       }
       if (!Object.keys(conteudo).length) return toast('O registro está vazio.', true);
+      const ck = painel?.estado(); if (ck) conteudo.cliques = ck; else if (c.cliques && painel) delete conteudo.cliques;
       const linha = { data_registro: fd.data_registro, atendimento_id: fd.atendimento_id || null, conteudo, status: 'assinado' };   // 'assinado' = status final (db/039); sem etapa de assinatura na tela
       const q = r.id ? sb.from('prontuario_registros').update(linha).eq('id', r.id)
         : sb.from('prontuario_registros').insert({ ...linha, clinica_id: estado.clinica.id, paciente_id: p.id, profissional_id: estado.profissionalId, area, modelo: r.modelo });
