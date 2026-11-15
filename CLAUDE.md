@@ -103,6 +103,14 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   **Escanometria (resultado):** bloco `blocoEsc` em `fisio_podo`, `fisio_avaliacao` e `fisio_esportiva` (campo `escanometria`): fêmur/tíbia/altura do pé D/E em cm,
   diferença anatômica, do pé e total em mm (positivo = D maior), distância femorotibial direta e compensação na palmilha. Baropodometria estática ficou opcional:
   os números completos vêm do PDF do BaroScan, anexado ao registro.
+- **Avaliação postural por foto — SAPO (db/049, `avaliacao-postural.js`, modelo `fisio_postural`):** 4 vistas (anterior, posterior, laterais D/E); foto no bucket
+  `prontuario` (pasta do autor → só ele vê); marcação guiada ponto a ponto com lupa, arrastar para ajustar, pular ponto; fio de prumo com 2 marcas corrige a vertical e dá
+  escala em cm (padrão 100 cm). Medidas pelas definições da documentação SAPO (Duarte/Ferreira 2005): alinhamentos horizontais (tragos, acrômios, EIAS, tíbias),
+  acrômios×EIAS, ângulo frontal do MI (valgo/varo), ângulo Q (SAPO trocânter–tuberosidade–patela + clássico EIAS–patela–tuberosidade), IA dos MMII (EIAS–maléolo medial,
+  + cm), IA escápulas×T3, perna/retropé (valgo/varo), laterais (trago–C7, acrômio–trago, tronco, quadril, corpo, pelve EIAS–EIPS, joelho flexo/recurvato, tornozelo).
+  Sem ponto de corte normal/anormal (só direção em palavras). Texto vai para anterior/posterior/lateral/conclusão (mantém texto digitado); conclusão lista os 5 maiores
+  desvios + comparação com a avaliação postural anterior (`conteudo.sapo.med`). "🖨 Laudo com fotos" (editor e registro) monta PDF com fotos anotadas, tabela e referências.
+  Foto trocada/cancelada fica órfã no Storage (sem política de delete no bucket); backup ZIP não leva as fotos.
 - **Solicitação de exame (db/047, `emissao.js`, tipo `solicitacao`):** escanometria pelo método de Farill (medidas em checkbox), RX dos pés em AP com altura
   base–tibiotársica e RX panorâmico da coluna; CID padrão M21.7 com descrição do `cid10.json`; justificativa opcional; texto editável, timbrado e com código.
 - **Relacionamento + e-mail (db/048):** `relacionamento()` devolve `email`; botão ✉ E-mail por paciente (mailto) e "E-mail em lote" por item de reavaliação

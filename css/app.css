@@ -327,3 +327,19 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 @media (max-width:640px){.ck-grade2{grid-template-columns:1fr}}
 .sol-exames{display:grid;gap:4px;border:1px solid var(--linha);border-radius:6px;padding:8px 12px;background:#FBFBFA}
 .sol-medidas{display:grid;gap:2px;padding:4px 0 4px 22px}
+
+/* ---------- Avaliação postural SAPO (db/049) ---------- */
+.ck-painel #sapo{padding:0 12px 10px}
+.sp-abas{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:4px 0 8px}
+.sp-como{flex-basis:100%;font-size:12.5px}.sp-como summary{cursor:pointer;color:var(--texto-2)}
+.sp-area{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px;align-items:start}
+.sp-foto{position:relative;min-height:120px}
+.sp-cv{display:block;max-width:100%;touch-action:none;cursor:crosshair;border-radius:6px;background:#111}
+.sp-lupa{position:absolute;top:6px;width:132px;height:132px;border:2px solid #fff;border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,.4);pointer-events:none}
+.sp-vazio{display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:16px;border:1px dashed var(--linha);border-radius:6px}
+.sp-instr{background:var(--laranja-claro);border-radius:6px;padding:8px 10px;font-size:13.5px}
+.sp-cm{display:block;font-size:12.5px;margin:4px 0}.sp-cm input{width:70px;display:inline-block}
+.sp-pts{margin:6px 0;padding-left:20px;font-size:12.5px;max-height:220px;overflow:auto}
+.sp-pts a{color:var(--texto);text-decoration:none}.sp-pts a.atual{color:var(--laranja-esc);font-weight:700}
+.sp-med{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}.sp-med td{border-top:1px solid var(--linha-fraca);padding:3px 2px;vertical-align:top}
+@media (max-width:720px){.sp-area{grid-template-columns:1fr}}

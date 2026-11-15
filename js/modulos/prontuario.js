@@ -5,6 +5,7 @@
 import { sb, estado, $, $$, esc, data, tela, toast, falha, modal, confirmar, descricaoCid } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo } from './documentos.js';
 import { montarPainel, temRoteiro, ROTEIROS } from './avaliacao-cliques.js';
+import { montarSapo, laudoPostural } from './avaliacao-postural.js';
 
 const OBS = ['obs', 'Observações (campo livre)'];
 export const MODELOS = {
@@ -30,6 +31,9 @@ export const MODELOS = {
     ['queixa', 'Motivo e queixa'], ['historico', 'Contexto: condições, atividade, calçado, antropometria'],
     ['estatica', 'Baropodometria estática'], ['dinamica', 'Análise dinâmica (marcha e pisada)'], ['postural', 'Postura e mobilidade'],
     ['fpi', 'Índice Postural do Pé (FPI-6)'], ['escanometria', 'Escanometria (resultado)'], ['conclusao', 'Correlação clínica e conclusão'], ['plano', 'Conduta e reavaliação'], OBS] },
+  fisio_postural: { nome: 'Avaliação postural por foto (SAPO)', area: 'fisioterapia', campos: [
+    ['queixa', 'Motivo e queixa'], ['anterior', 'Vista anterior'], ['posterior', 'Vista posterior'], ['lateral', 'Vistas laterais'],
+    ['conclusao', 'Conclusão (mini laudo)'], ['plano', 'Conduta e reavaliação'], OBS] },
   fisio_evolucao: { nome: 'Evolução de sessão (fisioterapia)', area: 'fisioterapia', campos: [
     ['diag', 'Diagnóstico / CID', 'Vem do encaminhamento ou da avaliação'],
     ['sessao', 'Sessão nº', '', 'num'], ['eva_pre', 'EVA antes', '', 'num'], ['eva_pos', 'EVA depois', '', 'num'],
@@ -123,6 +127,7 @@ export async function abaProntuario(alvo, p, ats, extra) {
   }));
   $$('[data-abrir]', alvo).forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.abrir, 'prontuario')));
   $$('[data-imp1]', alvo).forEach((b) => (b.onclick = () => imprimir(p, regs.filter((r) => r.id === b.dataset.imp1), ads, me)));
+  $$('[data-laudo]', alvo).forEach((b) => (b.onclick = () => laudoPostural(p, regs.find((r) => r.id === b.dataset.laudo), me)));
 
   // Vindo da agenda (#paciente-<id>-prontuario:<atendimento>): abre a evolução já ligada ao atendimento
   if (extra) {
@@ -178,7 +183,8 @@ function linhaRegistro(r, ads, anx, ats, me) {
         <button class="btn pequeno primario" data-edit="${r.id}">Editar</button>
         ${r.status === 'rascunho' ? `<button class="btn pequeno" data-apagar="${r.id}">Apagar</button>` : `<button class="btn pequeno" data-adendo="${r.id}">Adendo</button>`}
         <button class="btn pequeno" data-anexar="${r.id}">Anexar</button>
-        <button class="btn pequeno" data-imp1="${r.id}">Imprimir</button></div>
+        <button class="btn pequeno" data-imp1="${r.id}">Imprimir</button>
+        ${r.modelo === 'fisio_postural' ? `<button class="btn pequeno" data-laudo="${r.id}">🖨 Laudo com fotos</button>` : ''}</div>
     </div></div>`;
 }
 
@@ -199,6 +205,7 @@ function editor(p, r, meusAts, aoSalvar) {
         ${m.campos.filter((x) => x[3] === 'num').map(([k, rot]) => `<label>${esc(rot)}<input name="c_${k}" type="number" step="1" value="${esc(c[k])}"></label>`).join('')}
       </div>
       ${temRoteiro(r.modelo) ? `<details class="ck-painel" ${r.id ? '' : 'open'}><summary>⚡ ${esc(ROTEIROS[r.modelo].rotulo || 'Avaliação por cliques')} <span class="muted">— cada clique escreve o texto nos campos abaixo; o que você digitar não é apagado</span></summary><div id="ck"></div></details>` : ''}
+      ${r.modelo === 'fisio_postural' ? `<details class="ck-painel" open><summary>📷 Fotos e pontos (protocolo SAPO) <span class="muted">— as medidas escrevem o texto abaixo; a foto fica só no seu prontuário</span></summary><div id="sapo"></div></details>` : ''}
       ${m.campos.filter((x) => x[3] !== 'num').map(([k, rot, dica]) => `<label class="pr-area">${esc(rot)}
         <textarea name="c_${k}" rows="${k === 'obs' ? 2 : 4}" placeholder="${esc(dica || '')}">${esc(c[k] || '')}</textarea></label>`).join('')}
     </form>
@@ -210,6 +217,15 @@ function editor(p, r, meusAts, aoSalvar) {
     const ctx = contextoEvolucao(r);
     const painel = $('#ck', box) ? montarPainel($('#ck', box), r.modelo, f, structuredClone(c.cliques || {}), ctx) : null;
     if (r.modelo === 'fisio_evolucao' && !r.id) prepararEvolucao(p, r, f, ctx, meusAts);
+    let sapo = null;
+    if ($('#sapo', box)) {
+      const ant = _regsPac.filter((x) => x.modelo === 'fisio_postural' && x.id !== r.id && x.conteudo?.sapo?.med)
+        .sort((a, b) => String(b.data_registro).localeCompare(String(a.data_registro)))[0];
+      sapo = montarSapo($('#sapo', box), f, structuredClone(c.sapo || {}), { pacienteId: p.id,
+        anterior: ant ? { med: ant.conteudo.sapo.med, data: data(ant.data_registro) } : null,
+        aoLaudo: () => { const fd = Object.fromEntries(new FormData(f)), cc = {}; m.campos.forEach(([k]) => { if (fd['c_' + k]) cc[k] = fd['c_' + k]; });
+          laudoPostural(p, { data_registro: fd.data_registro, conteudo: { ...cc, sapo: sapo.estado() || { vistas: {} } } }, _eu); } });
+    }
     const recalc = () => { const v = imc({ peso: +f.m_peso?.value, altura: +f.m_altura?.value }); if ($('#imc', box)) $('#imc', box).value = v || ''; };
     f.m_peso?.addEventListener('input', recalc); f.m_altura?.addEventListener('input', recalc);
     const salvar = async () => {
@@ -219,6 +235,7 @@ function editor(p, r, meusAts, aoSalvar) {
         const mm = {}; ['peso', 'altura', 'cc', 'gordura'].forEach((k) => { if (fd['m_' + k]) mm[k] = Number(fd['m_' + k]); });
         if (Object.keys(mm).length) conteudo.medidas = mm;
       }
+      const sp = sapo?.estado(); if (sp) conteudo.sapo = sp;
       if (!Object.keys(conteudo).length) return toast('O registro está vazio.', true);
       const ck = painel?.estado(); if (ck) conteudo.cliques = ck; else if (c.cliques && painel) delete conteudo.cliques;
       const linha = { data_registro: fd.data_registro, atendimento_id: fd.atendimento_id || null, conteudo, status: 'assinado' };   // 'assinado' = status final (db/039); sem etapa de assinatura na tela
