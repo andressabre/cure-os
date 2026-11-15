@@ -11,6 +11,7 @@ export async function render() {
   c.innerHTML = `<div class="cartao"><div class="grade-form">
       <label>Buscar (nome, CPF ou telefone)<input id="busca" placeholder="Digite ao menos 2 letras"></label>
       <label>Situação<select id="sit"><option value="1">Ativos</option><option value="0">Inativos</option><option value="">Todos</option></select></label>
+      ${estado.profissionalId ? `<label>Mostrar<select id="meus"><option value="">Todos os pacientes</option><option value="1" ${sessionStorage.getItem('pac_meus') === '1' ? 'selected' : ''}>Meus pacientes</option></select></label>` : ''}
     </div></div><div class="cartao tabela-rolagem" id="lista"></div>`;
   let t;
   const buscar = async () => {
@@ -18,6 +19,7 @@ export async function render() {
     let consulta = sb.from('pacientes').select('id, nome, cpf, data_nascimento, telefone, celular, ativo, campos_extras', { count: 'exact' })
       .eq('clinica_id', estado.clinica.id).order('nome').limit(100);
     if (sit !== '') consulta = consulta.eq('ativo', sit === '1');
+    if ($('#meus')?.value === '1') consulta = consulta.contains('profissionais_resp', [estado.profissionalId]);
     if (q.length >= 2) {
       const dig = q.replace(/\D/g, '');
       consulta = dig.length >= 4 ? consulta.or(`cpf.ilike.%${dig}%,telefone.ilike.%${dig}%,celular.ilike.%${dig}%`) : consulta.ilike('nome', `%${q}%`);
@@ -34,6 +36,7 @@ export async function render() {
   };
   $('#busca').oninput = () => { clearTimeout(t); t = setTimeout(buscar, 300); };
   $('#sit').onchange = buscar;
+  if ($('#meus')) $('#meus').onchange = (e) => { sessionStorage.setItem('pac_meus', e.target.value); buscar(); };
   $('#novo')?.addEventListener('click', () => ficha(null));
   $('#imp')?.addEventListener('click', importar);
   buscar();

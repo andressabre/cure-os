@@ -29,7 +29,7 @@ export async function render(params) {
   const gestao = podeGerir() || estado.perfil === 'recepcao';
   const cid = estado.clinica.id;
 
-  const [{ data: p, error }, { data: planos }, { data: ats }, { data: auts }, { data: contratos }, { data: encs }, { data: sols }] = await Promise.all([
+  const [{ data: p, error }, { data: planos }, { data: ats }, { data: auts }, { data: contratos }, { data: encs }, { data: sols }, { data: profsAll }] = await Promise.all([
     sb.from('pacientes').select('*').eq('id', id).single(),
     sb.from('paciente_planos').select('*, contratos(id, nome, regras)').eq('paciente_id', id).order('principal', { ascending: false }),
     sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, autorizacao_id, paciente_plano_id, profissional_id, profissionais(nome)').eq('paciente_id', id).order('inicio', { ascending: false }),
@@ -38,6 +38,7 @@ export async function render(params) {
     gestao ? sb.from('contratos').select('id, nome').eq('clinica_id', cid).eq('ativo', true).order('nome') : Promise.resolve({ data: [] }),
     sb.from('encaminhamentos').select('*, solicitantes(nome, conselho, numero_conselho)').eq('paciente_id', id).order('data_pedido', { ascending: false }),
     sb.from('solicitantes').select('id, nome, conselho, numero_conselho').eq('clinica_id', cid).eq('ativo', true).order('nome'),
+    sb.from('profissionais').select('id, nome, especialidade').eq('clinica_id', cid).eq('ativo', true).order('nome'),
   ]);
   if (error) return falha(error);
   // Profissional (ou sócio no modo profissional): só autorizações/guias da sua área ou feitas em seu nome; encaminhamentos de todas
@@ -112,6 +113,8 @@ export async function render(params) {
         <label class="c2">CEP<input name="cep" value="${esc(e.cep)}"></label>
         <label class="c3">Cidade<input name="cidade" value="${esc(e.cidade)}"></label>
         <label class="c1">UF<input name="uf" maxlength="2" value="${esc(e.uf)}"></label>
+        <div class="c12"><span class="rotulo-campo">Profissionais responsáveis</span> <small class="muted">entra sozinho ao agendar; pode ter mais de um (ex.: fisio + psico)</small>
+          <div class="chips-resp">${(profsAll || []).map((x) => `<label class="icone-check"><input type="checkbox" name="resp" value="${x.id}" ${(p.profissionais_resp || []).includes(x.id) ? 'checked' : ''} ${gestao ? '' : 'disabled'}> ${esc(x.nome)}${x.especialidade ? ` <small class="muted">${esc(x.especialidade)}</small>` : ''}</label>`).join('')}</div></div>
         <label class="c12">Observações<textarea name="observacao" rows="2" placeholder="Preferências, horários, combinações…">${esc(p.observacao)}</textarea></label>
         <div class="c12 icones-dados">
           <label class="icone-check" title="Recebe mensagens de relacionamento (aniversário, reavaliação)${p.comunicacao_optout_em ? ` — pediu para sair em ${data(p.comunicacao_optout_em.slice(0, 10))}` : ''}">
@@ -133,7 +136,7 @@ export async function render(params) {
         try { celular = fone('celular', true); telefone = fone('telefone', false); } catch (er) { return toast(er.message, true); }
         const { error: er } = await sb.from('pacientes').update({ nome: f.nome.trim(), nome_social: f.nome_social || null, cpf: f.cpf.replace(/\D/g, '') || null,
           data_nascimento: f.data_nascimento || null, sexo: f.sexo || null, nome_mae: f.nome_mae || null, cns: f.cns.replace(/\D/g, '') || null,
-          celular, telefone, email: f.email || null, observacao: f.observacao.trim() || null, consentimento_comunicacao: fd.has('consentimento_comunicacao'), ativo: fd.has('ativo'),
+          celular, telefone, email: f.email || null, observacao: f.observacao.trim() || null, profissionais_resp: fd.getAll('resp'), consentimento_comunicacao: fd.has('consentimento_comunicacao'), ativo: fd.has('ativo'),
           comunicacao_optout_em: fd.has('consentimento_comunicacao') ? null : (p.comunicacao_optout_em || new Date().toISOString()),
           endereco: { ...e, rua: f.rua, cep: f.cep, cidade: f.cidade, uf: f.uf.toUpperCase() } }).eq('id', id);
         if (er) return falha(er, er.code === '23505' ? 'CPF já cadastrado em outro paciente' : 'Salvar'); toast('Salvo.'); recarregar();

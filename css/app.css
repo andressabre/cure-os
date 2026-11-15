@@ -353,3 +353,4 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 .carteiras a{padding:6px 14px;border-radius:999px;border:1px solid var(--linha,#ddd);text-decoration:none;color:inherit;font-weight:500;font-size:14px}
 .carteiras a.ativa{background:var(--grafite,#2b3236);color:#fff;border-color:transparent}
 .carteiras a.pessoal.ativa{background:var(--laranja-esc)}
+.chips-resp{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px}.rotulo-campo{font-weight:600;font-size:13.5px}

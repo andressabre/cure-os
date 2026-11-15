@@ -137,6 +137,9 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   **Agenda:** profissional cria agendamento só para si (`prof_cria_atendimentos`), com serviços de `SERVICOS_DA_AREA`, série e nova solicitação de senha
   (`prof_cria_autorizacoes`, status pendente/autorizada); agendamento existente segue só leitura para ele (status e observação). Conflito de sala/horário
   vem de `ocupacao_agenda()` (DEFINER, sem dados de paciente). Botão 📅 da ficha liberado para o profissional.
+- **Profissionais responsáveis (db/053, 15/11/2026):** `pacientes.profissionais_resp uuid[]` (vários por paciente); trigger `incluir_responsavel`
+  em `atendimentos` acrescenta o profissional ao agendar; histórico preenchido por atendimentos + prontuário; editável no cadastro (gestão/recepção).
+  Pacientes tem filtro "Meus pacientes" para quem tem profissional vinculado. Ainda NÃO restringe a visão (decisão 15/11/2026: prontuário já é por autor).
 - **Trava de senha (db/050, 15/11/2026):** gatilho `trava_autorizada_sem_senha` em `autorizacoes`: status `autorizada` em contrato que exige senha
   (`contrato_exige_senha`) precisa de senha, data da autorização e validade (validade ≥ data). Particular/sem_tiss isentos; só checa quando status/senha/data/validade mudam.
 
