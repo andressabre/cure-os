@@ -322,3 +322,6 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 .ag-ev{user-select:none;touch-action:manipulation}
 .ag-ev.arrastando{opacity:.9;z-index:5;box-shadow:0 6px 18px rgba(0,0,0,.2);cursor:grabbing;outline:2px dashed var(--laranja)}
 .ck-repetir{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--laranja-claro);border-radius:6px;padding:8px 10px;margin:8px 0}
+.ck-fpi{font-weight:600;color:var(--texto);background:var(--branco);border:1px solid var(--linha);border-radius:10px;padding:1px 8px;margin-left:6px;font-size:12.5px}
+.ck-grade2{display:grid;grid-template-columns:1fr 1fr;column-gap:20px}.ck-grade2>small{grid-column:1/-1}
+@media (max-width:640px){.ck-grade2{grid-template-columns:1fr}}

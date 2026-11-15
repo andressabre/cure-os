@@ -94,6 +94,12 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   **Evolução rápida (`fisio_evolucao`, 15/11/2026):** campos novos `diag` e `estado`; nº da sessão automático (última evolução + 1); diagnóstico/CID preenchido
   do encaminhamento ativo de fisioterapia (CID + descrição do `cid10.json`) + diagnóstico da última avaliação; região/lado herdados; botão "↻ Repetir condutas da
   última sessão" (região, lado, condutas e detalhes); chips de como chegou / o que foi feito / resposta / próxima, EVA antes→depois.
+  **Avaliação podoposturológica (`fisio_podo`, db/046):** modelo separado para baropodometria/palmilha — estática (carga D/E com E calculado, retropé×antepé,
+  picos por região e lado, centro de pressão, arco), dinâmica (pisada D/E, marcha, trajetória), postura e mobilidade (joelhos, retropé, hálux, lunge test, Thomas),
+  **FPI-6** por pé (6 critérios −2…+2, total e classe calculados: ≤−5 altamente supinado, −4…−1 supinado, 0…+5 neutro, +6…+9 pronado, ≥+10 altamente pronado),
+  correlação com a queixa e conduta; aviso de pé em risco (DM/neuropatia + hiperpressão). "Copiar da avaliação anterior" traz motivo/contexto e a conclusão
+  ganha a comparação automática (FPI e carga anterior → atual). Avaliação de fisio ganhou profissão, comorbidades, peso/altura/IMC, achados de palpação,
+  ADM comparada entre lados, escore de questionário funcional (campo livre; WOMAC é licenciado), objetivos de curto e longo prazo e data da reavaliação.
 
 - **Acessos (15/11/2026):** **a gestora tem acesso total** a todas as telas (exceto ler prontuário de outro profissional — sigilo por autor).
   Na tela `#acessos` cria acesso com nome, e-mail (= login), senha provisória (botão Gerar), perfil e profissional vinculado; edita e-mail/senha/perfil/vínculo;

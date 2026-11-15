@@ -26,6 +26,10 @@ export const MODELOS = {
     ['exame', 'Exame físico e testes funcionais', 'Inspeção, palpação, ADM, força, testes especiais, agachamento unipodal, hop test'],
     ['diagnostico', 'Diagnóstico e prognóstico fisioterapêutico', 'Cinético-funcional'],
     ['objetivos', 'Objetivos terapêuticos'], ['plano', 'Plano terapêutico e retorno ao esporte', 'Condutas, frequência, nº de sessões, critérios de retorno'], OBS] },
+  fisio_podo: { nome: 'Avaliação podoposturológica (baropodometria/palmilha)', area: 'fisioterapia', campos: [
+    ['queixa', 'Motivo e queixa'], ['historico', 'Contexto: condições, atividade, calçado, antropometria'],
+    ['estatica', 'Baropodometria estática'], ['dinamica', 'Análise dinâmica (marcha e pisada)'], ['postural', 'Postura e mobilidade'],
+    ['fpi', 'Índice Postural do Pé (FPI-6)'], ['conclusao', 'Correlação clínica e conclusão'], ['plano', 'Conduta e reavaliação'], OBS] },
   fisio_evolucao: { nome: 'Evolução de sessão (fisioterapia)', area: 'fisioterapia', campos: [
     ['diag', 'Diagnóstico / CID', 'Vem do encaminhamento ou da avaliação'],
     ['sessao', 'Sessão nº', '', 'num'], ['eva_pre', 'EVA antes', '', 'num'], ['eva_pos', 'EVA depois', '', 'num'],
@@ -231,9 +235,9 @@ function editor(p, r, meusAts, aoSalvar) {
 // Evolução rápida: última evolução e avaliação do mesmo paciente (só registros do próprio autor, pela RLS)
 function contextoEvolucao(r) {
   const outros = _regsPac.filter((x) => x.id !== r.id);
-  const ultEvol = outros.filter((x) => x.modelo === 'fisio_evolucao').sort((a, b) => String(b.data_registro).localeCompare(String(a.data_registro)) || String(b.criado_em).localeCompare(String(a.criado_em)))[0];
+  const ultEvol = outros.filter((x) => x.modelo === (r.modelo === 'fisio_podo' ? 'fisio_podo' : 'fisio_evolucao')).sort((a, b) => String(b.data_registro).localeCompare(String(a.data_registro)) || String(b.criado_em).localeCompare(String(a.criado_em)))[0];
   const aval = outros.filter((x) => ['fisio_avaliacao', 'fisio_esportiva'].includes(x.modelo)).sort((a, b) => String(b.data_registro).localeCompare(String(a.data_registro)))[0];
-  return { ultima: ultEvol?.conteudo?.cliques || null, avaliacao: aval?.conteudo?.cliques || null, ultEvol, aval, nEvol: outros.filter((x) => x.modelo === 'fisio_evolucao').length };
+  return { ultima: ultEvol?.conteudo?.cliques || null, ultimaData: ultEvol ? data(ultEvol.data_registro) : '', avaliacao: aval?.conteudo?.cliques || null, ultEvol, aval, nEvol: outros.filter((x) => x.modelo === 'fisio_evolucao').length };
 }
 // Nº da sessão e diagnóstico/CID preenchidos sozinhos (encaminhamento ativo de fisioterapia > diagnóstico da avaliação > última evolução)
 async function prepararEvolucao(p, r, f, ctx, meusAts) {
