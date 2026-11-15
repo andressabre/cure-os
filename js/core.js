@@ -6,7 +6,16 @@ export const sb = createClient(
   'sb_publishable_S_s0TbvaOmGDH0y1x56WYw_4pqe5_PO'
 );
 
-export const estado = { user: null, clinica: null, perfil: null, profissionalId: null };
+export const estado = { user: null, clinica: null, perfil: null, perfilReal: null, profissionalId: null, modo: 'gestao' };
+
+// Chave Gestão ↔ Profissional (sócios que também atendem). Só muda a TELA: quem protege os dados é a RLS.
+// No modo profissional o app inteiro se comporta como o perfil "profissional" (menu, agenda, ficha).
+export const temDoisModos = () => ['gestor', 'financeiro'].includes(estado.perfilReal) && !!estado.profissionalId;
+export function aplicarModo(modo) {
+  estado.modo = temDoisModos() && modo === 'profissional' ? 'profissional' : 'gestao';
+  estado.perfil = estado.modo === 'profissional' ? 'profissional' : estado.perfilReal;
+  try { localStorage.setItem('modo_' + estado.user?.id, estado.modo); } catch {}
+}
 
 export const $ = (s, el = document) => el.querySelector(s);
 export const $$ = (s, el = document) => [...el.querySelectorAll(s)];

@@ -9,7 +9,32 @@ const FORMAS = { pix: 'Pix', boleto: 'Boleto', ted: 'TED/transferência', cartao
 const GRUPOS = [['receita_bruta', 'Receita bruta'], ['deducoes', '(−) Deduções: impostos e taxas'], ['custo_direto', '(−) Custos diretos'],
   ['despesa_operacional', '(−) Despesas operacionais'], ['resultado_financeiro', '(±) Resultado financeiro'],
   ['investimento', 'Investimentos (fora do resultado)'], ['retirada', 'Distribuição de lucros (fora do resultado)'], ['transferencia', 'Transferências']];
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const hoje = () => new Date().toISOString().slice(0, 10);
+
+// Anexos (fatura/comprovante) no bucket privado "financeiro": <clinica>/<empresa|pessoal>/<lançamento>/<tipo>-<data>.<ext>
+// Fotos são reduzidas (1600 px, JPEG) antes de subir para poupar o Storage gratuito; PDF até 5 MB.
+async function comprimir(file) {
+  if (!/^image\//.test(file.type) || file.type === 'image/gif') return file;
+  const img = await createImageBitmap(file); const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+  const cv = Object.assign(document.createElement('canvas'), { width: Math.round(img.width * k), height: Math.round(img.height * k) });
+  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  const b = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.72));
+  return b && b.size < file.size ? new File([b], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : file;
+}
+async function enviarAnexo(cid, cart, lancId, tipo, file) {
+  const f = await comprimir(file);
+  if (f.size > 5 * 1024 * 1024) throw new Error('Arquivo acima de 5 MB. Reduza o PDF ou envie foto.');
+  const ext = (f.name.match(/\.(\w+)$/)?.[1] || 'pdf').toLowerCase();
+  const path = `${cid}/${cart.tipo}/${lancId}/${tipo}-${Date.now()}.${ext}`;
+  const { error } = await sb.storage.from('financeiro').upload(path, f, { contentType: f.type || undefined });
+  if (error) throw error;
+  return path;
+}
+async function abrirAnexo(path) {
+  const { data: u, error } = await sb.storage.from('financeiro').createSignedUrl(path, 120);
+  if (error) return falha(error, 'Anexo'); window.open(u.signedUrl, '_blank', 'noopener');
+}
 const mesAtual = () => hoje().slice(0, 7);
 const somaMes = (ym, n) => { const [a, m] = ym.split('-').map(Number); const d = new Date(a, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const fimMes = (ym) => { const [a, m] = ym.split('-').map(Number); return new Date(a, m, 0).toISOString().slice(0, 10); };
@@ -28,22 +53,33 @@ export async function render(params = '') {
   $('#prox').onclick = () => ir(aba, somaMes(ym, 1));
 
   const cid = estado.clinica.id;
-  const [{ data: cats, error: e1 }, { data: contas, error: e2 }] = await Promise.all([
+  const [{ data: cats0, error: e1 }, { data: contas0, error: e2 }, { data: carts, error: e3 }] = await Promise.all([
     sb.from('categorias_financeiras').select('*').eq('clinica_id', cid).order('ordem'),
     sb.from('contas_financeiras').select('*').eq('clinica_id', cid).order('nome'),
+    sb.from('carteiras').select('*').eq('clinica_id', cid).eq('ativo', true).order('ordem'),
   ]);
-  if (e1 || e2) return falha(e1 || e2, 'Financeiro');
+  if (e1 || e2 || e3) return falha(e1 || e2 || e3, 'Financeiro');
+  // Carteira: empresa (DRE, repasse, convênios) ou pessoal de cada sócio (só gestores veem — RLS)
+  const cart = carts.find((k) => k.id === sessionStorage.getItem('fin-cart')) || carts.find((k) => k.tipo === 'empresa') || carts[0];
+  const pessoal = cart?.tipo === 'pessoal';
+  const cats = cats0.filter((k) => (k.uso || 'empresa') === (pessoal ? 'pessoal' : 'empresa'));
+  const contas = contas0.filter((k) => !k.carteira_id || k.carteira_id === cart.id);
+  if (pessoal && aba === 'dre') return ir('lancamentos');
   const catPor = Object.fromEntries(cats.map((k) => [k.id, k]));
   const contaPor = Object.fromEntries(contas.map((k) => [k.id, k]));
-  const nav = `<nav class="abas">${ABAS.map(([k, n]) => `<a href="#financeiro-${k}-${ym}" class="${k === aba ? 'ativa' : ''}">${n}</a>`).join('')}</nav>`;
+  const nav = (carts.length > 1 ? `<div class="carteiras">${carts.map((k) => `<a href="#" data-cart="${k.id}" class="${k.tipo} ${k.id === cart.id ? 'ativa' : ''}">${esc(k.nome)}</a>`).join('')}</div>` : '') +
+    `<nav class="abas">${ABAS.filter(([k]) => !(pessoal && k === 'dre')).map(([k, n]) => `<a href="#financeiro-${k}-${ym}" class="${k === aba ? 'ativa' : ''}">${n}</a>`).join('')}</nav>`;
+  // troca de carteira (delegado: o nav é redesenhado a cada aba)
+  c.onclick = (e) => { const a = e.target.closest('[data-cart]'); if (!a) return; e.preventDefault();
+    sessionStorage.setItem('fin-cart', a.dataset.cart); render(`${aba}-${ym}`); };
 
   // ---------------- Lançamentos ----------------
   async function lancamentos() {
     const ini = ym + '-01', fim = fimMes(ym);
-    const { data: ls, error } = await sb.from('lancamentos').select('*').eq('clinica_id', cid)
+    const { data: ls, error } = await sb.from('lancamentos').select('*').eq('clinica_id', cid).eq('carteira_id', cart.id)
       .neq('status', 'cancelado').gte('vencimento', ini).lte('vencimento', fim).order('vencimento');
     if (error) return falha(error);
-    const { data: atrasados } = await sb.from('lancamentos').select('id, tipo, valor_previsto').eq('clinica_id', cid)
+    const { data: atrasados } = await sb.from('lancamentos').select('id, tipo, valor_previsto').eq('clinica_id', cid).eq('carteira_id', cart.id)
       .eq('status', 'previsto').lt('vencimento', ini);
     const filtro = sessionStorage.getItem('fin-filtro') || 'todos';
     const visiveis = ls.filter((l) => filtro === 'todos' || l.tipo === filtro);
@@ -51,6 +87,12 @@ export async function render(params = '') {
     const rec = soma('receber'), recOk = soma('receber', 'pago'), pag = soma('pagar'), pagOk = soma('pagar', 'pago');
     const atrR = (atrasados || []).filter((l) => l.tipo === 'receber'), atrP = (atrasados || []).filter((l) => l.tipo === 'pagar');
     const vencido = (l) => l.status === 'previsto' && l.vencimento < hoje();
+    const selos = (l) => [
+      l.recorrencia === 'media' && l.status === 'previsto' && !l.valor_confirmado ? '<span class="selo pendente" title="Previsto pela média dos últimos meses. Ao chegar a fatura, edite e marque o valor como confirmado.">estimado</span>' : '',
+      l.recorrencia === 'fixa' && l.reajuste_mes && Number(l.vencimento.slice(5, 7)) === l.reajuste_mes && l.status === 'previsto' && !l.valor_confirmado ? '<span class="selo alerta" title="Mês de reajuste do contrato: confira o valor novo e aplique às próximas.">reajuste?</span>' : '',
+      l.fatura_arquivo ? `<a href="#" data-anx="${esc(l.fatura_arquivo)}" title="Fatura">📄</a>` : '',
+      l.comprovante_arquivo ? `<a href="#" data-anx="${esc(l.comprovante_arquivo)}" title="Comprovante">🧾</a>` : '',
+    ].filter(Boolean).map((x) => ' ' + x).join('');
 
     c.innerHTML = nav + `
       <div class="kpis">
@@ -63,7 +105,7 @@ export async function render(params = '') {
       ${contas.length ? '' : '<div class="dica"><strong>Comece pelas contas:</strong> cadastre a conta bancária e o caixa em "Contas e categorias", com o saldo inicial. Sem isso o Caixa não fecha.</div>'}
       <div class="linha-acoes" style="justify-content:flex-start;margin-bottom:12px">
         <button class="btn primario" id="nr">+ A receber</button><button class="btn primario" id="np">+ A pagar</button>
-        <button class="btn" id="rep">Gerar repasse de ${nomeMes(somaMes(ym, -1))}</button>
+        ${pessoal ? '' : `<button class="btn" id="rep">Gerar repasse de ${nomeMes(somaMes(ym, -1))}</button>`}
         <select id="filtro" style="margin-left:auto">${opts([['todos', 'Todos'], ['receber', 'Só a receber'], ['pagar', 'Só a pagar']], filtro)}</select>
       </div>
       <div class="cartao tabela-rolagem">${visiveis.length ? `<table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Categoria</th><th>Área</th>
@@ -71,7 +113,7 @@ export async function render(params = '') {
         ${visiveis.map((l) => `<tr>
           <td>${data(l.vencimento)}</td>
           <td><span class="selo ${l.tipo === 'receber' ? 'ok' : 'outra'}">${l.tipo === 'receber' ? '↓ receber' : '↑ pagar'}</span>
-            <strong>${esc(l.descricao)}</strong>${l.parcela ? ` <small>(${esc(l.parcela)})</small>` : ''}${l.fornecedor ? `<br><small>${esc(l.fornecedor)}</small>` : ''}</td>
+            <strong>${esc(l.descricao)}</strong>${l.parcela ? ` <small>(${esc(l.parcela)})</small>` : ''}${selos(l)}${l.fornecedor ? `<br><small>${esc(l.fornecedor)}</small>` : ''}</td>
           <td>${esc(catPor[l.categoria_id]?.nome || '—')}</td><td>${esc(AREAS[l.area] || '—')}</td>
           <td class="num">${brl(l.valor_previsto)}</td>
           <td>${l.status === 'pago' ? `<span class="selo ok">${l.tipo === 'receber' ? 'recebido' : 'pago'} ${data(l.data_realizado)}</span>`
@@ -82,9 +124,10 @@ export async function render(params = '') {
         : '<div class="vazio">Nenhum lançamento com vencimento neste mês.</div>'}</div>`;
 
     $('#filtro').onchange = (e) => { sessionStorage.setItem('fin-filtro', e.target.value); lancamentos(); };
+    $$('[data-anx]', c).forEach((a) => (a.onclick = (e) => { e.preventDefault(); abrirAnexo(a.dataset.anx); }));
     $('#nr').onclick = () => formLanc({ tipo: 'receber' });
     $('#np').onclick = () => formLanc({ tipo: 'pagar' });
-    $('#rep').onclick = gerarRepasse;
+    if ($('#rep')) $('#rep').onclick = gerarRepasse;
     $$('[data-ed]', c).forEach((b) => (b.onclick = () => formLanc(ls.find((l) => l.id === b.dataset.ed))));
     $$('[data-baixa]', c).forEach((b) => (b.onclick = () => baixar(ls.find((l) => l.id === b.dataset.baixa))));
     $$('[data-estorna]', c).forEach((b) => (b.onclick = async () => {
@@ -103,21 +146,43 @@ export async function render(params = '') {
         <label style="grid-column:1/-1">Descrição<input name="descricao" required value="${esc(l.descricao)}"></label>
         <label>${receber ? 'Pagador' : 'Fornecedor / favorecido'}<input name="fornecedor" value="${esc(l.fornecedor)}"></label>
         <label>Categoria<select name="categoria_id">${opts(catsTipo, l.categoria_id, 'Sem categoria')}</select></label>
-        <label>Área<select name="area">${opts(Object.entries(AREAS), l.area || 'geral')}</select></label>
+        ${pessoal ? '<input type="hidden" name="area" value="geral">' : `<label>Área<select name="area">${opts(Object.entries(AREAS), l.area || 'geral')}</select></label>`}
         <label>Valor (R$)<input name="valor_previsto" type="number" step="0.01" min="0" required value="${esc(l.valor_previsto)}"></label>
         <label>Vencimento<input name="vencimento" type="date" required value="${esc(l.vencimento || (ym === mesAtual() ? hoje() : ym + '-10'))}"></label>
         <label>Competência (mês da DRE)<input name="competencia" type="month" value="${esc((l.competencia || ym + '-01').slice(0, 7))}"></label>
         <label>Forma de pagamento<select name="forma_pagamento">${opts(Object.entries(FORMAS), l.forma_pagamento, '—')}</select></label>
         <label>Conta<select name="conta_id">${opts(contas.filter((k) => k.ativo).map((k) => [k.id, k.nome]), l.conta_id, '—')}</select></label>
         <label>Documento (NF, boleto)<input name="documento" value="${esc(l.documento)}"></label>
-        ${novo ? `<label>Repetir<select name="rep">${opts([['1', 'Não repete'], ['rec', 'Mensal (recorrente)'], ['parc', 'Parcelado']], '1')}</select></label>
-          <label>Nº de meses / parcelas<input name="n" type="number" min="2" max="60" value="12"></label>` : ''}
+        ${novo ? `<label>Repetir<select name="rep">${opts([['1', 'Não repete'], ['fixa', 'Mensal fixo (aluguel, contador)'], ['media', 'Mensal pela média (luz, água)'], ['parc', 'Parcelado (IPTU, compra)']], '1')}</select></label>
+          <label>Nº de meses / parcelas<input name="n" type="number" min="2" max="60" value="12"></label>
+          <label data-so="fixa" hidden>Mês do reajuste<select name="reajuste_mes">${opts(MESES.map((x, i) => [i + 1, x]), '', 'Sem reajuste')}</select></label>
+          <label data-so="media" hidden>Média dos últimos<select name="media_meses">${opts([[3, '3 meses'], [6, '6 meses'], [12, '12 meses']], 3)}</select></label>` : ''}
+        ${!novo ? `<label style="grid-column:1/-1"><span><input type="checkbox" name="valor_confirmado" ${l.valor_confirmado ? 'checked' : ''}> Valor confirmado (fatura/boleto chegou)${l.recorrencia === 'media' ? ' — os meses seguintes passam a prever a média' : ''}</span></label>` : ''}
+        ${!novo && l.serie_id ? `<label style="grid-column:1/-1"><span><input type="checkbox" name="proximas"> Aplicar este valor também aos próximos meses em aberto da série${l.recorrencia === 'fixa' ? ' (reajuste)' : ''}</span></label>` : ''}
         <label style="grid-column:1/-1">Observação<input name="observacao" value="${esc(l.observacao)}"></label>
+        <label>Fatura / boleto ${l.fatura_arquivo ? '<a href="#" data-ver="fatura_arquivo">(ver anexo)</a>' : ''}<input type="file" name="fatura" accept="application/pdf,image/*"></label>
+        <label>Comprovante ${l.comprovante_arquivo ? '<a href="#" data-ver="comprovante_arquivo">(ver anexo)</a>' : ''}<input type="file" name="comprovante" accept="application/pdf,image/*"></label>
       </form>
-      ${novo ? '<p class="dica" style="margin-top:10px">Parcelado divide o valor pelo nº de parcelas. Mensal repete o mesmo valor todo mês (aluguel, contador, sistemas).</p>' : ''}
+      ${novo ? '<p class="dica" style="margin-top:10px"><strong>Fixo</strong> repete o mesmo valor; no mês do reajuste aparece o alerta e, ao editar, dá para aplicar o valor novo às próximas. <strong>Pela média</strong> começa com o valor digitado e, a cada fatura confirmada, refaz a previsão dos meses seguintes. <strong>Parcelado</strong> divide o valor.</p>' : ''}
       <div class="linha-acoes">${novo ? '' : '<button class="btn" id="canc" style="margin-right:auto">Cancelar lançamento</button>'}
+        ${!novo && l.serie_id && l.recorrencia ? '<button class="btn" id="ext">+12 meses</button>' : ''}
         <button class="btn" data-fechar>Fechar</button><button class="btn primario" id="s">Salvar</button></div>`,
     (m, fechar) => {
+      const selRep = $('[name=rep]', m);
+      if (selRep) selRep.onchange = () => $$('[data-so]', m).forEach((x) => (x.hidden = x.dataset.so !== selRep.value));
+      $$('[data-ver]', m).forEach((a) => (a.onclick = (e) => { e.preventDefault(); abrirAnexo(l[a.dataset.ver]); }));
+      $('#ext', m)?.addEventListener('click', async () => {
+        const { data: ult, error: e0 } = await sb.from('lancamentos').select('*').eq('serie_id', l.serie_id).neq('status', 'cancelado').order('vencimento', { ascending: false }).limit(1);
+        if (e0 || !ult?.length) return falha(e0 || 'Série vazia');
+        const u = ult[0], dia = u.vencimento.slice(8);
+        const linhas = Array.from({ length: 12 }, (_, i) => { const ym2 = somaMes(u.vencimento.slice(0, 7), i + 1);
+          return { clinica_id: cid, carteira_id: u.carteira_id, tipo: u.tipo, descricao: u.descricao, fornecedor: u.fornecedor, categoria_id: u.categoria_id,
+            area: u.area, forma_pagamento: u.forma_pagamento, conta_id: u.conta_id, serie_id: u.serie_id, recorrencia: u.recorrencia,
+            media_meses: u.media_meses, reajuste_mes: u.reajuste_mes, valor_previsto: u.valor_previsto, competencia: ym2 + '-01',
+            vencimento: ym2 + '-' + String(Math.min(Number(dia), Number(fimMes(ym2).slice(8)))).padStart(2, '0') }; });
+        const { error: e } = await sb.from('lancamentos').insert(linhas); if (e) return falha(e);
+        fechar(); toast('Série estendida por mais 12 meses.'); lancamentos();
+      });
       $('#canc', m)?.addEventListener('click', async () => {
         const serie = l.serie_id && await confirmar('Cancelar também as próximas parcelas/recorrências ainda em aberto?', 'Sim, as próximas também');
         let q = sb.from('lancamentos').update({ status: 'cancelado' });
@@ -125,29 +190,49 @@ export async function render(params = '') {
         const { error: e } = await q; if (e) return falha(e); fechar(); toast('Cancelado.'); lancamentos();
       });
       $('#s', m).onclick = async () => {
-        const f = Object.fromEntries(new FormData($('#f', m)));
+        const fd = new FormData($('#f', m)); const f = Object.fromEntries(fd);
+        const arqs = { fatura_arquivo: fd.get('fatura'), comprovante_arquivo: fd.get('comprovante') };
         if (!f.descricao.trim() || f.valor_previsto === '' || !f.vencimento) return toast('Preencha descrição, valor e vencimento.', true);
+        // sobe anexos novos e devolve { coluna: caminho }
+        const subir = async (id) => { const out = {};
+          for (const [col, file] of Object.entries(arqs)) if (file && file.size) out[col] = await enviarAnexo(cid, cart, id, col.split('_')[0], file);
+          return out; };
         const base = { descricao: f.descricao.trim(), fornecedor: f.fornecedor || null, categoria_id: f.categoria_id || null, area: f.area,
           forma_pagamento: f.forma_pagamento || null, conta_id: f.conta_id || null, documento: f.documento || null, observacao: f.observacao || null,
           competencia: (f.competencia || f.vencimento.slice(0, 7)) + '-01' };
         const valor = Number(f.valor_previsto);
         if (!novo) {
-          const { error: e } = await sb.from('lancamentos').update({ ...base, valor_previsto: valor, vencimento: f.vencimento }).eq('id', l.id);
-          if (e) return falha(e); fechar(); toast('Salvo.'); return lancamentos();
+          let anexos; try { anexos = await subir(l.id); } catch (e) { return falha(e, 'Anexo'); }
+          const { error: e } = await sb.from('lancamentos').update({ ...base, ...anexos, valor_previsto: valor, vencimento: f.vencimento,
+            valor_confirmado: fd.has('valor_confirmado') }).eq('id', l.id);
+          if (e) return falha(e);
+          if (fd.has('proximas')) {
+            const { error: e2 } = await sb.from('lancamentos').update({ valor_previsto: valor }).eq('serie_id', l.serie_id)
+              .eq('status', 'previsto').eq('valor_confirmado', false).gt('vencimento', f.vencimento);
+            if (e2) return falha(e2);
+          }
+          fechar(); toast(fd.has('proximas') ? 'Salvo e aplicado às próximas.' : 'Salvo.'); return lancamentos();
         }
         const n = f.rep === '1' ? 1 : Math.max(2, Math.min(60, Number(f.n) || 2));
+        const recorr = ['fixa', 'media'].includes(f.rep) ? f.rep : null;
         const serie = n > 1 ? crypto.randomUUID() : null;
         const parcela = f.rep === 'parc' ? Math.floor((valor / n) * 100) / 100 : valor;
         const linhas = Array.from({ length: n }, (_, i) => {
           const venc = somaMes(f.vencimento.slice(0, 7), i) + '-' + f.vencimento.slice(8);
           const vencOk = venc.slice(0, 7) + '-' + String(Math.min(Number(f.vencimento.slice(8)), Number(fimMes(venc.slice(0, 7)).slice(8)))).padStart(2, '0');
-          return { ...base, clinica_id: cid, tipo: l.tipo, vencimento: vencOk, serie_id: serie,
+          return { ...base, clinica_id: cid, carteira_id: cart.id, tipo: l.tipo, vencimento: vencOk, serie_id: serie, recorrencia: recorr,
+            reajuste_mes: recorr === 'fixa' && f.reajuste_mes ? Number(f.reajuste_mes) : null,
+            media_meses: recorr === 'media' ? Number(f.media_meses) || 3 : null,
             competencia: f.rep === 'parc' ? base.competencia : somaMes(base.competencia.slice(0, 7), i) + '-01',
             valor_previsto: f.rep === 'parc' && i === n - 1 ? Math.round((valor - parcela * (n - 1)) * 100) / 100 : parcela,
             parcela: f.rep === 'parc' ? `${i + 1}/${n}` : null };
         });
-        const { error: e } = await sb.from('lancamentos').insert(linhas);
-        if (e) return falha(e); fechar(); toast(n > 1 ? `${n} lançamentos criados.` : 'Salvo.'); lancamentos();
+        const { data: novos, error: e } = await sb.from('lancamentos').insert(linhas).select('id, vencimento').order('vencimento');
+        if (e) return falha(e);
+        if (arqs.fatura_arquivo?.size || arqs.comprovante_arquivo?.size) {   // anexos ficam no 1º mês da série
+          try { const ax = await subir(novos[0].id); await sb.from('lancamentos').update(ax).eq('id', novos[0].id); } catch (e2) { falha(e2, 'Anexo'); }
+        }
+        fechar(); toast(n > 1 ? `${n} lançamentos criados.` : 'Salvo.'); lancamentos();
       };
     });
   }
@@ -160,13 +245,15 @@ export async function render(params = '') {
         <label>Valor efetivo (R$)<input name="valor_realizado" type="number" step="0.01" min="0" value="${esc(l.valor_previsto)}"></label>
         <label>Conta<select name="conta_id">${opts(contas.filter((k) => k.ativo).map((k) => [k.id, k.nome]), l.conta_id || contas[0].id)}</select></label>
         <label>Forma<select name="forma_pagamento">${opts(Object.entries(FORMAS), l.forma_pagamento, '—')}</select></label>
+        <label style="grid-column:1/-1">Comprovante (opcional)<input type="file" name="comprovante" accept="application/pdf,image/*"></label>
       </form>
       <p class="dica" style="margin-top:10px">Se o valor vier menor (glosa, taxa de cartão), registre o que entrou de fato. A diferença fica visível no previsto × realizado.</p>
       <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="s">Confirmar</button></div>`,
     (m, fechar) => ($('#s', m).onclick = async () => {
-      const f = Object.fromEntries(new FormData($('#f', m)));
+      const fd = new FormData($('#f', m)); const f = Object.fromEntries(fd); const comp = fd.get('comprovante');
       if (f.valor_realizado === '' || !f.data_realizado) return toast('Informe data e valor.', true);
-      const { error: e } = await sb.from('lancamentos').update({ status: 'pago', data_realizado: f.data_realizado,
+      let ax = {}; if (comp?.size) { try { ax.comprovante_arquivo = await enviarAnexo(cid, cart, l.id, 'comprovante', comp); } catch (e) { return falha(e, 'Anexo'); } }
+      const { error: e } = await sb.from('lancamentos').update({ ...ax, valor_confirmado: true, status: 'pago', data_realizado: f.data_realizado,
         valor_realizado: Number(f.valor_realizado), conta_id: f.conta_id, forma_pagamento: f.forma_pagamento || null }).eq('id', l.id);
       if (e) return falha(e); fechar(); toast('Baixado.'); lancamentos();
     }));
@@ -189,7 +276,7 @@ export async function render(params = '') {
   async function caixa() {
     const fim = fimMes(ym);
     const { data: ls, error } = await sb.from('lancamentos').select('tipo, status, conta_id, valor_previsto, valor_realizado, data_realizado, vencimento')
-      .eq('clinica_id', cid).neq('status', 'cancelado').lte('vencimento', fimMes(somaMes(ym, 3)));
+      .eq('clinica_id', cid).eq('carteira_id', cart.id).neq('status', 'cancelado').lte('vencimento', fimMes(somaMes(ym, 3)));
     if (error) return falha(error);
     const sinal = (l) => (l.tipo === 'receber' ? 1 : -1);
     const linhas = contas.filter((k) => k.ativo).map((k) => {
@@ -229,7 +316,7 @@ export async function render(params = '') {
     const ini = modo === 'ano' ? ym.slice(0, 4) + '-01-01' : ym + '-01';
     const fim = modo === 'ano' ? ym.slice(0, 4) + '-12-01' : ym + '-01';
     const { data: ls, error } = await sb.from('lancamentos').select('tipo, status, categoria_id, area, valor_previsto, valor_realizado')
-      .eq('clinica_id', cid).neq('status', 'cancelado').gte('competencia', ini).lte('competencia', fim);
+      .eq('clinica_id', cid).eq('carteira_id', cart.id).neq('status', 'cancelado').gte('competencia', ini).lte('competencia', fim);
     if (error) return falha(error);
     const areas = Object.keys(AREAS);
     const val = (l) => Number(l.status === 'pago' ? l.valor_realizado : l.valor_previsto) * (l.tipo === 'receber' ? 1 : -1);
@@ -293,7 +380,7 @@ export async function render(params = '') {
     (m, fechar) => ($('#s', m).onclick = async () => {
       const fd = new FormData($('#f', m)); const f = Object.fromEntries(fd); f.ativo = fd.has('ativo'); f.saldo_inicial = Number(f.saldo_inicial) || 0;
       if (!f.nome.trim()) return toast('Informe o nome.', true);
-      const q = k.id ? sb.from('contas_financeiras').update(f).eq('id', k.id) : sb.from('contas_financeiras').insert({ ...f, clinica_id: cid });
+      const q = k.id ? sb.from('contas_financeiras').update(f).eq('id', k.id) : sb.from('contas_financeiras').insert({ ...f, clinica_id: cid, carteira_id: cart.id });
       const { error: e } = await q; if (e) return falha(e); fechar(); toast('Salvo.'); render(`cadastros-${ym}`);
     }));
 
@@ -307,7 +394,7 @@ export async function render(params = '') {
     (m, fechar) => ($('#s', m).onclick = async () => {
       const fd = new FormData($('#f', m)); const f = Object.fromEntries(fd); f.ativo = fd.has('ativo'); f.ordem = Number(f.ordem) || 100;
       if (!f.nome.trim()) return toast('Informe o nome.', true);
-      const q = k.id ? sb.from('categorias_financeiras').update(f).eq('id', k.id) : sb.from('categorias_financeiras').insert({ ...f, clinica_id: cid });
+      const q = k.id ? sb.from('categorias_financeiras').update(f).eq('id', k.id) : sb.from('categorias_financeiras').insert({ ...f, clinica_id: cid, uso: pessoal ? 'pessoal' : 'empresa' });
       const { error: e } = await q; if (e) return falha(e); fechar(); toast('Salvo.'); render(`cadastros-${ym}`);
     }));
 

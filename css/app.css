@@ -343,3 +343,13 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 .sp-pts a{color:var(--texto);text-decoration:none}.sp-pts a.atual{color:var(--laranja-esc);font-weight:700}
 .sp-med{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}.sp-med td{border-top:1px solid var(--linha-fraca);padding:3px 2px;vertical-align:top}
 @media (max-width:720px){.sp-area{grid-template-columns:1fr}}
+
+/* Chave Gestão ↔ Profissional (db/050) */
+.chave-modo{display:flex;margin:0 18px 18px;background:var(--grafite-2);border-radius:999px;padding:3px}
+.chave-modo button{flex:1;border:0;background:transparent;color:#C3C9CC;font:600 13px/1 inherit;font-family:inherit;padding:8px 6px;border-radius:999px;cursor:pointer}
+.chave-modo button.ativo{background:var(--laranja);color:#fff}
+/* Carteiras no financeiro */
+.carteiras{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.carteiras a{padding:6px 14px;border-radius:999px;border:1px solid var(--linha,#ddd);text-decoration:none;color:inherit;font-weight:500;font-size:14px}
+.carteiras a.ativa{background:var(--grafite,#2b3236);color:#fff;border-color:transparent}
+.carteiras a.pessoal.ativa{background:var(--laranja-esc)}

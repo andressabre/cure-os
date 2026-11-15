@@ -66,6 +66,16 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   `prontuario_versoes` e marca `editado_em`; DELETE de registro final continua bloqueado. Tela em lista compacta expansível. Importador dos .txt antigos.
 - **Documentos timbrados** (`emissao.js`) com código de verificação público (`verificar.html` → `verificar_documento`, única função anônima).
 - **Financeiro:** contas, categorias com grupo DRE, lançamentos previsto × realizado, repasse do mês, caixa e DRE.
+  **Carteiras (db/051, 15/11/2026):** `carteiras` (1 `empresa` + `pessoal` por sócio); `lancamentos.carteira_id` e `contas_financeiras.carteira_id`
+  (trigger `carteira_padrao` põe a empresa quando vem vazio: repasse, lote, particular). RLS: pessoal só `gestor` (os sócios veem as duas pessoais);
+  `financeiro` só a empresa. Categorias com `uso` empresa|pessoal ("Casa – …"). Carteira pessoal não tem DRE nem repasse. Seletor em chips no topo do módulo.
+  **Recorrência:** `recorrencia` fixa (com `reajuste_mes` → selo "reajuste?" naquele mês) ou media (`media_meses`; trigger `reprojetar_media` refaz os
+  previstos futuros não confirmados pela média dos últimos N confirmados/pagos); `valor_confirmado` = fatura chegou; "aplicar às próximas" e "+12 meses" no editar.
+  **Anexos:** bucket privado `financeiro` (`<clinica>/<empresa|pessoal>/<lançamento>/…`, 5 MB, fotos reduzidas a 1600 px JPEG no navegador;
+  `pasta_financeiro_ok`: pessoal só gestor); colunas `fatura_arquivo` e `comprovante_arquivo`; comprovante também na baixa.
+- **Chave Gestão ↔ Profissional (15/11/2026):** quem é gestor/financeiro E tem profissional vinculado vê a chave no menu lateral (`#chave-modo`).
+  `estado.perfilReal` guarda o perfil de verdade; `aplicarModo()` troca `estado.perfil` para 'profissional' no modo profissional (menu, agenda,
+  ficha e `podeGerir()` passam a se comportar como profissional). Só muda a tela — a RLS continua pelo perfil real. Modo salvo em `localStorage.modo_<user>`.
 - **Backup** (só gestor): ZIP no navegador. Limitação: pela RLS, exporta só o prontuário de quem gera o backup.
 - **Agenda (db/025):** `clinicas.config.salas` + `sala_padrao` por profissional; padrão no agendamento = última sala usada pelo profissional;
   aviso de conflito de sala entre profissionais; **agendamento em série** (`atendimentos.serie_id`, limitado ao saldo da senha, pula conflitos;

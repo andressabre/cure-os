@@ -1,5 +1,5 @@
 // Entrada do app: login, menu por perfil e roteamento por #hash.
-import { sb, estado, $, esc, toast, falha } from './core.js';
+import { sb, estado, $, esc, toast, falha, temDoisModos, aplicarModo } from './core.js';
 import * as painel from './modulos/painel.js';
 import * as retornos from './modulos/retornos.js';
 import * as contratos from './modulos/contratos.js';
@@ -48,10 +48,31 @@ async function iniciarSessao() {
     mostrarLogin('Sua conta ainda não está vinculada a uma clínica. Peça um convite à gestora.', true);
     await sb.auth.signOut(); return;
   }
-  estado.perfil = vinc[0].perfil; estado.profissionalId = vinc[0].profissional_id; estado.clinica = vinc[0].clinicas;
+  estado.perfilReal = vinc[0].perfil; estado.profissionalId = vinc[0].profissional_id; estado.clinica = vinc[0].clinicas;
+  let salvo = 'gestao'; try { salvo = localStorage.getItem('modo_' + session.user.id) || 'gestao'; } catch {}
+  aplicarModo(salvo);
   $('#tela-login').hidden = true; $('#tela-app').hidden = false;
-  $('#usuario-info').innerHTML = `<strong>${esc(estado.clinica.nome)}</strong><br>${esc(session.user.email)}<br>${PERFIL_NOME[estado.perfil]}`;
-  montarMenu(); rotear();
+  montarChaveModo(); montarMenu(); rotear();
+}
+
+function infoUsuario() {
+  $('#usuario-info').innerHTML = `<strong>${esc(estado.clinica.nome)}</strong><br>${esc(estado.user.email)}<br>${PERFIL_NOME[estado.perfilReal]}`;
+}
+
+// Chave Gestão ↔ Profissional: só para quem gere e também atende
+function montarChaveModo() {
+  infoUsuario();
+  const el = $('#chave-modo');
+  if (!temDoisModos()) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = ['gestao', 'profissional'].map((m) => `<button type="button" data-modo="${m}" class="${estado.modo === m ? 'ativo' : ''}">${m === 'gestao' ? 'Gestão' : 'Profissional'}</button>`).join('');
+  el.querySelectorAll('button').forEach((b) => (b.onclick = () => {
+    if (b.dataset.modo === estado.modo) return;
+    aplicarModo(b.dataset.modo); montarChaveModo(); montarMenu();
+    const id = location.hash.slice(1).split('-')[0];
+    if (!rotasDoPerfil().some((r) => r.id === id)) location.hash = rotasDoPerfil()[0].id; else rotear();
+    toast(estado.modo === 'gestao' ? 'Modo gestão: financeiro, faturamento e cadastros.' : 'Modo profissional: sua agenda, pacientes e prontuário.');
+  }));
 }
 
 function rotasDoPerfil() { return ROTAS.filter((r) => r.perfis.includes(estado.perfil) && (!r.precisaProf || estado.profissionalId)); }
