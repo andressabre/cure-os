@@ -1,4 +1,4 @@
-// Relacionamento (db/030): aniversariantes e reavaliações vencendo, com WhatsApp pronto (wa.me, sem custo).
+// Relacionamento (db/030): aniversariantes e reavaliações vencendo, com WhatsApp pronto (wa.me, sem custo) e e-mail (mailto, db/048; em lote com Cco).
 // Opt-out: toda mensagem termina com o rodapé "responda SAIR"; "Pediu para sair" grava comunicacao_optout_em e o paciente sai da lista.
 import { sb, estado, $, $$, esc, toast, falha, modal, confirmar } from '../core.js';
 import { foneWhats } from './agenda.js';
@@ -14,6 +14,17 @@ function texto(cfg, it) {
   const base = it.tipo === 'aniversario' ? cfg.texto_aniversario : cfg.texto_reavaliacao;
   return `${(base || '').replace(/\{nome\}/g, primeiro(it.nome)).replace(/\{item\}/g, (it.item || '').toLowerCase())
     .replace(/\{tempo\}/g, it.ultima ? tempoDesde(it.ultima) : '')}\n\n${cfg.rodape_sair || 'Se não quiser mais receber, responda SAIR.'}`;
+}
+
+const assunto = (it) => (it.tipo === 'aniversario' ? 'Feliz aniversário! — Clínica Cure' : `Hora da reavaliação: ${it.item} — Clínica Cure`);
+const linkEmail = (cfg, it) => `mailto:${encodeURIComponent(it.email)}?subject=${encodeURIComponent(assunto(it))}&body=${encodeURIComponent(texto(cfg, it))}`;
+// E-mail em lote: mesmo texto sem o nome, destinatários em Cco (ninguém vê o e-mail do outro); grupos de 20 por limite do mailto
+function lotesEmail(cfg, lista) {
+  const comEmail = lista.filter((i) => i.email), grupos = [];
+  for (let i = 0; i < comEmail.length; i += 20) grupos.push(comEmail.slice(i, i + 20));
+  return grupos.map((g) => { const it0 = { ...g[0], nome: '' };
+    const corpo = texto(cfg, { ...it0, ultima: null }).replace(/Olá,\s*!/, 'Olá!').replace(/Já faz\s+desde/, 'Já está na hora');
+    return { n: g.length, href: `mailto:?bcc=${encodeURIComponent(g.map((x) => x.email).join(','))}&subject=${encodeURIComponent(assunto(g[0]))}&body=${encodeURIComponent(corpo)}` }; });
 }
 
 export function abrir() {
@@ -35,12 +46,16 @@ export function abrir() {
           <td><a href="#paciente-${it.paciente_id}" data-fechar>${esc(it.nome)}</a><br><small class="muted">${esc(it.telefone || 'sem telefone')}</small></td>
           <td style="white-space:nowrap">${f ? `<a class="btn pequeno ${enviados[chave] ? '' : 'primario'}" target="_blank" rel="noopener" data-env="${esc(chave)}"
               href="https://wa.me/${f}?text=${encodeURIComponent(texto(cfg, it))}">${enviados[chave] ? '✓ enviado' : 'WhatsApp'}</a>` : '<span class="muted">sem celular</span>'}
+            ${it.email ? `<a class="btn pequeno" href="${esc(linkEmail(cfg, it))}" data-env="${esc(chave)}" title="${esc(it.email)}">✉ E-mail</a>` : ''}
             <button class="btn pequeno" data-sair="${it.paciente_id}">Pediu para sair</button></td></tr>`; };
       const aniv = itens.filter((i) => i.tipo === 'aniversario'), reav = itens.filter((i) => i.tipo === 'reavaliacao');
       const tab = (lista) => `<table><tbody>${lista.map(linha).join('')}</tbody></table>`;
       $('#rl', m).className = '';
       $('#rl', m).innerHTML = `<h4>Aniversários (${aniv.length})</h4>${aniv.length ? tab(aniv) : '<p class="muted">Nenhum — lembre que só aparece quem tem data de nascimento no cadastro.</p>'}
-        <h4>Reavaliações (${reav.length})</h4>${reav.length ? tab(reav) : '<p class="muted">Nenhuma vencendo.</p>'}`;
+        <h4>Reavaliações (${reav.length})</h4>${reav.length ? [...new Set(reav.map((r) => r.item))].map((item) => {
+          const doItem = reav.filter((r) => r.item === item), lotes = lotesEmail(cfg, doItem);
+          return `<p style="margin:8px 0 4px"><strong>${esc(item)}</strong> · ${doItem.length} paciente(s)${lotes.map((l, i) => ` <a class="btn pequeno" href="${esc(l.href)}">✉ E-mail em lote${lotes.length > 1 ? ' ' + (i + 1) : ''} (${l.n}, Cco)</a>`).join('')}</p>${tab(doItem)}`; }).join('')
+          : '<p class="muted">Nenhuma vencendo.</p>'}`;
       $$('[data-env]', m).forEach((a) => a.addEventListener('click', () => {
         enviados[a.dataset.env] = 1; sessionStorage.setItem('rel-enviados', JSON.stringify(enviados)); setTimeout(carregar, 600); }));
       $$('[data-sair]', m).forEach((b) => (b.onclick = async () => {

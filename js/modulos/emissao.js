@@ -1,8 +1,8 @@
 // Emissão de documentos timbrados (db/024): atestado, declaração de comparecimento/acompanhante,
-// orientação de alta, relatório ao médico, orientações e livre. Modelos padrão aqui + modelos próprios (documento_modelos).
+// orientação de alta, relatório ao médico, solicitação de exame (escanometria/RX, db/047), orientações e livre. Modelos padrão aqui + modelos próprios (documento_modelos).
 // Sigilo: documento clínico só o autor vê; declarações sem dado clínico também recepção/gestão.
 // Documento emitido pode ser editado (mesmo código de verificação), excluído, salvo sem imprimir ou reimpresso (db/039).
-import { sb, estado, $, $$, esc, toast, falha, modal, confirmar } from '../core.js';
+import { sb, estado, $, $$, esc, toast, falha, modal, confirmar, descricaoCid } from '../core.js';
 
 const REGIAO = { SC: { CRN: '10', CREFITO: '10', CRP: '12' } };
 export const conselhoFmt = (p) => {
@@ -51,10 +51,31 @@ Evolução:
 Conclusão / solicitação:
 
 Coloco-me à disposição para esclarecimentos.` },
+  solicitacao: { nome: 'Solicitação de exame', titulo: 'Solicitação de exame', clinico: true,
+    corpo: 'Paciente: {paciente}{cpf_frase}\nDiagnóstico: {cid_linha}\n\n{exames_texto}{justif_texto}\n\nColoco-me à disposição para qualquer dúvida ou esclarecimento.' },
   orientacoes: { nome: 'Orientações ao paciente', titulo: 'Orientações', clinico: true, corpo: 'Orientações para {paciente}:\n\n• \n• \n• ' },
   livre: { nome: 'Documento livre', titulo: 'Declaração', clinico: true, corpo: '' },
 };
 const SO_RECEPCAO = ['comparecimento', 'acompanhante'];
+// Solicitação de exame (15/11/2026): exames e medidas por cliques; texto padrão do Dionatan (escanometria pelo método de Farill)
+const MEDIDAS_ESC = ['Medida do fêmur', 'Medida da tíbia', 'Total do fêmur + tíbia (medida indireta)', 'Distância femorotibial (medida direta – funcional)'];
+const EXAMES = {
+  esc: { nome: 'Escanometria dos membros inferiores', cid: 'M21.7' },
+  pes: { nome: 'RX dos pés em AP com medida da altura' },
+  col: { nome: 'RX panorâmico da coluna (escoliose)', cid: '' },
+};
+function textoExames(f) {
+  const partes = [];
+  if (f.ex_esc?.checked) {
+    const meds = MEDIDAS_ESC.filter((_, i) => f['med' + i]?.checked);
+    partes.push(`Solicito exame de escanometria dos membros inferiores, pelo método de Farill${meds.length ? ', com as seguintes medições:\n' + meds.map((m) => '• ' + m).join('\n') : '.'}`);
+  }
+  if (f.ex_pes?.checked) partes.push('Solicito RX dos pés em AP, com a medida da altura desde a base até a superfície articular tibiotársica de cada pé. '
+    + 'Paciente em posição ortostática, com tornozelos a 90º e 30º de rotação interna dos pés.');
+  if (f.ex_col?.checked) partes.push('Solicito radiografia panorâmica da coluna total, em ortostase, nas incidências PA e perfil, para avaliação de escoliose e medida do ângulo de Cobb.');
+  if (f.ex_outro?.value.trim()) partes.push(`Solicito: ${f.ex_outro.value.trim()}.`);
+  return partes.join('\n\n') || '(marque o exame acima)';
+}
 
 function preencher(modelo, v) {
   return modelo.replace(/\{(\w+)\}/g, (m, k) => (v[k] ?? m));
@@ -132,6 +153,12 @@ function editor(p, ats, eu, tipo, modeloProprio, aoEmitir, existente, favs) {
         <label>CID<input name="cid" placeholder="Só com autorização do paciente"></label>
         <label><span><input type="checkbox" name="cid_ok"> Paciente autorizou constar o CID</span></label>` : ''}
       ${tipo === 'acompanhante' ? '<label style="grid-column:1/-1">Nome do acompanhante<input name="acomp" required></label>' : ''}
+      ${tipo === 'solicitacao' ? `<div style="grid-column:1/-1" class="sol-exames"><strong>Exames</strong>
+          ${Object.entries(EXAMES).map(([k, e]) => `<label><span><input type="checkbox" name="ex_${k}" ${k !== 'col' ? 'checked' : ''}> ${esc(e.nome)}</span></label>`).join('')}
+          <div class="sol-medidas"><small class="muted">Medidas da escanometria</small>${MEDIDAS_ESC.map((m, i) => `<label><span><input type="checkbox" name="med${i}" checked> ${esc(m)}</span></label>`).join('')}</div>
+          <label>Outro exame<input name="ex_outro" placeholder="Ex.: ressonância do joelho direito"></label></div>
+        <label>CID<input name="cid_sol" value="M21.7" placeholder="Ex.: M21.7"></label>
+        <label style="grid-column:1/-1">Justificativa clínica (opcional)<input name="justif" placeholder="Ex.: discrepância clínica de membros inferiores com dor lombar"></label>` : ''}
       ${favs ? `<label style="grid-column:1/-1">★ Modelo favorito<select name="fav">${favs.map((m) => `<option value="${m.id}" ${m.id === modeloProprio?.id ? 'selected' : ''}>${esc(m.titulo)}</option>`).join('')}</select></label>` : ''}
       <label style="grid-column:1/-1">Título<input name="titulo" value="${esc(existente?.titulo || modeloProprio?.titulo || T.titulo)}"></label>
     </form>
@@ -158,9 +185,21 @@ function editor(p, ats, eu, tipo, modeloProprio, aoEmitir, existente, favs) {
         dias, dias_extenso: EXT[dias] || String(dias), area: areaAt.toLowerCase(), acompanhante: f.acomp?.value || '____________________',
         cid_frase: f.cid?.value && f.cid_ok?.checked ? ` CID: ${f.cid.value.toUpperCase()}.` : '',
         sessoes: atendidos.length, primeira: atendidos[0] ? dBr(atendidos[0].inicio) : '____', ultima: atendidos.at(-1) ? dBr(atendidos.at(-1).inicio) : '____',
-        hoje: dBr(new Date().toISOString()) };
+        hoje: dBr(new Date().toISOString()),
+        ...(tipo === 'solicitacao' ? { exames_texto: textoExames(f), justif_texto: f.justif?.value.trim() ? `\n\nJustificativa clínica: ${f.justif.value.trim()}.` : '',
+          cid_linha: f.cid_sol?.value.trim() ? `${f.cid_sol.value.trim().toUpperCase()}${cidDesc[f.cid_sol.value.trim().toUpperCase()] ? ' — ' + cidDesc[f.cid_sol.value.trim().toUpperCase()] : ''}` : '____' } : {}) };
     };
+    const cidDesc = {};   // descrição do CID (cid10.json local), carregada sob demanda
     const gerar = () => { if (existente) return; if (!editado) corpo.value = preencher(modeloProprio?.corpo ?? T.corpo, valores()); };
+    if (f.cid_sol) {
+      const buscarCid = async () => { const c = f.cid_sol.value.trim().toUpperCase(); if (c && !(c in cidDesc)) { cidDesc[c] = await descricaoCid(c).catch(() => ''); gerar(); } };
+      f.cid_sol.addEventListener('change', buscarCid); buscarCid();
+      // CID de exemplo some quando só o RX de coluna está marcado
+      const limparCid = () => { if (f.ex_col.checked && !f.ex_esc.checked && !f.ex_pes.checked && f.cid_sol.value === 'M21.7') { f.cid_sol.value = ''; gerar(); } };
+      [f.ex_col, f.ex_esc, f.ex_pes].forEach((x) => x.addEventListener('change', limparCid));
+      const sincMed = () => $('.sol-medidas', box).style.display = f.ex_esc.checked ? '' : 'none';
+      f.ex_esc.addEventListener('change', sincMed);
+    }
     f.oninput = gerar; f.onchange = gerar; gerar();
     if (f.cid) f.cid.oninput = () => { if (f.cid.value) f.cid_ok.closest('label').style.color = f.cid_ok.checked ? '' : 'var(--vermelho)'; gerar(); };
     // Texto → modelo: campos automáticos voltam a ser {marcadores}, para reaproveitar com outros pacientes

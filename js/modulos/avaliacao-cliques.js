@@ -158,6 +158,7 @@ function gerarFisio(st, esporte) {
     tem(st.agach) ? `agachamento unipodal: ${min1(lista(st.agach))}` : '',
     num(st.hop) !== null ? `hop test com índice de simetria de ${st.hop}%${Number(st.hop) < 90 ? ' (abaixo de 90%)' : ''}` : '',
     psfsTexto(st), tem(st.escore) ? `questionário funcional: ${st.escore}` : '');
+  out.escanometria = escanometria(st);
   out.diagnostico = regiaoLado(st) ? junta(`quadro de dor em ${regiaoLado(st)}${fase(st) ? ', ' + fase(st) : ''}${st.inicio ? ', de início ' + min1(st.inicio.replace(/ \(.*\)/, '')) : ''}${st.impacto ? ` (${min1(st.impacto)})` : ''}`,
     tt.pos.length ? `achados positivos em ${lista(tt.pos)}` : '') : '';
   out.objetivos = junta(tem(st.obj) ? `curto prazo: ${min1(lista(st.obj))}` : '', tem(st.obj_longo) ? `longo prazo: ${min1(lista(st.obj_longo))}` : '');
@@ -300,6 +301,14 @@ const FPI = ['Palpação da cabeça do tálus', 'Curvas supra e inframaleolares 
 const fpiClasse = (t) => (t <= -5 ? 'altamente supinado' : t <= -1 ? 'supinado' : t <= 5 ? 'neutro' : t <= 9 ? 'pronado' : 'altamente pronado');
 const fpiTotal = (st, lado) => { const v = FPI.map((_, i) => num(st[`fpi${lado}${i}`])); return v.every((x) => x !== null) ? v.reduce((a, b) => a + b, 0) : null; };
 const PICOS = ['Calcâneo', '1º metatarso', 'Metatarsos centrais', '5º metatarso', 'Hálux', 'Borda lateral'].flatMap((x) => [`${x} D`, `${x} E`]);
+const blocoEsc = { titulo: 'Escanometria (resultado do exame)', dica: 'Medidas em cm, como no laudo. As diferenças são calculadas em mm. Anexe o laudo no registro.', perguntas: [
+    { k: 'esc_data', rot: 'Data do exame', tipo: 'texto' },
+    { k: 'femur_d', rot: 'Fêmur D (cm)', tipo: 'num', min: 10, max: 70, passo: 0.1 }, { k: 'femur_e', rot: 'Fêmur E (cm)', tipo: 'num', min: 10, max: 70, passo: 0.1 },
+    { k: 'tibia_d', rot: 'Tíbia D (cm)', tipo: 'num', min: 10, max: 60, passo: 0.1 }, { k: 'tibia_e', rot: 'Tíbia E (cm)', tipo: 'num', min: 10, max: 60, passo: 0.1 },
+    { k: 'pe_d', rot: 'Altura do pé D no RX (cm)', tipo: 'num', min: 2, max: 15, passo: 0.1 }, { k: 'pe_e', rot: 'Altura do pé E no RX (cm)', tipo: 'num', min: 2, max: 15, passo: 0.1 },
+    { k: 'ffd', rot: 'Distância femorotibial direta D/E (como no laudo)', tipo: 'texto' },
+    { k: 'compensa', rot: 'Compensação aplicada na palmilha (mm e lado)', tipo: 'texto' },
+  ] };
 const blocosPodo = [
   { titulo: 'Motivo e contexto', perguntas: [
     { k: 'motivo', rot: 'Motivo da avaliação', tipo: 'varios', ops: ['Dor no pé/calcanhar', 'Dor no joelho', 'Dor no quadril', 'Dor lombar', 'Performance/corrida', 'Prevenção', 'Pé diabético/risco de úlcera', 'Revisão de palmilha anterior'] },
@@ -311,7 +320,7 @@ const blocosPodo = [
     { k: 'peso', rot: 'Peso (kg)', tipo: 'num', min: 20, max: 300, passo: 0.1 },
     { k: 'altura', rot: 'Altura (cm)', tipo: 'num', min: 100, max: 230 },
   ] },
-  { titulo: 'Baropodometria estática', perguntas: [
+  { titulo: 'Baropodometria estática (opcional)', dica: 'Os números completos ficam no PDF do BaroScan: depois de salvar, use "Anexar" no registro. Aqui, só o essencial para o texto.', perguntas: [
     { k: 'carga_d', rot: 'Carga no pé direito (%) — o esquerdo é calculado', tipo: 'num', min: 0, max: 100 },
     { k: 'distr', rot: 'Distribuição retropé × antepé', tipo: 'um', ops: ['Retropé > antepé', 'Equilibrada', 'Antepé > retropé'] },
     { k: 'pico', rot: 'Picos de pressão (hiperpressão)', tipo: 'varios', ops: PICOS },
@@ -338,6 +347,7 @@ const blocosPodo = [
   { titulo: 'Índice Postural do Pé (FPI-6)', dica: 'Cada critério de −2 (supinação) a +2 (pronação). O total e a classificação são calculados.', perguntas: [
     ...FPI.flatMap((c, i) => [{ k: `fpiD${i}`, rot: `${c} — D`, tipo: 'pts' }, { k: `fpiE${i}`, rot: `${c} — E`, tipo: 'pts' }]),
   ] },
+  blocoEsc,
   { titulo: 'Correlação e conduta', perguntas: [
     { k: 'correl', rot: 'Correlação com a queixa', tipo: 'varios', ops: ['Sobrecarga de retropé compatível com dor no calcanhar', 'Pronação compatível com sobrecarga medial do joelho',
       'Assimetria de carga compatível com queixa em quadril/lombar', 'Hiperpressão em antepé (metatarsalgia)', 'Sem correlação clara com a queixa'] },
@@ -346,6 +356,23 @@ const blocosPodo = [
     { k: 'reav', rot: 'Nova baropodometria', tipo: 'um', ops: ['Em 30 dias', 'Em 60 dias', 'Em 90 dias', 'Após adaptação da palmilha'] },
   ] },
 ];
+// Escanometria: diferença em mm (positivo = direito maior); total inclui a altura do pé no RX
+function escanometria(st) {
+  const v = (k) => num(st[k]), mm = (a, b) => Math.round((a - b) * 10);
+  const lado = (d) => (d === 0 ? 'sem diferença' : `${Math.abs(d)} mm, ${d > 0 ? 'membro E mais curto' : 'membro D mais curto'}`);
+  const partes = [];
+  const fD = v('femur_d'), fE = v('femur_e'), tD = v('tibia_d'), tE = v('tibia_e'), pD = v('pe_d'), pE = v('pe_e');
+  const cm = (x) => String(x).replace('.', ',');
+  if (fD !== null && fE !== null) partes.push(`fêmur D ${cm(fD)} / E ${cm(fE)} cm`);
+  if (tD !== null && tE !== null) partes.push(`tíbia D ${cm(tD)} / E ${cm(tE)} cm`);
+  let anat = null;
+  if ([fD, fE, tD, tE].every((x) => x !== null)) { anat = mm(fD + tD, fE + tE); partes.push(`total fêmur + tíbia D ${cm(+(fD + tD).toFixed(1))} / E ${cm(+(fE + tE).toFixed(1))} cm (diferença anatômica ${lado(anat)})`); }
+  if (pD !== null && pE !== null) partes.push(`altura do pé D ${cm(pD)} / E ${cm(pE)} cm (diferença ${lado(mm(pD, pE))})`);
+  if (anat !== null && pD !== null && pE !== null) partes.push(`discrepância total estimada ${lado(anat + mm(pD, pE))}`);
+  if (tem(st.ffd)) partes.push(`distância femorotibial direta: ${st.ffd}`);
+  if (!partes.length && !tem(st.compensa)) return '';
+  return junta(`escanometria${tem(st.esc_data) ? ' de ' + st.esc_data : ''}: ${partes.join('; ')}`, tem(st.compensa) ? `compensação aplicada na palmilha: ${st.compensa}` : '');
+}
 function gerarPodo(st, ctx = {}) {
   const cd = num(st.carga_d), ce = cd !== null ? 100 - cd : null;
   const fD = fpiTotal(st, 'D'), fE = fpiTotal(st, 'E');
@@ -372,6 +399,7 @@ function gerarPodo(st, ctx = {}) {
       tem(st.dedos) ? lista(st.dedos) : '',
       num(st.lunge_d) !== null || num(st.lunge_e) !== null ? `lunge test D ${num(st.lunge_d) ?? '—'} cm / E ${num(st.lunge_e) ?? '—'} cm` : '',
       st.thomas ? `Thomas ${min1(st.thomas)}` : ''),
+    escanometria: escanometria(st),
     fpi: [fD !== null ? `FPI-6 D ${sg(fD)} (${fpiClasse(fD)})` : '', fE !== null ? `FPI-6 E ${sg(fE)} (${fpiClasse(fE)})` : ''].filter(Boolean).join(' · '),
     conclusao: junta(tem(st.correl) ? lista(st.correl) : '', st.conclusao_txt, cmp.length ? `Comparado à avaliação anterior${ctx.ultimaData ? ' (' + ctx.ultimaData + ')' : ''}: ${cmp.join('; ')}` : ''),
     plano: junta(tem(st.cond) ? lista(st.cond) : '', st.reav ? `nova baropodometria ${min1(st.reav)}` : ''),
@@ -380,8 +408,8 @@ function gerarPodo(st, ctx = {}) {
 
 // ---------- registro por modelo do prontuário ----------
 export const ROTEIROS = {
-  fisio_avaliacao: { blocos: [blocoQueixa(false), blocoBandeiras, blocoExame(false), blocoPSFS, blocoPlanoFisio(false)], gerar: (s) => gerarFisio(s, false) },
-  fisio_esportiva: { blocos: [blocoEsporte, blocoQueixa(true), blocoBandeiras, blocoExame(true), blocoPSFS, blocoPlanoFisio(true)], gerar: (s) => gerarFisio(s, true) },
+  fisio_avaliacao: { blocos: [blocoQueixa(false), blocoBandeiras, blocoExame(false), blocoPSFS, blocoEsc, blocoPlanoFisio(false)], gerar: (s) => gerarFisio(s, false) },
+  fisio_esportiva: { blocos: [blocoEsporte, blocoQueixa(true), blocoBandeiras, blocoExame(true), blocoPSFS, blocoEsc, blocoPlanoFisio(true)], gerar: (s) => gerarFisio(s, true) },
   soapn: { blocos: blocosNutri, gerar: gerarNutri, rotulo: 'Anamnese por cliques (preenche o S)' },
   psico_registro: { blocos: blocosPsico, gerar: gerarPsico },
   medica_consulta: { blocos: blocosMedica, gerar: gerarMedica },

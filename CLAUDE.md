@@ -100,6 +100,13 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   correlação com a queixa e conduta; aviso de pé em risco (DM/neuropatia + hiperpressão). "Copiar da avaliação anterior" traz motivo/contexto e a conclusão
   ganha a comparação automática (FPI e carga anterior → atual). Avaliação de fisio ganhou profissão, comorbidades, peso/altura/IMC, achados de palpação,
   ADM comparada entre lados, escore de questionário funcional (campo livre; WOMAC é licenciado), objetivos de curto e longo prazo e data da reavaliação.
+  **Escanometria (resultado):** bloco `blocoEsc` em `fisio_podo`, `fisio_avaliacao` e `fisio_esportiva` (campo `escanometria`): fêmur/tíbia/altura do pé D/E em cm,
+  diferença anatômica, do pé e total em mm (positivo = D maior), distância femorotibial direta e compensação na palmilha. Baropodometria estática ficou opcional:
+  os números completos vêm do PDF do BaroScan, anexado ao registro.
+- **Solicitação de exame (db/047, `emissao.js`, tipo `solicitacao`):** escanometria pelo método de Farill (medidas em checkbox), RX dos pés em AP com altura
+  base–tibiotársica e RX panorâmico da coluna; CID padrão M21.7 com descrição do `cid10.json`; justificativa opcional; texto editável, timbrado e com código.
+- **Relacionamento + e-mail (db/048):** `relacionamento()` devolve `email`; botão ✉ E-mail por paciente (mailto) e "E-mail em lote" por item de reavaliação
+  (Cco, grupos de 20, texto sem nome). Palmilha 3D = 365 dias em `config.relacionamento.reavaliacoes`. Envio automático exige SMTP da clínica (pendente).
 
 - **Acessos (15/11/2026):** **a gestora tem acesso total** a todas as telas (exceto ler prontuário de outro profissional — sigilo por autor).
   Na tela `#acessos` cria acesso com nome, e-mail (= login), senha provisória (botão Gerar), perfil e profissional vinculado; edita e-mail/senha/perfil/vínculo;

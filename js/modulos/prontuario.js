@@ -18,18 +18,18 @@ export const MODELOS = {
     ['queixa', 'Queixa principal'], ['hda', 'História da doença atual'],
     ['historico', 'Antecedentes, medicamentos, exames de imagem'], ['eva', 'Dor (EVA 0–10)', '', 'num'],
     ['exame', 'Exame físico', 'Inspeção, palpação, ADM, força, testes especiais, marcha/pisada'],
-    ['diagnostico', 'Diagnóstico e prognóstico fisioterapêutico', 'Cinético-funcional'],
+    ['escanometria', 'Escanometria (resultado)'], ['diagnostico', 'Diagnóstico e prognóstico fisioterapêutico', 'Cinético-funcional'],
     ['objetivos', 'Objetivos terapêuticos'], ['plano', 'Plano terapêutico', 'Condutas, frequência, nº de sessões previsto'], OBS] },
   fisio_esportiva: { nome: 'Avaliação de fisioterapia esportiva', area: 'fisioterapia', campos: [
     ['esporte', 'Modalidade e carga de treino'], ['queixa', 'Queixa principal'], ['hda', 'História da doença atual'],
     ['historico', 'Antecedentes, medicamentos, exames de imagem'], ['eva', 'Dor (EVA 0–10)', '', 'num'],
     ['exame', 'Exame físico e testes funcionais', 'Inspeção, palpação, ADM, força, testes especiais, agachamento unipodal, hop test'],
-    ['diagnostico', 'Diagnóstico e prognóstico fisioterapêutico', 'Cinético-funcional'],
+    ['escanometria', 'Escanometria (resultado)'], ['diagnostico', 'Diagnóstico e prognóstico fisioterapêutico', 'Cinético-funcional'],
     ['objetivos', 'Objetivos terapêuticos'], ['plano', 'Plano terapêutico e retorno ao esporte', 'Condutas, frequência, nº de sessões, critérios de retorno'], OBS] },
   fisio_podo: { nome: 'Avaliação podoposturológica (baropodometria/palmilha)', area: 'fisioterapia', campos: [
     ['queixa', 'Motivo e queixa'], ['historico', 'Contexto: condições, atividade, calçado, antropometria'],
     ['estatica', 'Baropodometria estática'], ['dinamica', 'Análise dinâmica (marcha e pisada)'], ['postural', 'Postura e mobilidade'],
-    ['fpi', 'Índice Postural do Pé (FPI-6)'], ['conclusao', 'Correlação clínica e conclusão'], ['plano', 'Conduta e reavaliação'], OBS] },
+    ['fpi', 'Índice Postural do Pé (FPI-6)'], ['escanometria', 'Escanometria (resultado)'], ['conclusao', 'Correlação clínica e conclusão'], ['plano', 'Conduta e reavaliação'], OBS] },
   fisio_evolucao: { nome: 'Evolução de sessão (fisioterapia)', area: 'fisioterapia', campos: [
     ['diag', 'Diagnóstico / CID', 'Vem do encaminhamento ou da avaliação'],
     ['sessao', 'Sessão nº', '', 'num'], ['eva_pre', 'EVA antes', '', 'num'], ['eva_pos', 'EVA depois', '', 'num'],

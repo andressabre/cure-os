@@ -325,3 +325,5 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 .ck-fpi{font-weight:600;color:var(--texto);background:var(--branco);border:1px solid var(--linha);border-radius:10px;padding:1px 8px;margin-left:6px;font-size:12.5px}
 .ck-grade2{display:grid;grid-template-columns:1fr 1fr;column-gap:20px}.ck-grade2>small{grid-column:1/-1}
 @media (max-width:640px){.ck-grade2{grid-template-columns:1fr}}
+.sol-exames{display:grid;gap:4px;border:1px solid var(--linha);border-radius:6px;padding:8px 12px;background:#FBFBFA}
+.sol-medidas{display:grid;gap:2px;padding:4px 0 4px 22px}
