@@ -16,6 +16,9 @@ import * as lotes from './modulos/lotes.js';
 import * as prontuarios from './modulos/prontuario.js';
 import * as auditoria from './modulos/auditoria.js';
 import * as hoje from './modulos/hoje.js';
+import * as espera from './modulos/espera.js';
+import * as previsao from './modulos/previsao.js';
+import * as glosas from './modulos/glosas-intel.js';
 import { iniciarPaleta, abrirPaleta } from './modulos/paleta.js';
 import { registrarPWA } from './pwa.js';
 
@@ -23,14 +26,17 @@ import { registrarPWA } from './pwa.js';
 const ROTAS = [
   { id: 'hoje', nome: 'Hoje', mod: hoje, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'agenda', nome: 'Agenda', mod: agenda, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
+  { id: 'espera', nome: 'Lista de espera', mod: espera, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'painel', nome: 'Painel', mod: painel, perfis: ['gestor', 'financeiro'] },
   { id: 'estatisticas', nome: 'Estatísticas', mod: estatisticas, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'prontuarios', nome: 'Meus prontuários', mod: prontuarios, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'], precisaProf: true },
   { id: 'pacientes', nome: 'Pacientes', mod: pacientes, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'paciente', nome: 'Paciente', mod: paciente, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'], oculto: true },
   { id: 'financeiro', nome: 'Financeiro', mod: financeiro, perfis: ['gestor', 'financeiro'] },
+  { id: 'previsao', nome: 'Previsão de caixa', mod: previsao, perfis: ['gestor', 'financeiro'] },
   { id: 'lotes', nome: 'Lotes TISS', mod: lotes, perfis: ['gestor', 'financeiro'] },
   { id: 'retornos', nome: 'Retornos e glosas', mod: retornos, perfis: ['gestor', 'financeiro'] },
+  { id: 'glosas', nome: 'Inteligência de glosas', mod: glosas, perfis: ['gestor', 'financeiro'] },
   { id: 'contratos', nome: 'Convênios e contratos', mod: contratos, perfis: ['gestor', 'financeiro'] },
   { id: 'profissionais', nome: 'Profissionais', mod: profissionais, perfis: ['gestor', 'financeiro', 'recepcao'] },
   { id: 'repasse', nome: 'Tabela de repasse', mod: repasse, perfis: ['gestor', 'financeiro'] },

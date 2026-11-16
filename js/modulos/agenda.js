@@ -77,7 +77,7 @@ export async function render() {
   if (souProf) vis.prof = estado.profissionalId;
   // Agendar a partir da ficha (13/11/2026): contexto em sessionStorage 'agendar_para'
   let pre = null; try { pre = JSON.parse(sessionStorage.getItem('agendar_para') || 'null'); } catch { pre = null; }
-  if (pre && !pre.aplicado) { if (pre.prof) { vis.prof = pre.prof; vis.modo = 'semana'; } vis.dia = hojeIso(); pre.aplicado = true; sessionStorage.setItem('agendar_para', JSON.stringify(pre)); }
+  if (pre && !pre.aplicado) { if (pre.prof) { vis.prof = pre.prof; vis.modo = 'semana'; } vis.dia = /^\d{4}-\d\d-\d\d$/.test(pre.dia || '') ? pre.dia : hojeIso(); pre.aplicado = true; sessionStorage.setItem('agendar_para', JSON.stringify(pre)); }
   guardarVis();
 
   const cfg = estado.clinica.config || (await sb.from('clinicas').select('config').eq('id', estado.clinica.id).single()).data?.config
@@ -167,7 +167,7 @@ export async function render() {
 
   import('./guia.js').then((g) => g.alertaSemSenha($('#alerta-senha'), render)).catch(() => {});
   c.innerHTML = `${pre ? `<div class="faixa-agendar"><span>📅 Agendando <strong>${esc(pre.nome)}</strong> · ${esc(pre.resumo || '')} — clique num horário livre</span>
-    <a href="#paciente-${pre.paciente}-autorizacoes" id="pre-voltar">Voltar à ficha</a><button class="btn pequeno" id="pre-canc">Cancelar</button></div>` : ''}<div id="alerta-senha"></div>
+    <a href="#${pre.origem === 'espera' ? 'espera' : `paciente-${pre.paciente}-autorizacoes`}" id="pre-voltar">${pre.origem === 'espera' ? 'Voltar à lista de espera' : 'Voltar à ficha'}</a><button class="btn pequeno" id="pre-canc">Cancelar</button></div>` : ''}<div id="alerta-senha"></div>
     <div class="cartao ag-filtros">
       <input id="f-pac" placeholder="🔍 Paciente" value="${esc(vis.f.pac)}">
       <select id="f-status"><option value="">Status: ativos</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
@@ -516,6 +516,12 @@ export async function render() {
         if (!(await confirmar('Cancelar este agendamento?', 'Cancelar agendamento'))) return;
         const { error: e } = await sb.from('atendimentos').update({ status: 'cancelado', atualizado_em: new Date().toISOString() }).eq('id', a.id);
         if (e) return falha(e); toast('Agendamento cancelado.'); render();
+        // Lista de espera (item 13): vaga futura que abriu → oferece para quem espera esse profissional/serviço
+        if (new Date(a.inicio) > new Date()) try {
+          const { candidatosParaVaga } = await import('./espera.js');
+          const cs = await candidatosParaVaga({ profissionalId: a.profissional_id, inicio: a.inicio, servico: a.servico, pacienteId: a.paciente_id });
+          if (cs.length && await confirmar(`${cs.length} pessoa(s) na lista de espera podem ficar com este horário. Abrir a lista de espera agora?`, 'Abrir lista de espera')) location.hash = 'espera';
+        } catch { /* lista de espera indisponível: o cancelamento já foi feito */ }
       });
       $('#s', m)?.addEventListener('click', async () => {
         const f = Object.fromEntries(new FormData($('#f', m)));

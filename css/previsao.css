@@ -1,0 +1,68 @@
+/* Previsão de caixa (js/modulos/previsao.js) — prefixo pv- */
+#pv-kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+#pv-kpis .valor{font-size:clamp(22px,2vw,28px);white-space:nowrap}
+.pv-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.pv-cab h3{margin:0}
+.pv-link{font-size:13.5px;font-weight:600;color:var(--laranja-esc);text-decoration:none}
+.pv-chips{display:flex;gap:6px;flex-wrap:wrap}
+.pv-cenarios{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 22px;align-items:start}
+.pv-ctl{display:grid;gap:6px;font-size:13px;font-weight:600;color:var(--texto-2)}
+.pv-rot{font-size:13px;font-weight:600;color:var(--texto-2)}
+.pv-inp{display:flex;align-items:center;gap:6px;color:var(--texto)}
+.pv-inp input{width:90px}
+.pv-ctl small,.pv-check small{display:block;font-weight:400;font-size:12.5px}
+.pv-check{display:flex;align-items:flex-start;gap:8px;grid-template-columns:none}
+.pv-check input{min-height:0;margin-top:3px;accent-color:var(--laranja)}
+.pv-check span{color:var(--texto)}
+.pv-nota{grid-column:1/-1;font-size:12.5px;margin:0}
+.pv-graf{position:relative;width:100%;min-height:210px;touch-action:pan-y}
+.pv-graf svg{display:block;max-width:100%;outline:none;font-family:var(--fonte)}
+.pv-graf svg:focus-visible{box-shadow:0 0 0 3px var(--laranja-claro);border-radius:4px}
+.pv-faixa{fill:var(--vermelho-claro)}
+.pv-grade{stroke:var(--linha-fraca);stroke-width:1}
+.pv-zero{stroke:var(--texto-3);stroke-width:1}
+.pv-ey,.pv-ex{fill:var(--texto-3);font-size:11.5px}
+.pv-linha{fill:none;stroke:var(--grafite);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.pv-linha.neg{stroke:var(--vermelho)}
+.pv-conv{fill:var(--verde);stroke:var(--branco);stroke-width:2}
+.pv-mira-l{stroke:var(--texto-3);stroke-width:1;stroke-dasharray:3 3}
+.pv-mira-p{fill:var(--branco);stroke:var(--grafite);stroke-width:2}
+.pv-tip{position:absolute;pointer-events:none;background:var(--branco);border:1px solid var(--linha);border-radius:var(--raio);box-shadow:0 4px 14px rgba(0,0,0,.1);padding:8px 10px;font-size:12.5px;min-width:160px;z-index:2}
+.pv-tip strong{display:block;margin-bottom:4px}
+.pv-tip div{display:flex;justify-content:space-between;gap:12px}
+.pv-tip b{font-weight:600;font-variant-numeric:tabular-nums}
+.pv-tip .pv-tip-s{border-top:1px solid var(--linha-fraca);margin-top:4px;padding-top:4px}
+.pv-legenda{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--texto-2);margin-top:8px}
+.pv-legenda span{display:inline-flex;align-items:center;gap:6px}
+.pv-l-linha{width:18px;height:2px;background:var(--grafite);display:inline-block}
+.pv-l-ponto{width:9px;height:9px;border-radius:50%;background:var(--verde);display:inline-block}
+.pv-l-neg{width:14px;height:10px;background:var(--vermelho-claro);border-bottom:2px solid var(--vermelho);display:inline-block}
+.pv-neg{color:var(--vermelho)}
+.pv-ent{color:var(--verde);white-space:nowrap}
+.pv-sai{color:var(--texto);white-space:nowrap}
+.pv-peq{font-size:12px}
+.pv-tab td,.pv-tab th{font-variant-numeric:tabular-nums}
+.pv-grupo td{background:var(--papel)}
+.pv-tab tfoot td{border-top:1px solid var(--linha)}
+.pv-seta{display:inline-block;width:14px;color:var(--texto-3)}
+.pv-det>td{background:#F9FAF8;padding:4px 10px 8px 24px}
+.pv-sub{font-size:13px}
+.pv-sub td{padding:6px 8px}
+.pv-sub .pv-d{width:48px;color:var(--texto-2);white-space:nowrap}
+.pv-sub a{color:var(--texto);font-weight:600}
+.pv-pontos{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.pv-pontos li{padding:9px 12px;border-left:3px solid var(--linha);background:var(--papel);border-radius:0 var(--raio) var(--raio) 0;font-size:14px}
+.pv-pontos li.alerta{border-color:var(--vermelho);background:var(--vermelho-claro)}
+.pv-pontos li.pendente{border-color:var(--amarelo);background:var(--amarelo-claro)}
+.pv-pontos a{font-weight:600;color:var(--laranja-esc);white-space:nowrap}
+.pv-vazio p{margin:0 0 12px}
+.pv-passos{margin:0 0 16px;padding-left:22px;display:grid;gap:8px;line-height:1.45}
+@media (max-width:520px){
+  #pv-kpis{grid-template-columns:1fr 1fr}
+  #pv-kpis .kpi{padding:12px 14px}
+  #pv-kpis .valor{font-size:20px}
+  #pv-kpis .kpi:first-child{grid-column:1/-1}
+  .pv-semanas th,.pv-semanas td{padding:7px 6px;font-size:13px}
+  .pv-det>td{padding-left:8px}
+}
+.pv-vazio a.btn{text-decoration:none;display:inline-flex;align-items:center}

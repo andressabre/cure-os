@@ -1,0 +1,29 @@
+/* Lista de espera (js/modulos/espera.js) — prefixo esp- */
+.esp-titulo{margin:18px 0 8px;font-family:var(--titulo);font-size:18px}
+.esp-titulo .muted{font-size:14px;font-weight:400}
+.esp-vagas,.esp-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.esp-vaga{border-left:4px solid var(--laranja)}
+.esp-vaga-topo,.esp-item-topo{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.esp-item-topo{justify-content:flex-start;align-items:center}
+.esp-item-topo a{color:var(--texto);text-decoration:none}
+.esp-dias{margin-left:auto;font-size:13px;color:var(--texto-2)}
+.esp-cand{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:8px}
+.esp-cand li{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-top:1px solid var(--linha-fraca);padding-top:8px}
+.esp-cand-info{flex:1;min-width:180px}
+.esp-motivo{font-size:13px}
+.esp-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.esp-item{display:grid;gap:4px}
+.esp-item.urgente{border-left:4px solid var(--vermelho)}
+.esp-obs{background:var(--papel);border-radius:var(--raio);padding:6px 8px;font-size:13.5px;overflow-wrap:anywhere}
+.esp-obs-p{font-size:12.5px}
+.esp-filtros{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.esp-filtros select{max-width:100%}
+.esp-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.esp-rot{display:block;font-size:13px;font-weight:600;color:var(--texto-2)}
+.esp-dup{display:block;margin:10px 0 0;padding:6px 10px}
+.esp-vazio{text-align:center;padding:28px 18px}
+.esp-vazio-ic{font-size:34px}
+.esp-vazio p{max-width:520px;margin:6px auto;color:var(--texto-2)}
+.esp-vazio .btn{margin-top:10px}
+@media (max-width:640px){.esp-vagas,.esp-lista{grid-template-columns:1fr}.esp-filtros select{flex:1 1 100%}}
+.esp-exc{color:var(--vermelho)}

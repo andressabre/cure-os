@@ -104,3 +104,13 @@ export async function descricaoCid(cod) {
   return t[c] || t[c.slice(0, 3)] || '';
 }
 export const normCid = (v) => { const c = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return c.length > 3 ? c.slice(0, 3) + '.' + c.slice(3, 4) : c; };
+
+// Tela nova cuja tabela ainda não existe no banco (migração escrita em db/, aguardando aprovação da gestora para aplicar).
+// Devolve true e mostra o aviso quando o erro é "tabela não encontrada"; nos outros erros devolve false.
+export function faltaBanco(error, c, migracao) {
+  if (!error || !(['PGRST205', '42P01'].includes(error.code) || /could not find the table|does not exist/i.test(error.message || ''))) return false;
+  c.innerHTML = `<div class="cartao"><h3>Falta um passo para ligar esta tela</h3>
+    <p>A tela está pronta, mas a parte dela no banco de dados (<strong>${esc(migracao)}</strong>) ainda não foi aplicada — isso precisa da aprovação da gestora.</p>
+    <p class="muted">Para ligar: peça ao Claude “aplique a migração ${esc(migracao)} do Cure OS” e confirme quando ele perguntar. Nada mais muda no sistema.</p></div>`;
+  return true;
+}

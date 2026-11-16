@@ -162,7 +162,10 @@ p.ok{color:var(--verde);font-weight:600} p.aviso{background:var(--amarelo-claro)
   .lateral{position:sticky;top:0;z-index:10;height:auto;flex-direction:row;align-items:center;padding:8px 12px;gap:8px;min-width:0}
   main{min-width:0}
   .lateral-logo{width:92px;margin:0 6px 0 0}
-  #menu{display:flex;overflow-x:auto;flex:1;scrollbar-width:none;min-width:0}
+  .lateral{flex-wrap:wrap}
+  #menu{display:flex;overflow-x:auto;flex:1 0 100%;order:9;scrollbar-width:none;min-width:0}   /* menu na 2ª linha: cabe logo + chave + buscar + sair na 1ª */
+  .chave-modo{margin:0}
+  .lateral-rodape{margin-left:auto !important}
   #menu a{padding:8px 12px;white-space:nowrap}
   #menu a.ativo::before{left:3px;top:8px;bottom:8px;width:4px}
   .lateral-rodape{margin:0;padding:0;border:0;display:flex;gap:10px}
