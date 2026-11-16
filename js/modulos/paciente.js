@@ -6,10 +6,11 @@ import { enviarArquivo, abrirArquivo, escolherArquivo, removerArquivo, ACEITA } 
 import { imprimirGuia } from './guia-impressa.js';
 import { abaProntuario, abaAvaliacoes } from './prontuario.js';
 import { abaDocumentos } from './emissao.js';
+import { renderLinhaTempo } from './linha-tempo.js';
 import { registrarPagamento, seloPagamento, excluirPagamento, fazerNota } from './particular.js';
 
 const ABAS = [['resumo', 'Resumo'], ['cadastro', 'Cadastro e encaminhamentos'], ['autorizacoes', 'Autorizações e guias'],
-  ['prontuario', 'Prontuário'], ['avaliacoes', 'Avaliações'], ['documentos', 'Documentos']];
+  ['prontuario', 'Prontuário'], ['avaliacoes', 'Avaliações'], ['documentos', 'Documentos'], ['linhatempo', 'Linha do tempo']];
 const ALIAS = { dados: 'cadastro', convenios: 'cadastro', encaminhamentos: 'cadastro', atendimentos: 'autorizacoes', guias: 'autorizacoes' };   // links antigos continuam valendo
 // Situação de faturamento do atendimento, pela guia em que ele entrou
 const FIN = { rascunho: ['a faturar', 'pendente'], pronta: ['a faturar', 'pendente'], enviada: ['faturado', 'clinica'], paga: ['pago', 'ok'],
@@ -76,6 +77,7 @@ export async function render(params) {
   const recarregar = () => render(params);
 
   const abas = {
+    linhatempo() { return renderLinhaTempo(alvo, id); },
     resumo() {
       const faltou = passado.filter((a) => a.status === 'faltou').length, atend = passado.filter((a) => a.status === 'atendido').length;
       const ultima = passado.find((a) => a.status === 'atendido');

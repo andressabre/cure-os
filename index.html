@@ -5,10 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cure OS — Gestão</title>
 <link rel="icon" href="favicon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#23272A">
+<link rel="apple-touch-icon" href="icones/icone-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:ital,wght@1,600;1,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/paleta.css">
+<link rel="stylesheet" href="css/linha-tempo.css">
+<link rel="stylesheet" href="css/hoje.css">
 </head>
 <body>
   <!-- Login -->
@@ -35,6 +41,7 @@
     <aside class="lateral">
       <img src="logo-branco.png" alt="Cure" class="lateral-logo">
       <div id="chave-modo" class="chave-modo" hidden title="Alterna o que aparece na tela"></div>
+      <button type="button" class="btn-buscar" id="btn-buscar" title="Buscar paciente, tela ou ação (Ctrl+K)"><span aria-hidden="true">🔍</span><span class="bb-tx">Buscar</span><kbd>Ctrl K</kbd></button>
       <nav id="menu"></nav>
       <div class="lateral-rodape">
         <div id="usuario-info"></div>

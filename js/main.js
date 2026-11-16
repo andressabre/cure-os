@@ -15,9 +15,13 @@ import * as financeiro from './modulos/financeiro.js';
 import * as lotes from './modulos/lotes.js';
 import * as prontuarios from './modulos/prontuario.js';
 import * as auditoria from './modulos/auditoria.js';
+import * as hoje from './modulos/hoje.js';
+import { iniciarPaleta, abrirPaleta } from './modulos/paleta.js';
+import { registrarPWA } from './pwa.js';
 
 // Cada módulo é independente: para mexer em um, só o arquivo dele muda.
 const ROTAS = [
+  { id: 'hoje', nome: 'Hoje', mod: hoje, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'agenda', nome: 'Agenda', mod: agenda, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'painel', nome: 'Painel', mod: painel, perfis: ['gestor', 'financeiro'] },
   { id: 'estatisticas', nome: 'Estatísticas', mod: estatisticas, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
@@ -53,6 +57,8 @@ async function iniciarSessao() {
   aplicarModo(salvo);
   $('#tela-login').hidden = true; $('#tela-app').hidden = false;
   montarChaveModo(); montarMenu(); rotear();
+  iniciarPaleta({ rotas: () => rotasDoPerfil().filter((r) => !r.oculto).map((r) => ({ id: r.id, nome: r.nome })) });
+  $('#btn-buscar').onclick = () => abrirPaleta();
 }
 
 function infoUsuario() {
@@ -143,4 +149,5 @@ sb.auth.onAuthStateChange(async (ev) => {
 });
 
 window.addEventListener('hashchange', rotear);
+registrarPWA();
 iniciarSessao();
