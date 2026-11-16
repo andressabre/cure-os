@@ -549,8 +549,10 @@ export async function render(params) {
         }));
         q('[data-guiaop]').forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.guiaop)));
         q('[data-sadt]').forEach((b) => (b.onclick = async () => {
+          if (b.disabled) return; b.disabled = true; b.textContent = 'Gerando…';   // evita arquivo duplicado por clique repetido
           const a = auts.find((k) => k.id === b.dataset.sadt);
-          if (await gerarSadt(a, { paciente: p, plano: (planos || []).find((pl) => pl.id === a.paciente_plano_id), auts })) recarregar();
+          const ok = await gerarSadt(a, { paciente: p, plano: (planos || []).find((pl) => pl.id === a.paciente_plano_id), auts });
+          if (ok) recarregar(); else { b.disabled = false; b.textContent = '🖨 Gerar SADT'; }
         }));
         q('[data-abrir-enc]').forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.abrirEnc)));
         q('[data-anxguia]').forEach((b) => (b.onclick = async () => {
