@@ -123,6 +123,7 @@ export async function render(params) {
             <input type="checkbox" name="consentimento_comunicacao" ${p.consentimento_comunicacao ? 'checked' : ''}> 💬 Mensagens</label>
           <label class="icone-check" title="Paciente ativo (aparece nas buscas e na agenda)"><input type="checkbox" name="ativo" ${p.ativo ? 'checked' : ''}> ✓ Ativo</label>
           ${gestao ? `<button type="button" class="icone-check ${p.alerta ? 'com-alerta' : ''}" id="ed-alerta" title="${p.alerta ? 'Alerta: ' + esc(p.alerta) : 'Adicionar alerta interno (aparece na ficha e na agenda)'}">⚠️ ${p.alerta ? 'Alerta ativo' : 'Alerta'}</button>` : ''}
+          ${gestao ? '<button type="button" class="icone-check" id="ex-cad" title="Excluir este cadastro (só se não tiver histórico)">🗑 Excluir cadastro</button>' : ''}
           ${gestao ? '<button type="button" class="btn primario" id="sdados" style="margin-left:auto">Salvar dados</button>' : ''}
         </div>
       </form></div>`;
@@ -144,6 +145,17 @@ export async function render(params) {
         if (er) return falha(er, er.code === '23505' ? 'CPF já cadastrado em outro paciente' : 'Salvar'); toast('Salvo.'); recarregar();
       });
       $('#boasvindas', t)?.addEventListener('click', boasVindas);
+      // Excluir cadastro: só sem histórico (a função do banco confere de novo); com histórico, orienta a desativar
+      $('#ex-cad', t)?.addEventListener('click', async () => {
+        const { data: v, error: ev } = await sb.rpc('paciente_vinculos', { p_paciente: id }); if (ev) return falha(ev, 'Excluir cadastro');
+        const nomes = { atendimentos: 'atendimento(s)', prontuario: 'registro(s) de prontuário', documentos: 'documento(s) emitido(s)', recebimentos: 'recebimento(s)', encaminhamentos: 'encaminhamento(s)', autorizacoes: 'autorização(ões)' };
+        const bloq = Object.entries(nomes).filter(([k]) => v[k] > 0).map(([k, n]) => `${v[k]} ${n}`);
+        if (bloq.length) return modal(`<h3>Não é possível excluir</h3><p>Este paciente tem ${esc(bloq.join(', '))}. Para não perder histórico, o cadastro só pode ser <strong>desativado</strong>: desmarque "Ativo" e salve.</p>
+          <div class="linha-acoes"><button class="btn primario" data-fechar>Entendi</button></div>`);
+        if (!(await confirmar(`Excluir o cadastro de ${p.nome}? Esta ação não pode ser desfeita.`, 'Excluir cadastro'))) return;
+        const { error } = await sb.rpc('excluir_paciente', { p_paciente: id }); if (error) return falha(error, 'Excluir cadastro');
+        toast('Cadastro excluído.'); location.hash = 'pacientes';
+      });
       // Alerta interno: só um ícone; abre uma caixinha para escrever, salva direto
       $('#ed-alerta', t)?.addEventListener('click', () => modal(`<h3>⚠️ Alerta interno</h3>
         <p class="muted">Aparece em destaque na ficha e quando o paciente é escolhido na agenda. Escreva só fatos objetivos (o paciente pode pedir acesso ao cadastro).</p>

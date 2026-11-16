@@ -162,6 +162,10 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 - **Trava de senha (db/050, 15/11/2026):** gatilho `trava_autorizada_sem_senha` em `autorizacoes`: status `autorizada` em contrato que exige senha
   (`contrato_exige_senha`) precisa de senha, data da autorização e validade (validade ≥ data). Particular/sem_tiss isentos; só checa quando status/senha/data/validade mudam.
 
+- **Excluir cadastro (db/058, 16/11/2026):** botão "🗑 Excluir cadastro" na ficha (Cadastro, gestão/recepção/financeiro) → `paciente_vinculos` (conta atendimentos, prontuário,
+  documentos, recebimentos, encaminhamentos e autorizações) e `excluir_paciente` (DEFINER; só apaga paciente sem histórico, senão orienta a desativar). O DELETE direto
+  apagaria planos/autorizações em cascata. Cadastro novo avisa se já existe paciente com o mesmo nome (`pacientes.js`).
+
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).
