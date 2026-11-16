@@ -4,6 +4,7 @@ import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar
   foneFmt, foneDig, foneValido, mascaraFone, soNumeros, descricaoCid, normCid } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo, removerArquivo, ACEITA } from './documentos.js';
 import { imprimirGuia } from './guia-impressa.js';
+import { gerarSadt, temModeloSadt } from './sadt.js';
 import { abaProntuario, abaAvaliacoes } from './prontuario.js';
 import { abaDocumentos } from './emissao.js';
 import { renderLinhaTempo } from './linha-tempo.js';
@@ -432,6 +433,7 @@ export async function render(params) {
             <div class="aut-cab"><div class="aut-proc"><code>${esc(a.procedimentos?.codigo)}</code> ${esc(a.procedimentos?.descricao || '')}</div>
               <div class="aut-acoes">${a.guia_arquivo ? `<button class="btn pequeno primario" data-guiaop="${esc(a.guia_arquivo)}" title="Abrir/imprimir a guia autorizada pela operadora">📄 Guia da operadora</button>`
                 : gestao && a.senha ? `<button class="btn pequeno" data-anxguia="${a.id}" title="Anexar o PDF da guia emitida pelo portal">📎 Anexar guia</button>` : ''}
+              ${gestao && a.numero_guia_operadora && temModeloSadt((planos || []).find((pl) => pl.id === a.paciente_plano_id)?.contratos) ? `<button class="btn pequeno" data-sadt="${a.id}" title="Gerar a guia SP/SADT preenchida no modelo da operadora e salvar no paciente">🖨 Gerar SADT</button>` : ''}
               ${gestao ? `<button class="btn pequeno" data-edaut="${a.id}">Editar</button>` : ''}</div></div>
             <div class="aut-meta">
               <span>📅 ${a.data_autorizacao ? data(a.data_autorizacao) : 'solicitada'} → <strong>${a.validade ? data(a.validade) : 'sem validade'}</strong></span>
@@ -546,6 +548,10 @@ export async function render(params) {
           if (e) return falha(e); toast('Guia cancelada.'); recarregar();
         }));
         q('[data-guiaop]').forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.guiaop)));
+        q('[data-sadt]').forEach((b) => (b.onclick = async () => {
+          const a = auts.find((k) => k.id === b.dataset.sadt);
+          if (await gerarSadt(a, { paciente: p, plano: (planos || []).find((pl) => pl.id === a.paciente_plano_id), auts })) recarregar();
+        }));
         q('[data-abrir-enc]').forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.abrirEnc)));
         q('[data-anxguia]').forEach((b) => (b.onclick = async () => {
           const f = await escolherArquivo(); if (!f) return;

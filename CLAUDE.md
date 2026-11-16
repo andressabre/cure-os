@@ -166,6 +166,12 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   documentos, recebimentos, encaminhamentos e autorizações) e `excluir_paciente` (DEFINER; só apaga paciente sem histórico, senão orienta a desativar). O DELETE direto
   apagaria planos/autorizações em cascata. Cadastro novo avisa se já existe paciente com o mesmo nome (`pacientes.js`).
 
+- **Gerar SADT (db/059, 16/11/2026, `sadt.js`):** botão "🖨 Gerar SADT" na autorização (gestão; só com nº da guia da operadora e contrato com `regras.autorizacao.modelo_sadt`).
+  Preenche o modelo em branco da operadora (`modelos/sadt-<modelo>.pdf` + `.layout.json` com a geometria das caixas) com pdf-lib (jsdelivr), no navegador, e guarda o PDF
+  no paciente (slot `guia_arquivo` de todas as linhas da mesma guia). Campos 4–6 (data/senha/validade) ficam em branco como no portal; campo 7 = nº da guia da operadora;
+  execução (36–57) e totais em branco. `autorizacoes.numero_guia_prestador` (campo 2) vem de `numero_guia_prestador_aut` (sequencial por contrato, máximo + 1).
+  Registro ANS, código do prestador, CNES e nome do prestador vêm de `contratos.regras.autorizacao` (nunca no código). Novo modelo = PDF + layout + `modelo_sadt` no contrato.
+
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).
