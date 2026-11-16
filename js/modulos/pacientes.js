@@ -1,5 +1,5 @@
 // Módulo Pacientes: lista, busca, cadastro e importação do sistema antigo.
-import { sb, estado, $, $$, esc, data, tela, toast, falha, modal, foneFmt, foneDig, foneValido, mascaraFone } from '../core.js';
+import { sb, estado, $, $$, esc, data, tela, toast, falha, modal, confirmar, foneFmt, foneDig, foneValido, mascaraFone } from '../core.js';
 import { lerArquivo, sugerirMapa, sugerirTabela, dicionario, converter, ROTULOS, formatos } from './importador.js';
 
 const ORIGEM = 'motivar_2012';
@@ -75,6 +75,11 @@ export async function render() {
         celular: f.celular.trim() ? (foneValido(f.celular, true) ? foneDig(f.celular) : p.celular) : null,
         telefone: f.telefone.trim() ? (foneValido(f.telefone) ? foneDig(f.telefone) : p.telefone) : null, email: f.email || null, consentimento_comunicacao: fd.has('consentimento_comunicacao'),
         ativo: fd.has('ativo'), endereco: { ...e, rua: f.rua, cep: f.cep, cidade: f.cidade, uf: f.uf.toUpperCase() } };
+      if (!id) { // aviso de nome repetido antes de criar (evita cadastro duplicado)
+        const nm = reg.nome.replace(/\s+/g, ' ').replace(/[\\%_]/g, (ch) => '\\' + ch);
+        const { data: ja } = await sb.from('pacientes').select('nome, data_nascimento').ilike('nome', nm).limit(5);
+        if (ja?.length && !(await confirmar(`Já existe cadastro com este nome: ${ja.map((a) => a.nome + (a.data_nascimento ? ' (nasc. ' + data(a.data_nascimento) + ')' : '')).join('; ')}. Cadastrar mesmo assim?`, 'Cadastrar mesmo assim'))) return toast('Cadastro não criado. Procure o paciente na busca.');
+      }
       const q = id ? sb.from('pacientes').update(reg).eq('id', id) : sb.from('pacientes').insert({ ...reg, clinica_id: estado.clinica.id });
       const { error } = await q; if (error) return falha(error, error.code === '23505' ? 'CPF já cadastrado' : 'Salvar'); fechar(); toast('Salvo.'); buscar();
     }; });
