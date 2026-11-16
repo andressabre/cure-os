@@ -171,6 +171,7 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   no paciente (slot `guia_arquivo` de todas as linhas da mesma guia). Campos 4–6 (data/senha/validade) ficam em branco como no portal; campo 7 = nº da guia da operadora;
   execução (36–57) e totais em branco. `autorizacoes.numero_guia_prestador` (campo 2) vem de `numero_guia_prestador_aut` (sequencial por contrato, máximo + 1).
   Registro ANS, código do prestador, CNES e nome do prestador vêm de `contratos.regras.autorizacao` (nunca no código). Novo modelo = PDF + layout + `modelo_sadt` no contrato.
+  **Uma guia = um bloco (16/11/2026):** na ficha, autorizações do mesmo plano com o mesmo nº de guia da operadora (ou mesma senha) aparecem numa sanfona só, procedimentos lado a lado (`agrupa`/`catGrupo` em `paciente.js`); um único 🖨 Gerar SADT.
 
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.

@@ -417,32 +417,50 @@ export async function render(params) {
         if (q > 20) return '';
         return `<span class="bolas">${vivos.map((x) => `<i class="${cls(x)}" title="${data(x.inicio.slice(0, 10))} · ${esc(x.status)}"></i>`).join('')}${'<i></i>'.repeat(Math.max(0, q - vivos.length))}</span>`; };
       const datas = (lig) => lig.filter((x) => x.status !== 'cancelado').map((x) => `<span class="dt dt-${x.status}">${data(x.inicio.slice(0, 10)).slice(0, 5)}${x.status === 'atendido' ? ' ✓' : x.status === 'faltou' ? ' ✗' : ''}</span>`).join('');
-      const bloco = (a, aberto) => { const u = usadas[a.id] || 0, sit = situ(a), lig = atsDe(a.id), q = a.qtd_autorizada || 0;
-        const ag = lig.filter((x) => ['agendado', 'confirmado', 'presente'].includes(x.status)).length, livres = q - u - ag;
-        const acabando = sit === 'ativa' && q > 1 && (livres <= 2 || (a.validade && (new Date(a.validade + 'T12:00') - new Date()) / 864e5 <= 7));
-        const en = (encs || []).find((k) => k.id === a.encaminhamento_id);
-        const alertas = [acabando ? '<span class="selo pendente">acabando</span>' : '', !en ? '<span class="selo alerta">sem encaminhamento</span>' : !en.arquivo ? '<span class="selo alerta">pedido sem arquivo</span>' : '',
-          guiasDe(a.id).some((g) => g.segurada) ? '<span class="selo outra">guia segurada</span>' : ''].join('');
+      // Uma guia = uma senha: autorizações do mesmo plano com o mesmo nº de guia da operadora (ou mesma senha) viram UM bloco, procedimentos lado a lado
+      const chaveGrupo = (a) => { const n = a.numero_guia_operadora || a.senha; return n ? `${a.paciente_plano_id}|${n}` : `s|${a.id}`; };
+      const agrupa = (lista) => { const m = new Map(); lista.forEach((a) => { const k = chaveGrupo(a); if (!m.has(k)) m.set(k, []); m.get(k).push(a); }); return [...m.values()]; };
+      const ORDCAT = ['abertas', 'pendentes', 'liberadas', 'realizadas', 'historico'];
+      const catGrupo = (mem) => mem.map(categoria).sort((k, y) => ORDCAT.indexOf(k) - ORDCAT.indexOf(y))[0];
+      const bloco = (mem, aberto) => { const a = mem[0], multi = mem.length > 1;
+        const cont = (k) => { const u = usadas[k.id] || 0, lg = atsDe(k.id), q = k.qtd_autorizada || 0;
+          const ag = lg.filter((x) => ['agendado', 'confirmado', 'presente'].includes(x.status)).length; return { k, u, lg, q, ag, livres: q - u - ag }; };
+        const cs = mem.map(cont);
+        const sit = mem.map(situ).includes('ativa') ? 'ativa' : situ(a);
+        const lig = cs.flatMap((c) => c.lg).sort((k, y) => k.inicio.localeCompare(y.inicio));
+        const gdo = mem.flatMap((k) => guiasDe(k.id));
+        const acabando = cs.some((c) => situ(c.k) === 'ativa' && c.q > 1 && (c.livres <= 2 || (c.k.validade && (new Date(c.k.validade + 'T12:00') - new Date()) / 864e5 <= 7)));
+        const semEnc = mem.some((k) => !(encs || []).find((e) => e.id === k.encaminhamento_id));
+        const encSemArq = !semEnc && mem.some((k) => !(encs || []).find((e) => e.id === k.encaminhamento_id)?.arquivo);
+        const alertas = [acabando ? '<span class="selo pendente">acabando</span>' : '', semEnc ? '<span class="selo alerta">sem encaminhamento</span>' : encSemArq ? '<span class="selo alerta">pedido sem arquivo</span>' : '',
+          gdo.some((g) => g.segurada) ? '<span class="selo outra">guia segurada</span>' : ''].join('');
+        const rotulo = (c) => multi ? ` ${esc(c.k.procedimentos?.codigo)}` : '';
+        const botAgendar = cs.filter((c) => podeAgendar(c.k, c.livres)).map((c) => `<button class="btn pequeno" data-agendar="${c.k.id}" title="Abrir a agenda do profissional com este paciente e esta senha já preenchidos">📅 Agendar${rotulo(c)}</button>`).join('');
+        const arq = mem.find((k) => k.guia_arquivo)?.guia_arquivo;
+        const encs1 = [...new Map(mem.map((k) => [k.encaminhamento_id || k.id, k])).values()];
         return `<details class="aut-bloco sit-${sit}" data-aut="${a.id}" ${aberto ? 'open' : ''}>
           <summary class="aut-linha">
             <span class="aut-l1"><strong>${a.senha ? 'Senha ' + esc(a.senha) : 'Sem senha'}</strong><span class="selo ${SIT[sit][1]}">${SIT[sit][0]}</span>${alertas}
-              <span class="aut-vence">${a.validade ? 'vence ' + data(a.validade).slice(0, 5) : ''}</span>${podeAgendar(a, livres) ? `<button class="btn pequeno" data-agendar="${a.id}" title="Abrir a agenda do profissional com este paciente e esta senha já preenchidos">📅 Agendar</button>` : ''}</span>
-            <span class="aut-l2 muted">${esc(a.paciente_planos?.contratos?.nome)} · <code>${esc(a.procedimentos?.codigo)}</code> · ${u} de ${q || '?'}${ag ? ` (+${ag} agend.)` : ''} ${bolinhas(a, lig, q)}</span>
+              <span class="aut-vence">${a.validade ? 'vence ' + data(a.validade).slice(0, 5) : ''}</span>${botAgendar}</span>
+            <span class="aut-l2 muted">${esc(a.paciente_planos?.contratos?.nome)} · ${cs.map((c) => `<code>${esc(c.k.procedimentos?.codigo)}</code> ${c.u} de ${c.q || '?'}${c.ag ? ` (+${c.ag} agend.)` : ''} ${bolinhas(c.k, c.lg, c.q)}`).join(' &nbsp;│&nbsp; ')}</span>
           </summary>
           <div class="aut-corpo">
-            <div class="aut-cab"><div class="aut-proc"><code>${esc(a.procedimentos?.codigo)}</code> ${esc(a.procedimentos?.descricao || '')}</div>
-              <div class="aut-acoes">${a.guia_arquivo ? `<button class="btn pequeno primario" data-guiaop="${esc(a.guia_arquivo)}" title="Abrir/imprimir a guia autorizada pela operadora">📄 Guia da operadora</button>`
+            <div class="aut-cab">${multi ? `<div class="aut-procs">${cs.map((c) => `<div class="aut-proc-col"><div class="aut-proc"><code>${esc(c.k.procedimentos?.codigo)}</code> ${esc(c.k.procedimentos?.descricao || '')}</div>
+                <div class="muted">${c.u} feitas · ${c.ag} agend. · ${c.q ? Math.max(0, c.livres) + ' livres de ' + c.q : '?'}</div>${bolinhas(c.k, c.lg, c.q)}
+                ${gestao ? `<div style="margin-top:6px"><button class="btn pequeno" data-edaut="${c.k.id}">Editar</button></div>` : ''}</div>`).join('')}</div>`
+                : `<div class="aut-proc"><code>${esc(a.procedimentos?.codigo)}</code> ${esc(a.procedimentos?.descricao || '')}</div>`}
+              <div class="aut-acoes">${arq ? `<button class="btn pequeno primario" data-guiaop="${esc(arq)}" title="Abrir/imprimir a guia autorizada pela operadora">📄 Guia da operadora</button>`
                 : gestao && a.senha ? `<button class="btn pequeno" data-anxguia="${a.id}" title="Anexar o PDF da guia emitida pelo portal">📎 Anexar guia</button>` : ''}
               ${gestao && a.numero_guia_operadora && temModeloSadt((planos || []).find((pl) => pl.id === a.paciente_plano_id)?.contratos) ? `<button class="btn pequeno" data-sadt="${a.id}" title="Gerar a guia SP/SADT preenchida no modelo da operadora e salvar no paciente">🖨 Gerar SADT</button>` : ''}
-              ${gestao ? `<button class="btn pequeno" data-edaut="${a.id}">Editar</button>` : ''}</div></div>
+              ${gestao && !multi ? `<button class="btn pequeno" data-edaut="${a.id}">Editar</button>` : ''}</div></div>
             <div class="aut-meta">
               <span>📅 ${a.data_autorizacao ? data(a.data_autorizacao) : 'solicitada'} → <strong>${a.validade ? data(a.validade) : 'sem validade'}</strong></span>
               ${a.numero_guia_operadora ? `<span>guia operadora ${esc(a.numero_guia_operadora)}</span>` : ''}
-              <span>${u} feitas · ${ag} agend. · ${q ? Math.max(0, livres) + ' livres de ' + q : '?'}</span>
-              ${chipEnc(a)}
+              ${multi ? '' : `<span>${cs[0].u} feitas · ${cs[0].ag} agend. · ${cs[0].q ? Math.max(0, cs[0].livres) + ' livres de ' + cs[0].q : '?'}</span>`}
+              ${encs1.map(chipEnc).join(' ')}
             </div>
             ${lig.length ? `<div class="aut-datas">${datas(lig)}</div>` : ''}
-            ${tabGuias(guiasDe(a.id))}
+            ${tabGuias(gdo)}
             ${lig.length ? `<details class="aut-sub"><summary>Agendamentos desta senha (${lig.length})</summary>${tabAts(lig, '')}</details>` : ''}
           </div></details>`; };
 
@@ -451,12 +469,12 @@ export async function render(params) {
           antiga: (k, y) => (k.data_autorizacao || k.solicitada_em || '').localeCompare(y.data_autorizacao || y.solicitada_em || ''),
           validade: (k, y) => (k.validade || '9999').localeCompare(y.validade || '9999') }[filtro.ordem];
         const doConv = (auts || []).filter((a) => !filtro.conv || a.paciente_planos?.contratos?.nome === filtro.conv);
-        const lista = doConv.filter((a) => filtro.sit === 'todas' || categoria(a) === filtro.sit).sort(ord);
+        const grupos = agrupa(doConv.slice().sort(ord)), lista = grupos.filter((m) => filtro.sit === 'todas' || catGrupo(m) === filtro.sit);
         // aberta por padrão: só a autorização com a próxima sessão agendada (ou todas, pelo botão)
         const agora = new Date().toISOString();
-        const prox = lista.map((a) => ({ a, d: atsDe(a.id).find((x) => x.inicio >= agora && x.status !== 'cancelado')?.inicio })).filter((x) => x.d).sort((k, y) => k.d.localeCompare(y.d))[0]?.a.id;
-        $('#lista-aut').innerHTML = lista.map((a) => bloco(a, filtro.todasAbertas || a.id === prox)).join('') || '<div class="vazio">Nenhuma autorização neste filtro.</div>';
-        const conta = (k) => k === 'todas' ? doConv.length : doConv.filter((a) => categoria(a) === k).length;
+        const prox = lista.map((m) => ({ m, d: m.flatMap((a) => atsDe(a.id)).filter((x) => x.inicio >= agora && x.status !== 'cancelado').map((x) => x.inicio).sort()[0] })).filter((x) => x.d).sort((k, y) => k.d.localeCompare(y.d))[0]?.m[0].id;
+        $('#lista-aut').innerHTML = lista.map((m) => bloco(m, filtro.todasAbertas || m[0].id === prox)).join('') || '<div class="vazio">Nenhuma autorização neste filtro.</div>';
+        const conta = (k) => k === 'todas' ? grupos.length : grupos.filter((m) => catGrupo(m) === k).length;
         $('#chips-aut').innerHTML = Object.entries(CHIPS).filter(([k]) => k !== 'liberadas' || verFin)
           .map(([k, v]) => `<button class="chip-filtro ${filtro.sit === k ? 'on' : ''}" data-chip="${k}">${v} <b>${conta(k)}</b></button>`).join('');
         $$('[data-chip]', $('#chips-aut')).forEach((b) => (b.onclick = () => { filtro.sit = b.dataset.chip; sessionStorage.setItem('aut_sit', filtro.sit); desenha(); }));

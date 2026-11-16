@@ -382,3 +382,4 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 .p3-ok{color:#2E7D32;margin:6px 0}.p3-telas{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
 #p3-mapa{max-height:440px;width:auto;max-width:100%;border:1px solid var(--linha);border-radius:8px;background:#fff;touch-action:none;cursor:grab}
 #p3-3d canvas{border:1px solid var(--linha);border-radius:8px;touch-action:none;cursor:grab;max-width:100%}.p3-leg{font-size:.8em;margin-top:4px}
+.aut-procs{display:flex;gap:10px;flex-wrap:wrap;flex:1 1 320px}.aut-procs .aut-proc-col{flex:1 1 220px;border:1px solid var(--linha);border-radius:6px;padding:6px 10px;background:var(--papel)}.aut-procs .aut-proc{margin-top:0}
