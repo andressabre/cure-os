@@ -20,7 +20,8 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 - `js/main.js` — login, menu por perfil, rotas por `#hash`.
 - `js/modulos/` — `agenda`, `pacientes` (+ `importador`), `paciente` (ficha, rota `#paciente-<id>-<aba>`), `guia` (fechar atendimento),
   `lotes` + `tiss-xml` (lote e XML TISS 4.03.00), `retornos` + `tiss` (Demonstrativo de Análise de Conta), `contratos`, `profissionais`,
-  `repasse`, `extrato`, `painel`, `estatisticas`, `financeiro`, `backup`, `documentos` (Storage), `guia-impressa`, `prontuario`, `emissao`, `acessos`.
+  `repasse`, `extrato`, `painel`, `estatisticas`, `financeiro`, `backup`, `documentos` (Storage), `guia-impressa`, `prontuario`, `emissao`, `acessos`,
+  `hoje`, `paleta`, `linha-tempo`, `previsao`, `glosas-intel`, `espera`, `conciliacao` + `extrato-banco` (ver "Módulos e ferramentas novos"); `js/pwa.js` registra o service worker.
 - `db/` — `000_esquema_base.sql` = esquema completo extraído da produção em 10/11/2026 (antes da 034); banco novo = 000 + 034 em diante.
   As 001–033 ficam como histórico (002–006 e 008 nunca foram versionadas, mas estão contidas no 000).
 - `ferramentas/` — exportação do sistema antigo e validação do XML contra os XSD da ANS.
@@ -173,6 +174,53 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   Registro ANS, código do prestador, CNES e nome do prestador vêm de `contratos.regras.autorizacao` (nunca no código). Novo modelo = PDF + layout + `modelo_sadt` no contrato.
   **Uma guia = um bloco (16/11/2026):** na ficha, autorizações do mesmo plano com o mesmo nº de guia da operadora (ou mesma senha) aparecem numa sanfona só, procedimentos lado a lado (`agrupa`/`catGrupo` em `paciente.js`); um único 🖨 Gerar SADT.
 
+### Módulos e ferramentas novos (backlog, 16/11/2026)
+- **Hoje (`hoje.js`, rota `#hoje`, itens 10 e 21):** central do dia de cada perfil. Seções que carregam cada uma sozinha (falha ou falta de permissão só faz a seção sumir):
+  atendimentos de hoje (com atalho para a agenda), lembretes de amanhã por link wa.me (não aparece para profissional; réplica do texto da agenda, que não exporta a função),
+  autorizações aguardando senha, evoluções em aberto e avisos (só quem tem profissional vinculado), pendências (só gestão, link para o Painel) e aniversariantes
+  (não profissional; mesmo texto e rodapé "responda SAIR" do `relacionamento.js`). Sócio no modo profissional enxerga como profissional.
+- **Busca Ctrl+K / Cmd+K (`paleta.js`, `iniciarPaleta`/`abrirPaleta` no `main.js`):** paleta de comandos com elemento próprio no `<body>` (não usa `modal()`). Pula para qualquer
+  tela que o perfil enxerga (a lista vem das `ROTAS` já filtradas), executa ações rápidas (novo agendamento, Hoje, alterar senha) e busca paciente a partir de 2 letras. Não guarda nome de paciente: só os ids das últimas telas usadas (`localStorage`) para ordenar.
+- **Linha do tempo do paciente (`linha-tempo.js`, `renderLinhaTempo(elemento, pacienteId)`, backlog 14):** aba da ficha (`linhatempo()` em `paciente.js`) que junta atendimentos,
+  autorizações, encaminhamentos, documentos, registros de prontuário (SÓ tipo e data, nunca o texto) e, para a gestão, pagamentos e guias, numa sequência única (próximos × passados).
+  Cada fonte é tolerante a erro (consulta negada ou falha → a fonte fica de fora, sem erro na tela). Chips por tipo + busca livre, filtro lembrado por paciente.
+  As funções puras (`montarEventos`, `resumir`, `agrupar`…) não importam o `core.js` (que carrega o Supabase pela rede), por isso testam em node; datas em horário de Brasília.
+- **PWA (`manifest.webmanifest`, `sw.js`, `js/pwa.js`):** app instalável com abertura da tela de login sem internet. O service worker é REDE PRIMEIRO só para arquivos do próprio site
+  (telas, scripts, estilos, imagens) e guarda cópia para o offline; nunca toca em Supabase, fontes ou CDN (dado de paciente não passa por ele). Não existe modo offline de dados.
+  Mudar `VERSAO` em `sw.js` descarta o cache antigo. O registro é silencioso (nunca mostra aviso).
+- **Previsão de caixa (`previsao.js`, rota `#previsao`, item 27 + recebíveis dos convênios):** só gestor e financeiro, só a carteira EMPRESA (nunca as pessoais dos sócios), somente leitura.
+  Curva do saldo dia a dia em 30/60/90 dias: saldo de hoje = mesma conta da aba Caixa do Financeiro (saldo inicial + baixas por conta ativa); entradas e saídas = lançamentos previstos;
+  lotes TISS enviados e não pagos entram como recebíveis. Cenários na tela: convênios atrasam N dias e glosa esperada em % (inicia pela taxa histórica das linhas `da_clinica`
+  do retorno); valem só para convênio e nada é gravado. Pontos de atenção (dias de aperto, maior saída do período) e CSV. Matemática em funções puras exportadas (centavos inteiros).
+- **Inteligência de glosas (`glosas-intel.js`, rota `#glosas`, item 26):** só gestão (`podeGerir`), só linhas `da_clinica` do retorno. Perda por motivo × convênio × procedimento × profissional
+  (matriz), evolução por período (3/6/12 meses ou tudo), 5 motivos de maior valor com a ação de prevenção que o sistema já sustenta, glosas pendentes com prazo de recurso vencido ou nos
+  próximos 15 dias, % recuperado nos recursos e tempo até o demonstrativo, com CSV. Cálculos em funções puras exportadas; o `core.js` só é importado dentro de `render()`.
+- **Lista de espera (`espera.js`, rota `#espera`, item 13, db/057 aplicada em 16/11/2026):** tabela `lista_espera` (paciente, profissional ou "qualquer", serviço, dias da semana, período,
+  urgência, situação aguardando/ofertado/agendado/desistiu). Cancelamento futuro → a tela mostra quem espera aquele profissional/serviço (função pura de combinação: ignora o próprio
+  paciente que cancelou e devolve a fila já em ordem), monta a mensagem wa.me (`config.espera_texto` ou texto padrão; placeholders {nome} {servico} {profissional} {dia} {hora})
+  e marca "ofertado"; "Já agendei" passa pela faixa da agenda (`sessionStorage.agendar_para`). RLS: gestor/recepção/financeiro em tudo; profissional vê a fila da clínica e cria/altera só
+  entradas em seu nome (sem excluir: usa "desistiu"). Auditoria genérica ligada.
+- **Conciliação bancária (`conciliacao.js` + `extrato-banco.js`, rota `#conciliacao`, gestor e financeiro, item 19, db/056 aplicada em 16/11/2026; T1–T4 do arquivo, advisors e `auditoria-rls.sql` conferidos):**
+  tabela `extrato_movimentos` (conta, data, valor com sinal, `id_banco`, situação pendente/conciliado/ignorado, `lancamento_id`, `baixa_anterior`, `lancamento_criado`), RLS espelhando
+  `gestao_lancamentos` (gestor tudo; financeiro só conta de carteira da empresa; pessoal só gestor) e auditoria genérica. Importa OFX (SGML ou XML, UTF-8 ou windows-1252) ou CSV (separador e
+  preâmbulo detectados, sinal ou colunas crédito/débito, mapeamento manual de colunas quando não reconhece), até 5 MB; deduplica por `(conta_id, id_banco)` (FITID ou hash da linha); mostra
+  prévia antes de gravar e confronta o saldo do arquivo com o saldo do sistema na conta. Sugestão (funções puras em `extrato-banco.js`): valor igual e vencimento a até 5 dias = "certo";
+  valor menor em lançamento de lote = "provável" (possível glosa, confira no retorno); empate = "escolher"; um lançamento só é "certo" para UM movimento. **Nenhuma baixa sem clique:**
+  Confirmar (pede confirmação se houver diferença), Confirmar todos os certos, Escolher outro, Criar lançamento (nasce pago, `origem='extrato'`) e Ignorar; Desfazer devolve o lançamento ao
+  estado guardado em `baixa_anterior` só se ninguém mexeu depois. A baixa são 2 gravações no cliente (lançamento e movimento), com reversão da primeira se a segunda falhar (não é transação).
+  Em banco sem a 056 a tela mostra `faltaBanco`. Testes: `node ferramentas/testes-js/extrato-banco.test.mjs` (leitores e sugestão, em node) e teste de tela com `fixtures-conciliacao.js` +
+  `passos-conciliacao.mjs` (importa OFX com dedupe, ignora, confirma com e sem diferença, cria lançamento, desfaz; confere o que foi gravado).
+- **Teste de tela sem rede (`ferramentas/teste-tela/`, `rodar.mjs`):** abre o app num Chrome sem cabeça (Playwright) trocando o cliente Supabase por `sb-falso.js` e falha em erro de JavaScript,
+  `console.error` ou toast de erro. Uso: `node ferramentas/teste-tela/rodar.mjs <rota> [--perfil …] [--fixtures ferramentas/teste-tela/fixtures-<modulo>.js] [--modulo js/modulos/x.js]
+  [--script passos.mjs] [--escritas] [--texto] [--shot arq.png]` (caminho das fixtures é a partir da raiz do repositório). `fixtures-base.js` + uma fixture por módulo; RPC sem fixture devolve erro
+  (aviso de que falta). Testar só o módulo tocado. NÃO testa RLS (isso é SQL) e nunca leva dado real de paciente.
+- **Testes SQL de regressão (`ferramentas/testes-sql/regressao-guia.sql`, item 4):** um bloco `DO` que cria uma clínica de teste isolada, roda os casos de guia, autorização, liberação e repasse
+  e SEMPRE termina com `raise exception 'RELATORIO …'`: o erro final é proposital, desfaz tudo e traz o resultado (bom = `RELATORIO: 0 falha(s)`). Roda inteiro de uma vez no SQL Editor ou por
+  `execute_sql`. Rodar depois de qualquer migração que toque `guia_atendimento*`, `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha` ou a trava de autorização.
+- **`faltaBanco(error, c, migracao)` no `core.js`:** tela nova cuja tabela ainda não existe no banco (migração escrita em `db/`, não aplicada) mostra o cartão "Falta um passo para ligar esta tela"
+  com o nome da migração, em vez de erro. Devolve `true` quando o erro é tabela inexistente (`PGRST205`/`42P01`) e a tela deve parar; nos outros erros devolve `false`. Permite subir a tela
+  antes de a gestora aprovar a migração.
+
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).
@@ -185,4 +233,5 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 
 ## Pendências técnicas (laudo 10/11/2026)
 Backup institucional com todos os prontuários; piloto ponta a ponta com 1 convênio; retorno em PDF/planilha; mesclar pacientes duplicados;
-criar testes SQL de regressão das regras de guia.
+auditoria de bugs por módulo (agenda, paciente, tiss-xml, lotes, financeiro — um módulo por conversa).
+Testes SQL de regressão das regras de guia: feitos (`ferramentas/testes-sql/regressao-guia.sql`).

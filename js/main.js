@@ -20,6 +20,7 @@ import * as hoje from './modulos/hoje.js';
 import * as espera from './modulos/espera.js';
 import * as previsao from './modulos/previsao.js';
 import * as glosas from './modulos/glosas-intel.js';
+import * as conciliacao from './modulos/conciliacao.js';
 import { iniciarPaleta, abrirPaleta } from './modulos/paleta.js';
 import { registrarPWA } from './pwa.js';
 
@@ -35,6 +36,7 @@ const ROTAS = [
   { id: 'paciente', nome: 'Paciente', mod: paciente, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'], oculto: true },
   { id: 'financeiro', nome: 'Financeiro', mod: financeiro, perfis: ['gestor', 'financeiro'] },
   { id: 'previsao', nome: 'Previsão de caixa', mod: previsao, perfis: ['gestor', 'financeiro'] },
+  { id: 'conciliacao', nome: 'Conciliação bancária', mod: conciliacao, perfis: ['gestor', 'financeiro'] },
   { id: 'lotes', nome: 'Lotes TISS', mod: lotes, perfis: ['gestor', 'financeiro'] },
   { id: 'retornos', nome: 'Retornos e glosas', mod: retornos, perfis: ['gestor', 'financeiro'] },
   { id: 'glosas', nome: 'Inteligência de glosas', mod: glosas, perfis: ['gestor', 'financeiro'] },

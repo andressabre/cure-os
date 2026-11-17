@@ -2,7 +2,7 @@
 // Rota sugerida: #conciliacao (gestor, financeiro). Nenhuma baixa sem clique humano. Tabela extrato_movimentos (db/056).
 // A baixa grava em `lancamentos` as mesmas colunas do Financeiro → baixar(): status 'pago', valor_realizado, data_realizado,
 // conta_id, forma_pagamento, valor_confirmado = true. Leitores e motor de sugestão (puros) em extrato-banco.js.
-import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir } from '../core.js';
+import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir, faltaBanco } from '../core.js';
 import { decodificar, pareceOFX, lerOFX, lerCSV, distribuir, sugerir, formaPelaDescricao, semAcento } from './extrato-banco.js';
 export { sugerir, distribuir } from './extrato-banco.js';
 
@@ -63,6 +63,7 @@ export async function render() {
     sb.from('lancamentos').select('*').eq('clinica_id', cid).eq('carteira_id', cart.id).eq('status', 'previsto').order('vencimento'),
     sb.from('lancamentos').select('id, tipo, valor_realizado, data_realizado').eq('conta_id', conta.id).eq('status', 'pago'),
   ]);
+  if (faltaBanco(e4, c, 'db/056_extrato_bancario.sql')) return;   // 056 ainda não aplicada: cartão "Falta um passo" em vez de erro
   if (e4 || e5 || e6) return falha(e4 || e5 || e6, 'Conciliação');
   const ligadosIds = [...new Set(movs.filter((m) => m.lancamento_id).map((m) => m.lancamento_id))];
   const ligados = {};
@@ -239,7 +240,7 @@ export async function render() {
 
   async function confirmarTodos() {
     const itens = certos.map((m) => [m, sug.get(m.id).melhor.lancamento]);
-    if (!(await confirmar(`Dar baixa em ${itens.length} lançamento(s) com valor e data iguais ao banco, somando ${brl(soma(itens.map(([m]) => m)))}?`, `Confirmar ${itens.length}`))) return;
+    if (!(await confirmar(`Dar baixa em ${itens.length} lançamento(s) com valor igual ao banco e vencimento a até 5 dias da data do extrato, somando ${brl(soma(itens.map(([m]) => m)))}? Cada um fica pago na data do banco.`, `Confirmar ${itens.length}`))) return;
     let ok = 0; const erros = [];
     for (const [m, l] of itens) { try { await baixar(m, l); ok++; } catch (e) { erros.push(e.message || String(e)); } }
     if (erros.length) { console.warn('Conciliação em lote', erros); toast(`${ok} conciliado(s); ${erros.length} não: ${erros[0]}`, true); } else toast(`${ok} conciliado(s).`);
