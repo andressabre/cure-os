@@ -9,6 +9,7 @@ import { abaProntuario, abaAvaliacoes } from './prontuario.js';
 import { abaDocumentos } from './emissao.js';
 import { renderLinhaTempo } from './linha-tempo.js';
 import { registrarPagamento, seloPagamento, excluirPagamento, fazerNota } from './particular.js';
+import { abrirPacote, resumoPacote, valorTabela } from './pacote.js';
 
 const ABAS = [['resumo', 'Resumo'], ['cadastro', 'Cadastro e encaminhamentos'], ['autorizacoes', 'Autorizações e guias'],
   ['prontuario', 'Prontuário'], ['avaliacoes', 'Avaliações'], ['documentos', 'Documentos'], ['linhatempo', 'Linha do tempo']];
@@ -459,6 +460,7 @@ export async function render(params) {
               ${multi ? '' : `<span>${cs[0].u} feitas · ${cs[0].ag} agend. · ${cs[0].q ? Math.max(0, cs[0].livres) + ' livres de ' + cs[0].q : '?'}</span>`}
               ${encs1.map(chipEnc).join(' ')}
             </div>
+            ${mem.filter(particular).map((k) => `<div class="aut-pacote" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0">📦 ${resumoPacote(k, recs)} <button class="btn pequeno primario" data-pacote="${k.id}">Pacote e pagamentos</button></div>`).join('')}
             ${lig.length ? `<div class="aut-datas">${datas(lig)}</div>` : ''}
             ${tabGuias(gdo)}
             ${lig.length ? `<details class="aut-sub"><summary>Agendamentos desta senha (${lig.length})</summary>${tabAts(lig, '')}</details>` : ''}
@@ -498,6 +500,9 @@ export async function render(params) {
           <label>Área<select name="area" id="area">${opcoesArea('fisioterapia')}</select></label>
           <label class="larga">Encaminhamento<select name="encaminhamento_id" id="enc"></select></label>
           <label class="estreita">Qtd.<input type="number" name="qtd" min="1" value="10"></label>
+          <label id="lv-unit" hidden>Valor por sessão (R$)<input type="number" step="0.01" min="0" name="vunit" placeholder="sugerido pela tabela"></label>
+          <label id="lv-desc" hidden>Desconto no pacote (R$)<input type="number" step="0.01" min="0" name="vdesc" value="0"></label>
+          <label id="lv-nota" hidden style="align-self:end"><input type="checkbox" name="vnota" checked> Paciente quer nota</label>
           <label>Senha<input name="senha" placeholder="vazio = pendente"></label><label>Nº guia operadora<input name="guia"></label>
           <label>Data da autorização<input type="date" name="data" value="${hojeIso()}"></label><label>Validade<input type="date" name="validade"></label>
           </form><div class="linha-acoes"><button class="btn" id="fechar-aut">Cancelar</button><button class="btn primario" id="s">Registrar</button></div></div>`
@@ -534,7 +539,10 @@ export async function render(params) {
         const carregaEnc = () => { $('#enc').innerHTML = '<option value="">— sem encaminhamento —</option>' + opcoesEnc($('#area').value); };
         $('#abrir-aut').onclick = () => (caixa.hidden = !caixa.hidden);
         $('#fechar-aut').onclick = () => (caixa.hidden = true);
-        $('#pl').onchange = carregaProcs; carregaProcs();
+        const ehPart = () => /particular/i.test($('#pl').selectedOptions[0].textContent);
+        const sugereValor = async () => { const part = ehPart(); ['#lv-unit', '#lv-desc', '#lv-nota'].forEach((k) => ($(k).hidden = !part));
+          if (!part) return; const v = await valorTabela($('#pl').selectedOptions[0].dataset.ct, $('#proc').value); f0.vunit.value = v != null ? v.toFixed(2) : ''; f0.vunit.dataset.tab = v ?? ''; };
+        $('#pl').onchange = async () => { await carregaProcs(); sugereValor(); }; $('#proc').onchange = sugereValor; carregaProcs().then(sugereValor);
         $('#area').onchange = carregaEnc; carregaEnc();
         f0.senha.addEventListener('change', () => { const d = diasValidade(f0.paciente_plano_id.value); if (d && f0.senha.value.trim() && !f0.validade.value) f0.validade.value = somaDias(f0.data.value || hojeIso(), d); });
         $('#s').onclick = async () => {
@@ -543,7 +551,8 @@ export async function render(params) {
           const { data: nova, error: er } = await sb.from('autorizacoes').insert({ clinica_id: cid, paciente_plano_id: f.paciente_plano_id, procedimento_id: f.procedimento_id,
             area: f.area, qtd_autorizada: Number(f.qtd), qtd_solicitada: Number(f.qtd), senha: senha || null, numero_guia_operadora: f.guia.trim() || null,
             status: senha || /particular/i.test(f0.paciente_plano_id.selectedOptions[0].textContent) ? 'autorizada' : 'pendente',
-            data_autorizacao: f.data || null, validade: f.validade || null }).select('id').single();
+            data_autorizacao: f.data || null, validade: f.validade || null,
+            ...(ehPart() && f.vunit !== '' ? { valor_unitario: Number(f.vunit), valor_tabela: f0.vunit.dataset.tab ? Number(f0.vunit.dataset.tab) : null, desconto: Number(f.vdesc) || 0, quer_nota: !!f.vnota } : {}) }).select('id').single();
           if (er) return falha(er);
           if (f.encaminhamento_id) {
             const { data: rv, error: e2 } = await sb.rpc('vincular_encaminhamento', { p_autorizacao: nova.id, p_encaminhamento: f.encaminhamento_id });
@@ -558,6 +567,8 @@ export async function render(params) {
         const q = (sel) => $$(sel, raiz).filter((b) => !pular || !b.closest(pular));
         q('[data-pgto]').forEach((b) => (b.onclick = () => { const a = ats.find((k) => k.id === b.dataset.pgto); registrarPagamento({ ...a, paciente_id: id }, recarregar, recDe[a.id] || null, p); }));
         q('[data-nota]').forEach((b) => (b.onclick = () => fazerNota(recDe[b.dataset.nota], p)));
+        q('[data-pacote]').forEach((b) => (b.onclick = () => { const a = auts.find((k) => k.id === b.dataset.pacote);
+          abrirPacote(a, { pacienteId: id, pac: p, podeAnexar: gestao, contratoId: (planos || []).find((pl) => pl.id === a.paciente_plano_id)?.contrato_id }, (fim) => fim && recarregar()); }));
         q('[data-delpg]').forEach((b) => (b.onclick = async () => { if (await excluirPagamento(recDe[b.dataset.delpg])) recarregar(); }));
         q('[data-impg]').forEach((b) => (b.onclick = () => imprimirGuia(b.dataset.impg)));
         q('[data-cancg]').forEach((b) => (b.onclick = async () => {
