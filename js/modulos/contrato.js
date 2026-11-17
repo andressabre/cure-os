@@ -128,7 +128,7 @@ export async function render(params) {
         <label>Conta em que recebemos<select name="conta_recebimento_id"><option value="">— não definida —</option>${opt(contas, k.conta_recebimento_id, (x) => x.nome + (x.banco ? ` · ${x.banco}` : ''))}</select></label>
       </div>`)}
 
-    ${sec('tab', 'Tabela de valores', novo ? 'salve o contrato para cadastrar' : 'clique para abrir e ajustar valores',
+    ${sec('tab', 'Tabela de valores', novo ? 'salve o contrato para cadastrar' : 'clique para abrir e editar itens',
       `<div id="tab-corpo">${novo ? '<div class="vazio">Salve o contrato primeiro.</div>' : '<div class="vazio">Carregando…</div>'}</div>`)}
 
     ${sec('cont', 'Contatos responsáveis pela negociação', `${contatos.length} ${contatos.length === 1 ? 'contato' : 'contatos'}`,
@@ -193,7 +193,7 @@ export async function render(params) {
   const secTab = $('[data-sec=tab]', c);
   if (!novo) {
     sb.from('contrato_tabela').select('id', { count: 'exact', head: true }).eq('contrato_id', id).is('vigencia_fim', null)
-      .then(({ count }) => { $('#tab-resumo', c).textContent = `— ${count ?? 0} procedimentos · clique para abrir e ajustar valores`; });
+      .then(({ count }) => { $('#tab-resumo', c).textContent = `— ${count ?? 0} procedimentos · clique para abrir e editar itens`; });
     let carregada = false;
     const abrirTab = () => { if (!carregada) { carregada = true; montarTabela($('#tab-corpo', c), k, $('#tab-resumo', c)); } };
     secTab.addEventListener('toggle', () => { if (secTab.open) abrirTab(); });
@@ -255,20 +255,23 @@ async function montarTabela(m, k, resumoEl) {
     .eq('contrato_id', k.id).is('vigencia_fim', null).order('vigencia_inicio');
   if (error) return falha(error);
   itens.sort((a, b) => a.procedimentos.codigo.localeCompare(b.procedimentos.codigo));
-  if (resumoEl) resumoEl.textContent = `— ${itens.length} procedimentos · clique para abrir e ajustar valores`;
+  if (resumoEl) resumoEl.textContent = `— ${itens.length} procedimentos · clique para abrir e editar itens`;
   m.innerHTML = `<div class="dica">Valores que a clínica recebe da operadora. No <strong>reajuste anual</strong>, informe o % e a data: o sistema
       encerra a tabela atual e cria a nova, guardando o histórico (guias antigas continuam com o valor da época).</div>
     <div class="grade-form"><label>Reajuste (%)<input type="number" step="0.01" id="pct" placeholder="ex.: 5,5"></label>
       <label>Vale a partir de<input type="date" id="desde" value="${hoje}"></label>
       <button type="button" class="btn escuro" id="reaj">Aplicar reajuste em todos</button></div>
     <div class="tabela-rolagem" style="max-height:50vh;margin-top:12px"><table><thead><tr><th>Código TUSS</th><th>Procedimento</th><th>Desde</th><th class="num">Valor (R$)</th></tr></thead><tbody>
-    ${itens.map((i) => `<tr><td>${esc(i.procedimentos.codigo)}</td><td>${esc(i.procedimentos.descricao)}</td><td>${esc(i.vigencia_inicio.split('-').reverse().join('/'))}</td>
-      <td class="num"><input type="number" step="0.01" min="0" style="width:100px;text-align:right" data-id="${i.id}" data-orig="${i.valor}" value="${Number(i.valor).toFixed(2)}"></td></tr>`).join('')
+    ${itens.map((i) => { const proprio = /^CURE-/.test(i.procedimentos.codigo), tr = proprio ? '' : 'disabled title="Código TUSS oficial: só valor e data podem mudar"';
+      return `<tr data-row="${i.id}"><td><input class="e-cod" style="width:130px" value="${esc(i.procedimentos.codigo)}" data-o="${esc(i.procedimentos.codigo)}" ${tr}></td>
+      <td><input class="e-desc" style="width:100%;min-width:220px" value="${esc(i.procedimentos.descricao)}" data-o="${esc(i.procedimentos.descricao)}" ${tr}></td>
+      <td><input type="date" class="e-desde" value="${i.vigencia_inicio}" data-o="${i.vigencia_inicio}"></td>
+      <td class="num"><input type="number" step="0.01" min="0" class="e-val" style="width:100px;text-align:right" data-id="${i.id}" data-orig="${i.valor}" data-o="${Number(i.valor).toFixed(2)}" value="${Number(i.valor).toFixed(2)}"></td></tr>`; }).join('')
       || '<tr><td colspan="4" class="vazio">Sem itens. Cadastre os procedimentos.</td></tr>'}
     </tbody></table></div>
     <div class="grade-form" style="margin-top:12px"><label>Novo código TUSS<input id="ncod"></label><label>Descrição<input id="ndesc"></label>
       <label>Valor<input type="number" step="0.01" id="nval"></label><button type="button" class="btn" id="add">Adicionar</button></div>
-    <div class="linha-acoes"><button type="button" class="btn primario" id="salvar-vals">Salvar valores alterados</button></div>`;
+    <div class="linha-acoes"><button type="button" class="btn primario" id="salvar-vals">Salvar alterações</button></div>`;
 
   const recarregar = () => montarTabela(m, k, resumoEl);
   const novaVigencia = async (id, procId, valor, desde) => {
@@ -278,11 +281,19 @@ async function montarTabela(m, k, resumoEl) {
     if (r2.error) throw r2.error;
   };
   $('#salvar-vals', m).onclick = async () => {
-    const alterados = $$('[data-id]', m).filter((x) => Number(x.value).toFixed(2) !== Number(x.dataset.orig).toFixed(2));
-    if (!alterados.length) return toast('Nenhum valor alterado.');
-    try { for (const x of alterados) { const it = itens.find((i) => i.id === x.dataset.id); await novaVigencia(it.id, it.procedimentos.id, Number(x.value), hoje); } }
-    catch (e) { return falha(e); }
-    toast(`${alterados.length} valores atualizados.`); recarregar();
+    const linhas = $$('tr[data-row]', m).map((tr) => ({ id: tr.dataset.row, cod: $('.e-cod', tr), desc: $('.e-desc', tr), desde: $('.e-desde', tr), val: $('.e-val', tr) }))
+      .filter((l) => [l.cod, l.desc, l.desde].some((x) => x.value.trim() !== x.dataset.o) || Number(l.val.value).toFixed(2) !== l.val.dataset.o);
+    if (!linhas.length) return toast('Nada alterado.');
+    if (linhas.some((l) => !l.desde.value || !(Number(l.val.value) >= 0) || !l.desc.value.trim() || !l.cod.value.trim())) return toast('Preencha código, descrição, data e valor.', true);
+    if (linhas.some((l) => l.cod.value.trim() !== l.cod.dataset.o) && !(await confirmar('Trocar o código atualiza também as regras de reavaliação, mas a categoria do financeiro depende do código (PALM, CHIN, AVAL, BIO…). Continuar?', 'Alterar código'))) return;
+    try {
+      for (const l of linhas) {
+        const { error: e } = await sb.rpc('editar_item_tabela_contrato', { p_clinica: estado.clinica.id, p_item: l.id, p_codigo: l.cod.value.trim(),
+          p_descricao: l.desc.value.trim(), p_valor: Number(l.val.value), p_desde: l.desde.value });
+        if (e) throw e;
+      }
+    } catch (e) { return falha(e, 'Salvar tabela de valores'); }
+    toast(`${linhas.length} item(ns) atualizado(s).`); recarregar();
   };
   $('#reaj', m).onclick = async () => {
     const pct = Number(String($('#pct', m).value).replace(',', '.')), desde = $('#desde', m).value;
