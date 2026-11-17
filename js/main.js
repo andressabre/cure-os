@@ -3,6 +3,7 @@ import { sb, estado, $, esc, toast, falha, temDoisModos, aplicarModo } from './c
 import * as painel from './modulos/painel.js';
 import * as retornos from './modulos/retornos.js';
 import * as contratos from './modulos/contratos.js';
+import * as contrato from './modulos/contrato.js';
 import * as profissionais from './modulos/profissionais.js';
 import * as repasse from './modulos/repasse.js';
 import * as acessos from './modulos/acessos.js';
@@ -38,6 +39,7 @@ const ROTAS = [
   { id: 'retornos', nome: 'Retornos e glosas', mod: retornos, perfis: ['gestor', 'financeiro'] },
   { id: 'glosas', nome: 'Inteligência de glosas', mod: glosas, perfis: ['gestor', 'financeiro'] },
   { id: 'contratos', nome: 'Convênios e contratos', mod: contratos, perfis: ['gestor', 'financeiro'] },
+  { id: 'contrato', nome: 'Contrato', mod: contrato, perfis: ['gestor', 'financeiro'], oculto: true },
   { id: 'profissionais', nome: 'Profissionais', mod: profissionais, perfis: ['gestor', 'financeiro', 'recepcao'] },
   { id: 'repasse', nome: 'Tabela de repasse', mod: repasse, perfis: ['gestor', 'financeiro'] },
   { id: 'extrato', nome: 'Meu extrato', mod: extrato, perfis: ['profissional'] },
@@ -98,7 +100,7 @@ function rotear() {
   const disponiveis = rotasDoPerfil();
   const [id, ...params] = (location.hash.slice(1) || disponiveis[0].id).split('-');
   const rota = disponiveis.find((r) => r.id === id) || disponiveis[0];
-  document.querySelectorAll('#menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.r === (rota.id === 'paciente' ? (location.hash.includes('-prontuario') && estado.profissionalId ? 'prontuarios' : 'pacientes') : rota.id)));
+  document.querySelectorAll('#menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.r === (rota.id === 'contrato' ? 'contratos' : rota.id === 'paciente' ? (location.hash.includes('-prontuario') && estado.profissionalId ? 'prontuarios' : 'pacientes') : rota.id)));
   rota.mod.render(params.join('-')).catch((e) => falha(e, rota.nome));
 }
 

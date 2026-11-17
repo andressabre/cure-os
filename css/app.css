@@ -383,3 +383,18 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 #p3-mapa{max-height:440px;width:auto;max-width:100%;border:1px solid var(--linha);border-radius:8px;background:#fff;touch-action:none;cursor:grab}
 #p3-3d canvas{border:1px solid var(--linha);border-radius:8px;touch-action:none;cursor:grab;max-width:100%}.p3-leg{font-size:.8em;margin-top:4px}
 .aut-procs{display:flex;gap:10px;flex-wrap:wrap;flex:1 1 320px}.aut-procs .aut-proc-col{flex:1 1 220px;border:1px solid var(--linha);border-radius:6px;padding:6px 10px;background:var(--papel)}.aut-procs .aut-proc{margin-top:0}
+
+/* Convênios e contratos (lista + ficha do contrato) */
+.dica-inline{font-size:13px;color:var(--texto-2);font-weight:400}
+.filtros-ct{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.filtros-ct input[type=search]{flex:1 1 240px;min-width:200px}
+.tab-uma-linha th,.tab-uma-linha td{white-space:nowrap}
+.tab-uma-linha td.corta{max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.tab-uma-linha th.ord{cursor:pointer;user-select:none}
+.tab-uma-linha th.ord:hover{color:var(--texto)}
+.tab-uma-linha tr.inativo td{opacity:.55}
+.btn.icone{padding:4px 8px;min-width:34px;text-align:center}
+.portal-lin{display:grid;grid-template-columns:1.2fr .8fr 1fr 1fr 1.2fr auto;gap:10px;align-items:end;margin-bottom:10px}
+.senha-campo{display:flex;gap:6px}.senha-campo input{flex:1;min-width:0}
+.check-linha{display:flex;flex-direction:row;align-items:center;gap:8px}
+@media(max-width:900px){.portal-lin{grid-template-columns:1fr 1fr}}
