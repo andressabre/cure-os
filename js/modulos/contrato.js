@@ -251,7 +251,7 @@ export async function render(params) {
 // Tabela de valores do contrato (o que a clínica RECEBE), dentro da ficha. Reajuste cria nova vigência e guarda o histórico.
 async function montarTabela(m, k, resumoEl) {
   const hoje = new Date().toISOString().slice(0, 10);
-  const { data: itens, error } = await sb.from('contrato_tabela').select('id, valor, vigencia_inicio, procedimentos(id, codigo, descricao)')
+  const { data: itens, error } = await sb.from('contrato_tabela').select('id, valor, vigencia_inicio, procedimentos(id, codigo, codigo_tabela, descricao)')
     .eq('contrato_id', k.id).is('vigencia_fim', null).order('vigencia_inicio');
   if (error) return falha(error);
   itens.sort((a, b) => a.procedimentos.codigo.localeCompare(b.procedimentos.codigo));
@@ -261,13 +261,14 @@ async function montarTabela(m, k, resumoEl) {
     <div class="grade-form"><label>Reajuste (%)<input type="number" step="0.01" id="pct" placeholder="ex.: 5,5"></label>
       <label>Vale a partir de<input type="date" id="desde" value="${hoje}"></label>
       <button type="button" class="btn escuro" id="reaj">Aplicar reajuste em todos</button></div>
-    <div class="tabela-rolagem" style="max-height:50vh;margin-top:12px"><table><thead><tr><th>Código TUSS</th><th>Procedimento</th><th>Desde</th><th class="num">Valor (R$)</th></tr></thead><tbody>
-    ${itens.map((i) => { const proprio = /^CURE-/.test(i.procedimentos.codigo), tr = proprio ? '' : 'disabled title="Código TUSS oficial: só valor e data podem mudar"';
+    <div class="tabela-rolagem" style="max-height:50vh;margin-top:12px"><table><thead><tr><th>Código TUSS</th><th>Procedimento</th><th>Desde</th><th class="num">Valor (R$)</th><th></th></tr></thead><tbody>
+    ${itens.map((i) => { const proprio = i.procedimentos.codigo_tabela === '00', tr = proprio ? '' : 'disabled title="Código TUSS oficial: só valor e data podem mudar"';
       return `<tr data-row="${i.id}"><td><input class="e-cod" style="width:130px" value="${esc(i.procedimentos.codigo)}" data-o="${esc(i.procedimentos.codigo)}" ${tr}></td>
       <td><input class="e-desc" style="width:100%;min-width:220px" value="${esc(i.procedimentos.descricao)}" data-o="${esc(i.procedimentos.descricao)}" ${tr}></td>
       <td><input type="date" class="e-desde" value="${i.vigencia_inicio}" data-o="${i.vigencia_inicio}"></td>
-      <td class="num"><input type="number" step="0.01" min="0" class="e-val" style="width:100px;text-align:right" data-id="${i.id}" data-orig="${i.valor}" data-o="${Number(i.valor).toFixed(2)}" value="${Number(i.valor).toFixed(2)}"></td></tr>`; }).join('')
-      || '<tr><td colspan="4" class="vazio">Sem itens. Cadastre os procedimentos.</td></tr>'}
+      <td class="num"><input type="number" step="0.01" min="0" class="e-val" style="width:100px;text-align:right" data-id="${i.id}" data-orig="${i.valor}" data-o="${Number(i.valor).toFixed(2)}" value="${Number(i.valor).toFixed(2)}"></td>
+      <td><button type="button" class="btn pequeno escuro" data-excluir="${i.id}" title="Tirar este procedimento da tabela do contrato">🗑 Excluir</button></td></tr>`; }).join('')
+      || '<tr><td colspan="5" class="vazio">Sem itens. Cadastre os procedimentos.</td></tr>'}
     </tbody></table></div>
     <div class="grade-form" style="margin-top:12px"><label>Novo código TUSS<input id="ncod"></label><label>Descrição<input id="ndesc"></label>
       <label>Valor<input type="number" step="0.01" id="nval"></label><button type="button" class="btn" id="add">Adicionar</button></div>
@@ -285,7 +286,7 @@ async function montarTabela(m, k, resumoEl) {
       .filter((l) => [l.cod, l.desc, l.desde].some((x) => x.value.trim() !== x.dataset.o) || Number(l.val.value).toFixed(2) !== l.val.dataset.o);
     if (!linhas.length) return toast('Nada alterado.');
     if (linhas.some((l) => !l.desde.value || !(Number(l.val.value) >= 0) || !l.desc.value.trim() || !l.cod.value.trim())) return toast('Preencha código, descrição, data e valor.', true);
-    if (linhas.some((l) => l.cod.value.trim() !== l.cod.dataset.o) && !(await confirmar('Trocar o código atualiza também as regras de reavaliação, mas a categoria do financeiro depende do código (PALM, CHIN, AVAL, BIO…). Continuar?', 'Alterar código'))) return;
+    if (linhas.some((l) => l.cod.value.trim() !== l.cod.dataset.o) && !(await confirmar('Trocar o código atualiza também as regras de reavaliação, mas a categoria do financeiro no caixa depende de trechos do código (PALM, CHIN, AVAL, BIO…). Continuar?', 'Alterar código'))) return;
     try {
       for (const l of linhas) {
         const { error: e } = await sb.rpc('editar_item_tabela_contrato', { p_clinica: estado.clinica.id, p_item: l.id, p_codigo: l.cod.value.trim(),
@@ -295,6 +296,14 @@ async function montarTabela(m, k, resumoEl) {
     } catch (e) { return falha(e, 'Salvar tabela de valores'); }
     toast(`${linhas.length} item(ns) atualizado(s).`); recarregar();
   };
+  $$('[data-excluir]', m).forEach((b) => (b.onclick = async () => {
+    const it = itens.find((i) => i.id === b.dataset.excluir);
+    if (!(await confirmar(`Excluir "${it.procedimentos.codigo} — ${it.procedimentos.descricao}" da tabela deste contrato? Guias antigas continuam com o valor da época; novos atendimentos desse procedimento ficarão sem valor neste contrato.`, 'Excluir procedimento'))) return;
+    const r = it.vigencia_inicio >= hoje ? await sb.from('contrato_tabela').delete().eq('id', it.id)
+      : await sb.from('contrato_tabela').update({ vigencia_fim: new Date(Date.now() - 864e5).toISOString().slice(0, 10) }).eq('id', it.id);
+    if (r.error) return falha(r.error, 'Excluir da tabela');
+    toast('Procedimento excluído da tabela do contrato (histórico preservado).'); recarregar();
+  }));
   $('#reaj', m).onclick = async () => {
     const pct = Number(String($('#pct', m).value).replace(',', '.')), desde = $('#desde', m).value;
     if (!pct || !desde) return toast('Informe o % e a data.', true);

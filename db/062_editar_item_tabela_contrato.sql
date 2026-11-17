@@ -1,26 +1,26 @@
 -- 062 — editar_item_tabela_contrato(clinica, item, codigo, descricao, valor, desde): edita cada campo da tabela de valores do contrato.
--- Só gestor/financeiro. Código e descrição só mudam em procedimentos próprios (código CURE-*); TUSS oficial fica travado (é compartilhado).
+-- Só gestor/financeiro. Código e descrição só mudam em procedimentos próprios (codigo_tabela 00; formato livre, sem repetir); TUSS oficial fica travado (é compartilhado).
 -- Trocar o código atualiza também config.relacionamento.reavaliacoes. "Desde" corrige o início da vigência atual;
 -- valor novo = nova vigência a partir de hoje (histórico preservado), ou correção direta se a vigência começa hoje/no futuro.
 create or replace function editar_item_tabela_contrato(p_clinica uuid, p_item uuid, p_codigo text, p_descricao text, p_valor numeric, p_desde date)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_t contrato_tabela; v_cod text; v_desc text; v_novo text; v_ini date; v_outros text;
+declare v_t contrato_tabela; v_cod text; v_tab text; v_desc text; v_novo text; v_ini date; v_outros text;
 begin
   if coalesce(meu_perfil(p_clinica)::text, '') not in ('gestor', 'financeiro') then raise exception 'Sem permissão'; end if;
   select t.* into v_t from contrato_tabela t where t.id = p_item and t.clinica_id = p_clinica and t.vigencia_fim is null;
   if v_t.id is null then raise exception 'Item não encontrado ou já encerrado.'; end if;
-  select codigo, descricao into v_cod, v_desc from procedimentos where id = v_t.procedimento_id;
+  select codigo, descricao, codigo_tabela into v_cod, v_desc, v_tab from procedimentos where id = v_t.procedimento_id;
   select string_agg(distinct c.nome, ', ') into v_outros from contrato_tabela t2 join contratos c on c.id = t2.contrato_id
     where t2.procedimento_id = v_t.procedimento_id and t2.contrato_id <> v_t.contrato_id and t2.vigencia_fim is null;
 
-  if v_cod like 'CURE-%' then
-    v_novo := upper(btrim(coalesce(p_codigo, v_cod)));
+  if v_tab = '00' then   -- procedimento próprio da clínica (codigo_tabela 00); TUSS oficial fica travado
+    v_novo := btrim(coalesce(p_codigo, v_cod));
     if v_outros is not null and (v_novo <> v_cod or coalesce(btrim(p_descricao), v_desc) <> v_desc) then
       raise exception 'Este procedimento também é usado em: %. Mudar código/descrição alteraria esses contratos; ajuste só valor e data aqui.', v_outros;
     end if;
     if v_novo <> v_cod then
-      if v_novo !~ '^CURE-[A-Z0-9-]{1,30}$' then raise exception 'Código próprio deve começar com CURE- (letras, números e hífen).'; end if;
-      if exists (select 1 from procedimentos where codigo = v_novo) then raise exception 'O código % já existe em outro procedimento (o código não pode se repetir no contrato).', v_novo; end if;
+      if v_novo = '' then raise exception 'Informe o código.'; end if;
+      if exists (select 1 from procedimentos where codigo_tabela = '00' and codigo = v_novo) then raise exception 'O código % já existe em outro procedimento (o código não pode se repetir no contrato).', v_novo; end if;
       update procedimentos set codigo = v_novo where id = v_t.procedimento_id;
       update clinicas set config = jsonb_set(config, '{relacionamento,reavaliacoes}',
         (select coalesce(jsonb_agg(jsonb_set(r, '{codigos}', (select coalesce(jsonb_agg(case when c #>> '{}' = v_cod then to_jsonb(v_novo) else c end), '[]'::jsonb)
