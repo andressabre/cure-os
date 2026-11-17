@@ -3,8 +3,8 @@
 // para salvar na pasta sincronizada do OneDrive. Só a gestora (RLS: algumas tabelas são só do gestor).
 import { sb, estado, $, esc, toast, falha } from '../core.js';
 
-// convites fica de fora (tokens de acesso)
-const TABELAS = ['clinicas', 'usuarios_clinica', 'cnpjs_faturamento', 'operadoras', 'contratos', 'contrato_tabela', 'procedimentos',
+// convites fica de fora (tokens de acesso); contrato_portais também (senhas de portais das operadoras)
+const TABELAS = ['clinicas', 'usuarios_clinica', 'cnpjs_faturamento', 'operadoras', 'contratos', 'contrato_contatos', 'contrato_tabela', 'procedimentos',
   'regras_repasse', 'profissionais', 'solicitantes', 'pacientes', 'paciente_planos', 'encaminhamentos', 'autorizacoes', 'atendimentos',
   'guias', 'guia_itens', 'guia_anexos', 'lotes', 'retornos', 'retorno_linhas', 'glosas', 'motivos_glosa', 'glosas_operadora',
   'notificacoes', 'contas_financeiras', 'categorias_financeiras', 'lancamentos', 'auditoria',

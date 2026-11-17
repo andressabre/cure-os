@@ -398,3 +398,9 @@ details.cartao>summary{cursor:pointer;list-style:revert}
 .senha-campo{display:flex;gap:6px}.senha-campo input{flex:1;min-width:0}
 .check-linha{display:flex;flex-direction:row;align-items:center;gap:8px}
 @media(max-width:900px){.portal-lin{grid-template-columns:1fr 1fr}}
+.contato-lin{display:grid;grid-template-columns:1.2fr .8fr 1fr 1fr 1.2fr auto;gap:10px;align-items:end;margin-bottom:10px}
+@media(max-width:900px){.contato-lin{grid-template-columns:1fr 1fr}}
+details.sec>summary{padding:2px 0}
+details.sec[open]>summary{margin-bottom:14px}
+details.sec h4{margin:18px 0 10px;font-size:13.5px;color:var(--texto-2);text-transform:uppercase;letter-spacing:.03em}
+details.sec h4:first-child{margin-top:0}
