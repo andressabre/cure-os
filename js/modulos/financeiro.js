@@ -361,7 +361,7 @@ export async function render(params = '') {
         ${contas.length ? `<table><thead><tr><th>Conta</th><th>Tipo</th><th>Banco / ag. / conta</th><th class="num">Saldo inicial</th><th>Em</th><th></th></tr></thead><tbody>
         ${contas.map((k) => `<tr class="${k.ativo ? '' : 'inativo'}"><td><strong>${esc(k.nome)}</strong>${k.ativo ? '' : ' <small>(inativa)</small>'}</td><td>${esc(k.tipo)}</td>
           <td>${esc([k.banco, k.agencia, k.conta].filter(Boolean).join(' · ') || '—')}</td><td class="num">${brl(k.saldo_inicial)}</td><td>${data(k.data_saldo_inicial)}</td>
-          <td><button class="btn pequeno" data-conta="${k.id}">Editar</button></td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhuma conta. Cadastre a conta PJ e o caixa físico.</div>'}</div>
+          <td><button class="btn pequeno" data-conta="${k.id}">Editar</button> <button class="btn pequeno" data-excluir-conta="${k.id}">Excluir</button></td></tr>`).join('')}</tbody></table>` : '<div class="vazio">Nenhuma conta. Cadastre a conta PJ e o caixa físico.</div>'}</div>
       <div class="cartao tabela-rolagem"><div class="linha-acoes" style="justify-content:space-between"><h3>Categorias</h3><button class="btn primario" id="ncat">+ Categoria</button></div>
         <table><thead><tr><th>Categoria</th><th>Tipo</th><th>Linha da DRE</th><th></th></tr></thead><tbody>
         ${cats.map((k) => `<tr><td>${esc(k.nome)}${k.ativo ? '' : ' <small>(inativa)</small>'}</td><td>${k.tipo}</td><td>${esc(GRUPOS.find(([g]) => g === k.grupo_dre)?.[1])}</td>
@@ -402,6 +402,17 @@ export async function render(params = '') {
     $('#ncat').onclick = () => formCat();
     $$('[data-conta]', c).forEach((b) => (b.onclick = () => formConta(contas.find((k) => k.id === b.dataset.conta))));
     $$('[data-cat]', c).forEach((b) => (b.onclick = () => formCat(cats.find((k) => k.id === b.dataset.cat))));
+    // Excluir conta: só sem uso (lançamentos, extrato importado ou contrato apontando para ela); com uso, orienta a desativar
+    $$('[data-excluir-conta]', c).forEach((b) => (b.onclick = async () => {
+      const k = contas.find((x) => x.id === b.dataset.excluirConta); if (!k) return;
+      const conta = (t, col) => sb.from(t).select('id', { count: 'exact', head: true }).eq(col, k.id);
+      const [r1, r2, r3] = await Promise.all([conta('lancamentos', 'conta_id'), conta('extrato_movimentos', 'conta_id'), conta('contratos', 'conta_recebimento_id')]);
+      if (r1.error || r2.error || r3.error) return falha(r1.error || r2.error || r3.error);
+      if (r1.count || r2.count || r3.count) return toast(`"${k.nome}" já tem movimento (${r1.count || 0} lançamento(s), ${r2.count || 0} do extrato, ${r3.count || 0} contrato(s)). Para tirar de uso, edite e desmarque "Ativa".`, true);
+      if (!(await confirmar(`Excluir a conta "${k.nome}"? Ela não tem nenhum movimento. Isso não pode ser desfeito.`, 'Excluir'))) return;
+      const { error: e } = await sb.from('contas_financeiras').delete().eq('id', k.id);
+      if (e) return falha(e); toast('Conta excluída.'); render(`cadastros-${ym}`);
+    }));
   }
 
   await ({ lancamentos, caixa, dre, cadastros }[aba])();

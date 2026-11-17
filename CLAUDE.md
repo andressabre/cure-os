@@ -76,6 +76,7 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   previstos futuros não confirmados pela média dos últimos N confirmados/pagos); `valor_confirmado` = fatura chegou; "aplicar às próximas" e "+12 meses" no editar.
   **Anexos:** bucket privado `financeiro` (`<clinica>/<empresa|pessoal>/<lançamento>/…`, 5 MB, fotos reduzidas a 1600 px JPEG no navegador;
   `pasta_financeiro_ok`: pessoal só gestor); colunas `fatura_arquivo` e `comprovante_arquivo`; comprovante também na baixa.
+  **Contas (Cadastros):** + Conta, Editar e **Excluir** (17/11/2026): excluir só se a conta não tem lançamento, movimento de extrato nem contrato apontando para ela (checagem no cliente; as FKs de `lancamentos` e `extrato_movimentos` também barram no banco); com uso, desmarcar "Ativa".
 - **Chave Gestão ↔ Profissional (15/11/2026):** quem é gestor/financeiro E tem profissional vinculado vê a chave no menu lateral (`#chave-modo`).
   `estado.perfilReal` guarda o perfil de verdade; `aplicarModo()` troca `estado.perfil` para 'profissional' no modo profissional (menu, agenda,
   ficha e `podeGerir()` passam a se comportar como profissional). Só muda a tela — a RLS continua pelo perfil real. Modo salvo em `localStorage.modo_<user>`.
