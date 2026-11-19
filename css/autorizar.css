@@ -1,0 +1,23 @@
+/* Autorizar guias (js/modulos/autorizar.js) — prefixo au- */
+.au-topo{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.au-resumo{display:flex;gap:6px;flex-wrap:wrap}
+.au-modo{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.au-modo select{max-width:100%}
+.au-lista,.au-fila{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:10px}
+.au-item{display:flex;gap:10px;align-items:flex-start;border-left:4px solid var(--linha-fraca)}
+.au-item.au-verde{border-left-color:var(--verde)}
+.au-item.au-amarelo{border-left-color:var(--laranja)}
+.au-item.au-vermelho{border-left-color:var(--vermelho)}
+.au-chk{padding-top:2px}
+.au-corpo{flex:1;min-width:0;display:grid;gap:4px}
+.au-linha{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.au-linha a{color:var(--texto);text-decoration:none}
+.au-motivos{margin:2px 0 0;padding-left:18px;font-size:13.5px}
+.au-bloq{color:var(--vermelho)}
+.au-aviso{color:var(--texto-2)}
+.au-titulo{margin:22px 0 4px;font-family:var(--titulo);font-size:18px}
+.au-titulo .muted{font-size:14px;font-weight:400}
+.au-fitem{display:grid;gap:4px}
+.au-msg{font-size:13px;color:var(--texto-2);overflow-wrap:anywhere}
+.au-vazio{text-align:center;padding:28px 18px}
+.au-vazio-ic{font-size:34px}

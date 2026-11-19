@@ -18,6 +18,7 @@ import * as prontuarios from './modulos/prontuario.js';
 import * as auditoria from './modulos/auditoria.js';
 import * as hoje from './modulos/hoje.js';
 import * as espera from './modulos/espera.js';
+import * as autorizar from './modulos/autorizar.js';
 import * as previsao from './modulos/previsao.js';
 import * as glosas from './modulos/glosas-intel.js';
 import * as conciliacao from './modulos/conciliacao.js';
@@ -28,6 +29,7 @@ import { registrarPWA } from './pwa.js';
 const ROTAS = [
   { id: 'hoje', nome: 'Hoje', mod: hoje, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'agenda', nome: 'Agenda', mod: agenda, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
+  { id: 'autorizar', nome: 'Autorizar guias', mod: autorizar, perfis: ['gestor', 'financeiro', 'recepcao'] },
   { id: 'espera', nome: 'Lista de espera', mod: espera, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
   { id: 'painel', nome: 'Painel', mod: painel, perfis: ['gestor', 'financeiro'] },
   { id: 'estatisticas', nome: 'Estatísticas', mod: estatisticas, perfis: ['gestor', 'financeiro', 'recepcao', 'profissional'] },
