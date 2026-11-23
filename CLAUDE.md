@@ -228,6 +228,9 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   `notas_profissional` **sem arquivo** (066 removeu o bucket `notas-prof`): guarda competência, nº, valor, data de emissão e `chave_acesso` (única por clínica); botão copia a chave e abre a consulta pública da NFS-e (nfse.gov.br/ConsultaPublica); nota de emissor municipal sem chave de 50 dígitos se consulta no site do município.
   NF do mês anterior sem registro = só selo de alerta (Profissionais tem a coluna "NF mês anterior" para a gestão; não bloqueia pagamento). Auditoria genérica nas 3 tabelas.
   Teste: `rodar.mjs ficha-<id>-dados --perfil gestor --fixtures ferramentas/teste-tela/fixtures-ficha.js [--script ferramentas/teste-tela/passos-ficha.mjs --escritas]`.
+- **Meu extrato do profissional (db/067, 23/11/2026, `extrato.js`):** `meu_extrato` devolve também `situacao` (pago = guia paga ou glosa recuperada · glosado = glosa **confirmada pela gestão**, com código, motivo e orientação · aguardando = ainda não pago) e `etapa` ("Ainda não enviado" / "Enviado, aguardando pagamento"); guia cancelada fica fora.
+  Tela: cartões Pago / Aguardando / Descontado por glosa e chips de filtro. Só o repasse do próprio profissional (nunca o valor recebido pela clínica); "aguardando" não é erro (operadora pode não ter pago). Meses anteriores ao sistema não aparecem (ponte planilha + PDF da operadora = Lote 3).
+  Teste: `rodar.mjs extrato --perfil profissional --fixtures ferramentas/teste-tela/fixtures-extrato.js --script ferramentas/teste-tela/passos-extrato.mjs`.
 
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
