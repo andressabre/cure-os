@@ -242,6 +242,8 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   **Editar abre o mesmo formulário na própria página** (não mais modal) com todos os procedimentos da guia: troca código/qtd, adiciona ou remove linha (bloqueia se já houve atendimento realizado), CID e situação.
   Excluir apaga a guia inteira (todas as linhas). Teste: `rodar.mjs paciente-<uuid>-autorizacoes --perfil gestor --fixtures ferramentas/teste-tela/fixtures-autorizacao-form.js --script ferramentas/teste-tela/passos-autorizacao-form.mjs --escritas`.
 
+- **Nutrição sem senha (db/068, 23/11/2026):** autorização da área `nutricao` com senha vazia e nº da guia da operadora preenchido recebe `senha := nº da guia` (gatilho `antes_nutricao_guia_vale_senha`, roda antes da trava da 050). Outras áreas seguem exigindo senha. O formulário da ficha aceita nutrição só com o nº da guia.
+
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).

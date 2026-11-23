@@ -593,8 +593,10 @@ export async function render(params) {
           if (ls.some((l) => !l.proc)) return toast('Escolha o procedimento em todas as linhas.', true);
           if (ls.some((l) => !(l.qtd > 0))) return toast('Informe a quantidade de cada procedimento.', true);
           if (new Set(ls.map((l) => l.proc)).size < ls.length) return toast('Há procedimento repetido: junte na mesma linha.', true);
-          const status = editando ? f.status : (senha || part ? 'autorizada' : 'pendente');
-          if (status === 'autorizada' && !senha && !part) return toast('Autorizada precisa de senha — ou deixe como pendente.', true);
+          // Nutrição não tem senha: o nº da guia da operadora vale como identificador (db/068 copia para a senha)
+          const idOk = senha || (f.area === 'nutricao' && (f.guia || '').trim());
+          const status = editando ? f.status : (idOk || part ? 'autorizada' : 'pendente');
+          if (status === 'autorizada' && !idOk && !part) return toast('Autorizada precisa de senha (ou, na nutrição, do nº da guia) — ou deixe como pendente.', true);
           const comum = { numero_guia_operadora: (f.guia || '').trim() || null, senha, data_autorizacao: f.data || null, validade: f.validade || null, cid: normCid(f.cid) || null, area: f.area, status };
           const enc = f.encaminhamento_id || null;
           const btn = $('#s'); btn.disabled = true;
