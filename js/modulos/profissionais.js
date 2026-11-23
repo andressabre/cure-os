@@ -1,18 +1,26 @@
 // Módulo Profissionais: cadastro da equipe (dados exigidos na guia TISS).
 import { sb, estado, $, $$, esc, tela, toast, falha, modal, podeGerir } from '../core.js';
 import { mostrarCalendario } from './agenda.js';
+import { competenciaAnterior, nomeMes } from './ficha-profissional.js';
 
 export async function render() {
   const c = tela('Profissionais', podeGerir() || estado.perfil === 'recepcao' ? '<button class="btn primario" id="novo">+ Profissional</button>' : '');
   const { data: ps, error } = await sb.from('profissionais').select('*').eq('clinica_id', estado.clinica.id).order('nome');
   if (error) return falha(error);
+  // Alerta de NF do mês anterior (só gestão; se a migração 065 não foi aplicada, a coluna simplesmente não aparece)
+  let comNf = null;
+  if (podeGerir()) {
+    const r = await sb.from('notas_profissional').select('profissional_id').eq('competencia', competenciaAnterior() + '-01');
+    if (!r.error) comNf = new Set(r.data.map((x) => x.profissional_id));
+  }
   c.innerHTML = `<div class="cartao tabela-rolagem"><table>
-    <thead><tr><th>Nome</th><th>Especialidade</th><th>Conselho</th><th>CBO</th><th>Agenda</th><th>Notificações</th><th>Situação</th><th></th></tr></thead><tbody>
+    <thead><tr><th>Nome</th><th>Especialidade</th><th>Conselho</th><th>CBO</th><th>Agenda</th><th>Notificações</th><th>Situação</th>${comNf ? `<th>NF ${esc(nomeMes(competenciaAnterior()))}</th>` : ''}<th></th></tr></thead><tbody>
     ${ps.map((p) => `<tr><td><strong>${esc(p.nome)}</strong></td><td>${esc(p.especialidade)}</td>
       <td>${esc([p.conselho, p.numero_conselho, p.uf_conselho].filter(Boolean).join(' '))}</td><td>${esc(p.cbo)}</td>
       <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(p.cor)}"></span> ${p.duracao_padrao_min} min</td><td>${p.notificacoes_ativas ? 'Ativas' : 'Desligadas'}</td>
       <td>${p.ativo ? '<span class="selo ok">Ativo</span>' : '<span class="selo outra">Inativo</span>'}</td>
-      <td><button class="btn pequeno" data-ed="${p.id}">Editar</button> <button class="btn pequeno" data-cal="${p.id}">Calendário</button></td></tr>`).join('') || '<tr><td colspan="8" class="vazio">Nenhum profissional cadastrado.</td></tr>'}
+      ${comNf ? `<td>${p.ativo ? (comNf.has(p.id) ? '<span class="selo ok">Recebida</span>' : '<span class="selo alerta">Pendente</span>') : ''}</td>` : ''}
+      <td>${podeGerir() ? `<a class="btn pequeno" href="#ficha-${p.id}-dados">Ficha</a> ` : ''}<button class="btn pequeno" data-ed="${p.id}">Editar</button> <button class="btn pequeno" data-cal="${p.id}">Calendário</button></td></tr>`).join('') || '<tr><td colspan="9" class="vazio">Nenhum profissional cadastrado.</td></tr>'}
     </tbody></table></div>`;
 
   const form = (p = { ativo: true, notificacoes_ativas: true }) => modal(`<h3>${p.id ? 'Editar' : 'Novo'} profissional</h3>

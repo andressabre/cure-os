@@ -222,6 +222,12 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   com o nome da migração, em vez de erro. Devolve `true` quando o erro é tabela inexistente (`PGRST205`/`42P01`) e a tela deve parar; nos outros erros devolve `false`. Permite subir a tela
   antes de a gestora aprovar a migração.
 
+- **Ficha do profissional (db/065, 23/11/2026, `ficha-profissional.js`, rotas `#ficha-<id>[-aba]` gestão/financeiro e `#cadastro[-aba]` o próprio profissional):** abas Dados · Pagamento · Notas fiscais.
+  `profissional_pagamento` (1 por profissional): leitura gestor/financeiro e o próprio; **só o gestor grava**; o profissional pede troca em `profissional_pagamento_solicitacoes` (gestor marca atendida/recusada).
+  `notas_profissional` + bucket privado `notas-prof` (`<clinica>/<profissional>/<AAAA-MM>/…`, 5 MB, pdf/jpg/png/xml; `pasta_nota_prof_ok`): gestor/financeiro e o próprio enviam e leem; recepção não vê.
+  NF do mês anterior sem anexo = só selo de alerta (Profissionais ganha a coluna "NF mês anterior" para a gestão; não bloqueia pagamento). Auditoria genérica nas 3 tabelas.
+  Teste: `rodar.mjs ficha-<id>-pagamento --perfil gestor --fixtures ferramentas/teste-tela/fixtures-ficha.js [--script ferramentas/teste-tela/passos-ficha.mjs]`.
+
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).

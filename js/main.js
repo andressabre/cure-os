@@ -22,6 +22,7 @@ import * as autorizar from './modulos/autorizar.js';
 import * as previsao from './modulos/previsao.js';
 import * as glosas from './modulos/glosas-intel.js';
 import * as conciliacao from './modulos/conciliacao.js';
+import * as ficha from './modulos/ficha-profissional.js';
 import { iniciarPaleta, abrirPaleta } from './modulos/paleta.js';
 import { registrarPWA } from './pwa.js';
 
@@ -45,7 +46,9 @@ const ROTAS = [
   { id: 'contratos', nome: 'Convênios e contratos', mod: contratos, perfis: ['gestor', 'financeiro'] },
   { id: 'contrato', nome: 'Contrato', mod: contrato, perfis: ['gestor', 'financeiro'], oculto: true },
   { id: 'profissionais', nome: 'Profissionais', mod: profissionais, perfis: ['gestor', 'financeiro', 'recepcao'] },
+  { id: 'ficha', nome: 'Ficha do profissional', mod: ficha, perfis: ['gestor', 'financeiro'], oculto: true },
   { id: 'repasse', nome: 'Tabela de repasse', mod: repasse, perfis: ['gestor', 'financeiro'] },
+  { id: 'cadastro', nome: 'Meu cadastro', mod: ficha, perfis: ['profissional'], precisaProf: true },
   { id: 'extrato', nome: 'Meu extrato', mod: extrato, perfis: ['profissional'] },
   { id: 'acessos', nome: 'Acessos', mod: acessos, perfis: ['gestor'] },
   { id: 'auditoria', nome: 'Auditoria', mod: auditoria, perfis: ['gestor'] },
@@ -104,7 +107,7 @@ function rotear() {
   const disponiveis = rotasDoPerfil();
   const [id, ...params] = (location.hash.slice(1) || disponiveis[0].id).split('-');
   const rota = disponiveis.find((r) => r.id === id) || disponiveis[0];
-  document.querySelectorAll('#menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.r === (rota.id === 'contrato' ? 'contratos' : rota.id === 'paciente' ? (location.hash.includes('-prontuario') && estado.profissionalId ? 'prontuarios' : 'pacientes') : rota.id)));
+  document.querySelectorAll('#menu a').forEach((a) => a.classList.toggle('ativo', a.dataset.r === (rota.id === 'contrato' ? 'contratos' : rota.id === 'ficha' ? 'profissionais' : rota.id === 'paciente' ? (location.hash.includes('-prontuario') && estado.profissionalId ? 'prontuarios' : 'pacientes') : rota.id)));
   rota.mod.render(params.join('-')).catch((e) => falha(e, rota.nome));
 }
 
