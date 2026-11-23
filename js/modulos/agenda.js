@@ -122,7 +122,7 @@ export async function render() {
     de = ate = vis.dia;
   }
 
-  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, paciente_plano_id, autorizacao_id, serie_id, lembrete_enviado_em, pacientes(nome, telefone, celular)')
+  let q = sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, observacao, profissional_id, paciente_id, paciente_plano_id, autorizacao_id, serie_id, combo_id, lembrete_enviado_em, pacientes(nome, telefone, celular)')
     .eq('clinica_id', estado.clinica.id).gte('inicio', new Date(de + 'T00:00').toISOString()).lt('inicio', new Date(somaDias(ate, 1) + 'T00:00').toISOString())
     .order('inicio');
   if (vis.prof) q = q.eq('profissional_id', vis.prof);
@@ -137,6 +137,16 @@ export async function render() {
     idsConv.length ? sb.rpc('convenio_atendimentos', { p_atendimentos: idsConv }) : { data: [] }]);
   (rNum.data || []).forEach((x) => (num[x.atendimento_id] = x));
   CONV = {}; (rConv.data || []).forEach((x) => (CONV[x.atendimento_id] = x.convenio));
+  // Sessão combinada (db/069): atendimentos do mesmo combo aparecem como UM bloco; a descrição dos procedimentos vem das autorizações
+  const COMBO = {}, PROC = {};
+  todos.filter((a) => a.combo_id && a.status !== 'cancelado').forEach((a) => (COMBO[a.combo_id] ||= []).push(a));
+  Object.values(COMBO).forEach((l) => l.sort((x, y) => x.id.localeCompare(y.id)));
+  const idsAutCombo = [...new Set(Object.values(COMBO).filter((l) => l.length > 1).flat().map((a) => a.autorizacao_id).filter(Boolean))];
+  if (idsAutCombo.length) { const { data: pa } = await sb.from('autorizacoes').select('id, procedimentos(descricao)').in('id', idsAutCombo);
+    (pa || []).forEach((x) => (PROC[x.id] = x.procedimentos?.descricao || '')); }
+  const irmaos = (a) => (a.combo_id && COMBO[a.combo_id]?.length > 1 ? COMBO[a.combo_id] : null);
+  const lider = (a) => { const l = irmaos(a); return !l || l[0].id === a.id; };
+  const descCombo = (a) => { const l = irmaos(a); return l ? l.map((x) => PROC[x.autorizacao_id]).filter(Boolean).join(' + ') : ''; };
 
   const ini = minDe(cfg.abre), fimMin = minDe(cfg.fecha), altura = (fimMin - ini) * PX_MIN;
   const horas = []; for (let m = Math.ceil(ini / 60) * 60; m < fimMin; m += 60) horas.push(m);
@@ -207,7 +217,7 @@ export async function render() {
     <div></div>${colunas.map((col) => `<div class="ag-tit${col.dia === hojeIso() && vis.modo === 'semana' ? ' hoje' : ''}">${esc(col.titulo)}</div>`).join('')}
     <div class="ag-horas" style="height:${altura}px">${horas.map((m) => `<span style="top:${(m - ini) * PX_MIN}px">${String(m / 60).padStart(2, '0')}:00</span>`).join('')}</div>
     ${colunas.map((col, ci) => {
-      const evs = ats.filter((a) => (!col.prof || a.profissional_id === col.prof) && new Date(a.inicio).toLocaleDateString('sv') === col.dia);
+      const evs = ats.filter((a) => (!col.prof || a.profissional_id === col.prof) && new Date(a.inicio).toLocaleDateString('sv') === col.dia && lider(a));
       const fx = faixas(evs);
       return `<div class="ag-col" data-ci="${ci}" style="height:${altura}px">
       ${horas.map((m) => `<i style="top:${(m - ini) * PX_MIN}px"></i>`).join('')}
@@ -217,7 +227,7 @@ export async function render() {
         const h = Math.max(22, ((e - s) / 6e4) * PX_MIN - 2), { i, n } = fx[a.id];
         const lado = n > 1 ? `left:calc(${(i / n) * 100}% + 2px);right:auto;width:calc(${100 / n}% - 4px);` : '';
         return `<div class="ag-ev st-${a.status}" data-id="${a.id}" title="${esc(`${hm(a.inicio)}–${hm(a.fim)} ${a.pacientes?.nome || ''} · ${nomeProf(a.profissional_id)}`)}" style="top:${top}px;height:${h}px;${lado}border-left-color:${corDe(a.profissional_id)}">
-          <b>${hm(a.inicio)} ${esc(a.pacientes?.nome || '')}${seloSessao(num[a.id])}</b><span>${todosProfs ? esc(primeiroNome(nomeProf(a.profissional_id))) + ' · ' : ''}${esc(a.servico || '')}${a.sala ? ' · ' + esc(a.sala) : ''} · ${STATUS[a.status]}</span></div>`;
+          <b>${hm(a.inicio)} ${esc(a.pacientes?.nome || '')}${seloSessao(num[a.id])}</b><span>${todosProfs ? esc(primeiroNome(nomeProf(a.profissional_id))) + ' · ' : ''}${esc(descCombo(a) || a.servico || '')}${a.sala ? ' · ' + esc(a.sala) : ''} · ${STATUS[a.status]}</span></div>`;
       }).join('')}</div>`; }).join('')}
   </div></div>`;
     $$('.ag-col', corpo).forEach((el) => (el.onclick = (e) => {
@@ -339,6 +349,7 @@ export async function render() {
         ${tel ? `<dt>Celular</dt><dd>${esc(tel)}</dd>` : ''}
         <dt>Profissional</dt><dd>${esc(nomeProf(a.profissional_id))}</dd>
         <dt>Serviço</dt><dd>${esc(a.servico || '—')}${a.sala ? ' · ' + esc(a.sala) : ''}</dd>
+        ${descCombo(a) ? `<dt>Procedimentos</dt><dd>${esc(descCombo(a))}</dd>` : ''}
         <dt>Convênio</dt><dd>${esc(nomeConv(a))}</dd>
         <dt>Status</dt><dd><span class="ag-st st-${a.status}">${STATUS[a.status]}</span>${a.lembrete_enviado_em ? ' <span class="selo ok">lembrete enviado</span>' : ''}</dd>
         ${a.observacao ? `<dt>Obs.</dt><dd>${esc(a.observacao)}</dd>` : ''}
@@ -455,7 +466,7 @@ export async function render() {
         if (e) return falha(e); toast(`${cs.length} agendamento(s) cancelado(s).`); render();
       });
       // Convênio e autorização: agendar convênio exige vínculo com autorização (existente ou solicitação pendente)
-      const conv = $('#conv', m); let planos = [], planoId = a?.paciente_plano_id || novo.pre?.plano || '', autId = a?.autorizacao_id || novo.pre?.aut || '';
+      const conv = $('#conv', m); let planos = [], planoId = a?.paciente_plano_id || novo.pre?.plano || '', autId = a?.autorizacao_id || novo.pre?.aut || ''; const juntos = new Set();
       const travado = a && ['atendido', 'cancelado'].includes(a.status); let carregado = false;
       async function carregarConv() {
         if (!pacienteId) { conv.innerHTML = ''; return; }
@@ -480,6 +491,10 @@ export async function render() {
             ${pl.autorizacoes.map((x) => `<option value="${x.id}" ${x.id === autId ? 'selected' : ''} ${saldo(x) <= 0 && x.id !== autId ? 'disabled' : ''}>
               ${x.status === 'pendente' ? '⏳ PENDENTE' : 'senha ' + esc(x.senha)} · ${esc(x.codigo)} · ${x.usadas} feitas + ${x.agendadas} agendadas de ${x.qtd}${x.validade ? ' · val. ' + new Date(x.validade + 'T12:00').toLocaleDateString('pt-BR') : ''}</option>`).join('')}
             <option value="nova" ${autId === 'nova' ? 'selected' : ''}>+ Nova solicitação de autorização</option></select></label>
+          ${!a && autId && autId !== 'nova' && !(pl.senha_por_sessao) ? (() => { const base = pl.autorizacoes.find((x) => x.id === autId);
+              const jun = base ? pl.autorizacoes.filter((x) => x.id !== autId && x.senha && x.senha === base.senha && x.area === base.area && x.status !== 'pendente' && saldo(x) > 0) : [];
+              return jun.length ? `<div style="grid-column:1/-1" class="caixa-form"><strong>Agendar junto na mesma sessão</strong> <span class="muted">(mesmo horário, mesma guia)</span>
+                ${jun.map((x) => `<label style="display:block;margin:4px 0"><input type="checkbox" class="c-junto" value="${x.id}" ${juntos.has(x.id) ? 'checked' : ''}> ${esc(x.codigo)}${(() => { const d = pl.procedimentos.find((q) => q.id === x.procedimento_id)?.descricao; return d ? ' · ' + esc(d) : ''; })()} <span class="muted">(saldo ${saldo(x)})</span></label>`).join('')}</div>` : ''; })() : ''}
           ${autId === 'nova' ? `<label style="grid-column:1/-1">Procedimento<select id="c-proc">${[...pl.procedimentos].sort((x, y) => x.codigo.localeCompare(y.codigo))
               .map((x) => `<option value="${x.id}">${esc(x.codigo)} — ${esc(x.descricao)}</option>`).join('')}</select></label>
             <label>Sessões solicitadas<input id="c-qtd" type="number" min="1" value="10"></label>
@@ -490,7 +505,8 @@ export async function render() {
           : pl ? '<p class="muted" style="grid-column:1/-1">Este contrato não exige senha.</p>' : ''}</div>`;
         if (autId === 'nova' && novo.pre?.proc && $('#c-proc', conv)) { $('#c-proc', conv).value = novo.pre.proc; if (novo.pre.porSessao && $('#c-qtd', conv)) $('#c-qtd', conv).value = 1; }
         $('#c-plano', conv)?.addEventListener('change', (e) => { planoId = e.target.value; autId = ''; desenharConv(); });
-        $('#c-aut', conv)?.addEventListener('change', (e) => { autId = e.target.value; desenharConv(); });
+        $('#c-aut', conv)?.addEventListener('change', (e) => { autId = e.target.value; juntos.clear(); desenharConv(); });
+        $$('.c-junto', conv).forEach((cb) => (cb.onchange = () => (cb.checked ? juntos.add(cb.value) : juntos.delete(cb.value))));
       }
       if (pacienteId) carregarConv();
       if (busca) busca.oninput = () => {
@@ -542,12 +558,14 @@ export async function render() {
         const nova = autId === 'nova' ? { senha: $('#c-senha', m).value.trim(), dAut: $('#c-data', m).value || null,
           qtd: Math.max(1, parseInt($('#c-qtd', m).value) || 1), proc: $('#c-proc', m).value, val: $('#c-val', m).value || null } : null;
         if (nova?.senha && !nova.dAut) return toast('Informe a data da autorização junto com a senha.', true);
+        const extras = !a && !nova ? [...juntos].map((id) => pl?.autorizacoes.find((y) => y.id === id)).filter(Boolean) : [];   // agendar junto (db/069)
         let aviso = '';
         const porSessao = !!pl?.senha_por_sessao;   // Amil: 1 senha por atendimento
         if (nova && porSessao) nova.qtd = 1;
         if (pl?.exige && !a && !porSessao) {
           const x = pl.autorizacoes.find((y) => y.id === autId);
-          const saldo = nova ? nova.qtd : x ? Number(x.qtd) - Number(x.usadas) - Number(x.agendadas) : nSessoes;
+          const saldo = Math.min(nova ? nova.qtd : x ? Number(x.qtd) - Number(x.usadas) - Number(x.agendadas) : nSessoes,
+            ...extras.map((e) => Number(e.qtd) - Number(e.usadas) - Number(e.agendadas)));
           if (nSessoes > saldo) { aviso = `A senha tem saldo de ${saldo} sessão(ões): a série foi limitada a ${saldo}. `; nSessoes = saldo; }
           if (nSessoes < 1) return toast('Autorização sem saldo de sessões.', true);
         }
@@ -612,10 +630,14 @@ export async function render() {
         }
         const serieId = serie ? crypto.randomUUID() : null;
         const { error: e } = a ? await sb.from('atendimentos').update({ ...base, inicio: ocorr[0].ini.toISOString(), fim: ocorr[0].fim.toISOString() }).eq('id', a.id)
-          : await sb.from('atendimentos').insert(criar.map((o, i) => ({ ...base, ...(serie && porSessao && pl?.exige ? { autorizacao_id: autDe[i] } : {}),
-            clinica_id: estado.clinica.id, status: 'agendado', serie_id: serieId,
-            inicio: o.ini.toISOString(), fim: o.fim.toISOString() })));
-        if (e) return falha(e); fechar(); toast(serie ? `${criar.length} agendamentos criados.` : 'Agendamento salvo.'); vis.dia = f.dia;
+          : await sb.from('atendimentos').insert(criar.flatMap((o, i) => {
+            const comum = { ...base, clinica_id: estado.clinica.id, status: 'agendado', serie_id: serieId, inicio: o.ini.toISOString(), fim: o.fim.toISOString() };
+            const principal = { ...comum, ...(serie && porSessao && pl?.exige ? { autorizacao_id: autDe[i] } : {}) };
+            if (!extras.length) return [principal];
+            const combo = crypto.randomUUID();   // mesma sessão: 1 atendimento por procedimento, no mesmo horário
+            return [{ ...principal, combo_id: combo }, ...extras.map((x) => ({ ...comum, autorizacao_id: x.id, combo_id: combo }))];
+          }));
+        if (e) return falha(e); fechar(); toast(extras.length ? `Sessão combinada agendada (${extras.length + 1} procedimentos no mesmo horário).` : serie ? `${criar.length} agendamentos criados.` : 'Agendamento salvo.'); vis.dia = f.dia;
         if (!a && novo.pre) toast('Agendado. A faixa continua para marcar outra sessão; use "Voltar à ficha" quando terminar.');
         render();
       });
@@ -646,10 +668,11 @@ function lembretes(cfg, profs, aoFechar) {
     caixa.onclick = (e) => { if (e.target === caixa) { fechar(); aoFechar(); } };
     $$('[data-fechar]', m).forEach((b) => (b.onclick = () => { fechar(); aoFechar(); }));
     async function carregar() {
-      const { data: ats, error } = await sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, profissional_id, lembrete_enviado_em, pacientes(nome, telefone, celular)')
+      const { data: ats0, error } = await sb.from('atendimentos').select('id, inicio, fim, status, servico, sala, profissional_id, combo_id, lembrete_enviado_em, pacientes(nome, telefone, celular)')
         .eq('clinica_id', estado.clinica.id).gte('inicio', new Date(dia + 'T00:00').toISOString()).lt('inicio', new Date(somaDias(dia, 1) + 'T00:00').toISOString())
         .in('status', ['agendado', 'confirmado']).order('inicio');
       if (error) return falha(error);
+      const vistos = new Set(), ats = (ats0 || []).filter((x) => { if (!x.combo_id) return true; if (vistos.has(x.combo_id)) return false; vistos.add(x.combo_id); return true; });
       const pend = (ats || []).filter((x) => !x.lembrete_enviado_em && x.status === 'agendado').length;
       $('#ll', m).className = '';
       $('#ll', m).innerHTML = !ats?.length ? '<div class="vazio">Nenhum atendimento agendado neste dia.</div>' : `
