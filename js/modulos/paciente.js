@@ -447,13 +447,12 @@ export async function render(params) {
           </summary>
           <div class="aut-corpo">
             <div class="aut-cab">${multi ? `<div class="aut-procs">${cs.map((c) => `<div class="aut-proc-col"><div class="aut-proc"><code>${esc(c.k.procedimentos?.codigo)}</code> ${esc(c.k.procedimentos?.descricao || '')}</div>
-                <div class="muted">${c.u} feitas · ${c.ag} agend. · ${c.q ? Math.max(0, c.livres) + ' livres de ' + c.q : '?'}</div>${bolinhas(c.k, c.lg, c.q)}
-                ${gestao ? `<div style="margin-top:6px"><button class="btn pequeno" data-edaut="${c.k.id}">Editar</button></div>` : ''}</div>`).join('')}</div>`
+                <div class="muted">${c.u} feitas · ${c.ag} agend. · ${c.q ? Math.max(0, c.livres) + ' livres de ' + c.q : '?'}</div>${bolinhas(c.k, c.lg, c.q)}</div>`).join('')}</div>`
                 : `<div class="aut-proc"><code>${esc(a.procedimentos?.codigo)}</code> ${esc(a.procedimentos?.descricao || '')}</div>`}
               <div class="aut-acoes">${arq ? `<button class="btn pequeno primario" data-guiaop="${esc(arq)}" title="Abrir/imprimir a guia autorizada pela operadora">📄 Guia da operadora</button>`
                 : gestao && a.senha ? `<button class="btn pequeno" data-anxguia="${a.id}" title="Anexar o PDF da guia emitida pelo portal">📎 Anexar guia</button>` : ''}
               ${gestao && a.numero_guia_operadora && temModeloSadt((planos || []).find((pl) => pl.id === a.paciente_plano_id)?.contratos) ? `<button class="btn pequeno" data-sadt="${a.id}" title="Gerar a guia SP/SADT preenchida no modelo da operadora e salvar no paciente">🖨 Gerar SADT</button>` : ''}
-              ${gestao && !multi ? `<button class="btn pequeno" data-edaut="${a.id}">Editar</button>` : ''}</div></div>
+              ${gestao ? `<button class="btn pequeno" data-edaut="${a.id}">✎ Editar</button> <button class="btn pequeno" data-excaut="${a.id}" title="Excluir esta autorização">Excluir</button>` : ''}</div></div>
             <div class="aut-meta">
               <span>📅 ${a.data_autorizacao ? data(a.data_autorizacao) : 'solicitada'} → <strong>${a.validade ? data(a.validade) : 'sem validade'}</strong></span>
               ${a.numero_guia_operadora ? `<span>guia operadora ${esc(a.numero_guia_operadora)}</span>` : ''}
@@ -494,18 +493,20 @@ export async function render(params) {
           <button class="btn pequeno" id="abrir-todas">Abrir todas</button>
           ${gestao && (planos || []).length ? '<button class="btn primario" id="abrir-aut">+ Registrar autorização</button>' : ''}
         </div>
-        ${gestao && (planos || []).length ? `<div id="nova-aut" class="caixa-form" hidden><form class="form-linha" id="f">
+        ${gestao && (planos || []).length ? `<div id="nova-aut" class="caixa-form" hidden><h3 id="tit-aut" style="margin:0 0 10px">Registrar autorização</h3><form class="form-linha" id="f">
           <label class="larga">Convênio<select name="paciente_plano_id" id="pl">${planos.map((pl) => `<option value="${pl.id}" data-ct="${pl.contrato_id}">${esc(pl.contratos?.nome)}</option>`).join('')}</select></label>
-          <label class="larga2">Procedimento<select name="procedimento_id" id="proc"></select></label>
           <label>Área<select name="area" id="area">${opcoesArea('fisioterapia')}</select></label>
           <label class="larga">Encaminhamento<select name="encaminhamento_id" id="enc"></select></label>
-          <label class="estreita">Qtd.<input type="number" name="qtd" min="1" value="10"></label>
+          <div class="lp-caixa" style="grid-column:1/-1"><strong>Procedimentos desta guia</strong> <span class="muted">(vários códigos na mesma senha/guia)</span>
+            <div id="linhas-proc"></div><button type="button" class="btn pequeno" id="add-proc">+ Adicionar procedimento</button></div>
           <label id="lv-unit" hidden>Valor por sessão (R$)<input type="number" step="0.01" min="0" name="vunit" placeholder="sugerido pela tabela"></label>
           <label id="lv-desc" hidden>Desconto no pacote (R$)<input type="number" step="0.01" min="0" name="vdesc" value="0"></label>
           <label id="lv-nota" hidden style="align-self:end"><input type="checkbox" name="vnota" checked> Paciente quer nota</label>
           <label>Senha<input name="senha" placeholder="vazio = pendente"></label><label>Nº guia operadora<input name="guia"></label>
           <label>Data da autorização<input type="date" name="data" value="${hojeIso()}"></label><label>Validade<input type="date" name="validade"></label>
-          </form><div class="linha-acoes"><button class="btn" id="fechar-aut">Cancelar</button><button class="btn primario" id="s">Registrar</button></div></div>`
+          <label>CID<input name="cid" placeholder="ex.: E66"></label>
+          <label id="lv-status" hidden>Situação<select name="status">${['pendente', 'autorizada', 'negada', 'cancelada'].map((k) => `<option>${k}</option>`).join('')}</select></label>
+          </form><p class="muted" id="dica-val" hidden></p><div class="linha-acoes"><button class="btn" id="fechar-aut">Cancelar</button><button class="btn primario" id="s">Registrar</button></div></div>`
           : gestao ? '<div class="dica">Vincule um convênio na aba Cadastro para registrar autorizações.</div>' : ''}
         <div id="lista-aut"></div>
         <h3 style="margin-top:18px">Agendamentos sem autorização <span class="muted" style="font-weight:400">(particular ou convênio sem senha)</span></h3>
@@ -529,37 +530,113 @@ export async function render(params) {
 
       // Validade padrão da senha pelo contrato (regras.autorizacao.validade_senha_dias)
       const diasValidade = (plId) => (planos || []).find((pl) => pl.id === plId)?.contratos?.regras?.autorizacao?.validade_senha_dias;
+      let editando = null;   // null = registrar; senão { rows } = autorizações (uma por procedimento) da mesma guia
+      let abrirForm = () => {};
       if ($('#pl')) {
         const caixa = $('#nova-aut'), f0 = $('#f');
+        let procHtml = '';
+        const ehPart = () => /particular/i.test($('#pl').selectedOptions[0].textContent);
+        const linhas = () => $$('.lp', f0);
+        const atualizaX = () => { const u = linhas().length === 1; linhas().forEach((l) => (l.querySelector('.lp-x').hidden = u)); $('#add-proc').hidden = ehPart() && !editando; };
+        const novaLinha = (row) => {
+          const d = document.createElement('div'); d.className = 'lp'; d.style.cssText = 'display:flex;gap:8px;align-items:center;margin:6px 0';
+          d.dataset.row = row?.id || ''; d.dataset.qs = row?.qtd_solicitada ?? ''; d.dataset.qa = row?.qtd_autorizada ?? '';
+          d.innerHTML = `<select class="lp-proc" style="flex:1;min-width:0">${procHtml}</select><label class="muted" style="white-space:nowrap">Qtd. <input type="number" min="1" class="lp-qtd" style="width:70px" value="${row?.qtd_autorizada || (linhas().length ? 1 : 10)}"></label><button type="button" class="btn pequeno lp-x" title="Remover este procedimento">✕</button>`;
+          const sel = d.querySelector('.lp-proc');
+          if (row?.procedimento_id) { if (![...sel.options].some((o) => o.value === row.procedimento_id)) sel.insertAdjacentHTML('beforeend', `<option value="${row.procedimento_id}">${esc(row.procedimentos?.codigo)} · ${esc(row.procedimentos?.descricao)}</option>`); sel.value = row.procedimento_id; }
+          sel.onchange = sugereValor;
+          d.querySelector('.lp-x').onclick = () => { d.remove(); atualizaX(); sugereValor(); };
+          $('#linhas-proc').append(d); atualizaX();
+        };
         const carregaProcs = async () => {
           const ct = $('#pl').selectedOptions[0].dataset.ct;
           const { data: itens } = await sb.from('contrato_tabela').select('procedimentos(id, codigo, descricao)').eq('contrato_id', ct).is('vigencia_fim', null);
-          $('#proc').innerHTML = (itens || []).map((i) => `<option value="${i.procedimentos.id}">${esc(i.procedimentos.codigo)} · ${esc(i.procedimentos.descricao)}</option>`).join('');
+          procHtml = (itens || []).map((i) => `<option value="${i.procedimentos.id}">${esc(i.procedimentos.codigo)} · ${esc(i.procedimentos.descricao)}</option>`).join('');
+          linhas().forEach((l) => { const sel = l.querySelector('.lp-proc'), v = sel.value, extra = [...sel.options].find((o) => o.value === v && !procHtml.includes(`value="${v}"`));
+            sel.innerHTML = procHtml + (extra ? extra.outerHTML : ''); if (v) sel.value = v; });
         };
-        const carregaEnc = () => { $('#enc').innerHTML = '<option value="">— sem encaminhamento —</option>' + opcoesEnc($('#area').value); };
-        $('#abrir-aut').onclick = () => (caixa.hidden = !caixa.hidden);
-        $('#fechar-aut').onclick = () => (caixa.hidden = true);
-        const ehPart = () => /particular/i.test($('#pl').selectedOptions[0].textContent);
-        const sugereValor = async () => { const part = ehPart(); ['#lv-unit', '#lv-desc', '#lv-nota'].forEach((k) => ($(k).hidden = !part));
-          if (!part) return; const v = await valorTabela($('#pl').selectedOptions[0].dataset.ct, $('#proc').value); f0.vunit.value = v != null ? v.toFixed(2) : ''; f0.vunit.dataset.tab = v ?? ''; };
-        $('#pl').onchange = async () => { await carregaProcs(); sugereValor(); }; $('#proc').onchange = sugereValor; carregaProcs().then(sugereValor);
-        $('#area').onchange = carregaEnc; carregaEnc();
-        f0.senha.addEventListener('change', () => { const d = diasValidade(f0.paciente_plano_id.value); if (d && f0.senha.value.trim() && !f0.validade.value) f0.validade.value = somaDias(f0.data.value || hojeIso(), d); });
+        const carregaEnc = (sel) => { $('#enc').innerHTML = '<option value="">— sem encaminhamento —</option>' + opcoesEnc($('#area').value, sel); };
+        const sugereValor = async () => { const part = ehPart(); ['#lv-unit', '#lv-desc', '#lv-nota'].forEach((k) => ($(k).hidden = !part || !!editando)); atualizaX();
+          if (!part || editando) return; const proc = $('.lp-proc', f0)?.value; const v = await valorTabela($('#pl').selectedOptions[0].dataset.ct, proc); f0.vunit.value = v != null ? v.toFixed(2) : ''; f0.vunit.dataset.tab = v ?? ''; };
+
+        // Abre o MESMO formulário na própria página: vazio (registrar) ou preenchido com a guia (editar)
+        abrirForm = async (rows) => {
+          editando = rows ? { rows } : null; const a = rows?.[0];
+          $('#tit-aut').textContent = rows ? 'Editar autorização' : 'Registrar autorização';
+          $('#s').textContent = rows ? 'Salvar alterações' : 'Registrar';
+          $('#lv-status').hidden = !rows; $('#linhas-proc').innerHTML = '';
+          f0.reset(); f0.data.value = a ? (a.data_autorizacao || hojeIso()) : hojeIso();
+          if (a) {
+            f0.paciente_plano_id.value = a.paciente_plano_id; f0.paciente_plano_id.disabled = true;
+            f0.senha.value = a.senha || ''; f0.guia.value = a.numero_guia_operadora || ''; f0.validade.value = a.validade || ''; f0.cid.value = a.cid || ''; f0.status.value = a.status;
+            f0.area.value = a.area || f0.area.value;
+          } else f0.paciente_plano_id.disabled = false;
+          await carregaProcs(); carregaEnc(a?.encaminhamento_id);
+          (rows || [null]).forEach((r) => novaLinha(r));
+          const dv = a ? diasValidade(a.paciente_plano_id) : null;
+          $('#dica-val').hidden = !dv; $('#dica-val').textContent = dv ? `Este convênio dá ${dv} dias de validade: ao lançar a senha, a validade é sugerida.` : '';
+          sugereValor(); caixa.hidden = false; caixa.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
+        $('#abrir-aut').onclick = () => { if (!caixa.hidden && !editando) { caixa.hidden = true; return; } abrirForm(null); };
+        $('#fechar-aut').onclick = () => { caixa.hidden = true; editando = null; };
+        $('#add-proc').onclick = () => { novaLinha(null); };
+        $('#pl').onchange = async () => { await carregaProcs(); sugereValor(); };
+        $('#area').onchange = () => carregaEnc();
+        f0.senha.addEventListener('change', () => { const pl = f0.paciente_plano_id.value || editando?.rows[0].paciente_plano_id, d = diasValidade(pl);
+          if (f0.senha.value.trim()) { if (editando && f0.status.value === 'pendente') f0.status.value = 'autorizada'; if (d && !f0.validade.value) f0.validade.value = somaDias(f0.data.value || hojeIso(), d); } });
+
         $('#s').onclick = async () => {
-          const f = Object.fromEntries(new FormData(f0)), senha = f.senha.trim();
-          if (!f.procedimento_id) return toast('Escolha o procedimento.', true);
-          const { data: nova, error: er } = await sb.from('autorizacoes').insert({ clinica_id: cid, paciente_plano_id: f.paciente_plano_id, procedimento_id: f.procedimento_id,
-            area: f.area, qtd_autorizada: Number(f.qtd), qtd_solicitada: Number(f.qtd), senha: senha || null, numero_guia_operadora: f.guia.trim() || null,
-            status: senha || /particular/i.test(f0.paciente_plano_id.selectedOptions[0].textContent) ? 'autorizada' : 'pendente',
-            data_autorizacao: f.data || null, validade: f.validade || null,
-            ...(ehPart() && f.vunit !== '' ? { valor_unitario: Number(f.vunit), valor_tabela: f0.vunit.dataset.tab ? Number(f0.vunit.dataset.tab) : null, desconto: Number(f.vdesc) || 0, quer_nota: !!f.vnota } : {}) }).select('id').single();
-          if (er) return falha(er);
-          if (f.encaminhamento_id) {
-            const { data: rv, error: e2 } = await sb.rpc('vincular_encaminhamento', { p_autorizacao: nova.id, p_encaminhamento: f.encaminhamento_id });
-            if (e2) return falha(e2, 'Autorização salva, mas o vínculo falhou');
-            (rv?.avisos || []).forEach((m) => toast(m, true));
-          }
-          toast(senha ? 'Autorização registrada.' : 'Registrada como senha pendente — lance a senha em Editar quando chegar.'); recarregar();
+          const f = Object.fromEntries(new FormData(f0)), senha = (f.senha || '').trim() || null;
+          const plId = editando ? editando.rows[0].paciente_plano_id : f.paciente_plano_id;
+          const part = editando ? particular(editando.rows[0]) : ehPart();
+          const ls = linhas().map((l) => ({ el: l, row: l.dataset.row, proc: l.querySelector('.lp-proc').value, qtd: Number(l.querySelector('.lp-qtd').value) }));
+          if (ls.some((l) => !l.proc)) return toast('Escolha o procedimento em todas as linhas.', true);
+          if (ls.some((l) => !(l.qtd > 0))) return toast('Informe a quantidade de cada procedimento.', true);
+          if (new Set(ls.map((l) => l.proc)).size < ls.length) return toast('Há procedimento repetido: junte na mesma linha.', true);
+          const status = editando ? f.status : (senha || part ? 'autorizada' : 'pendente');
+          if (status === 'autorizada' && !senha && !part) return toast('Autorizada precisa de senha — ou deixe como pendente.', true);
+          const comum = { numero_guia_operadora: (f.guia || '').trim() || null, senha, data_autorizacao: f.data || null, validade: f.validade || null, cid: normCid(f.cid) || null, area: f.area, status };
+          const enc = f.encaminhamento_id || null;
+          const btn = $('#s'); btn.disabled = true;
+          try {
+            if (!editando) {
+              for (const l of ls) {
+                const { data: nova, error: er } = await sb.from('autorizacoes').insert({ clinica_id: cid, paciente_plano_id: plId, procedimento_id: l.proc, ...comum,
+                  qtd_autorizada: l.qtd, qtd_solicitada: l.qtd,
+                  ...(part && ls.length === 1 && f.vunit !== '' ? { valor_unitario: Number(f.vunit), valor_tabela: f0.vunit.dataset.tab ? Number(f0.vunit.dataset.tab) : null, desconto: Number(f.vdesc) || 0, quer_nota: !!f.vnota } : {}) }).select('id').single();
+                if (er) return falha(er, 'Registrar');
+                if (enc) { const { data: rv, error: e2 } = await sb.rpc('vincular_encaminhamento', { p_autorizacao: nova.id, p_encaminhamento: enc });
+                  if (e2) return falha(e2, 'Autorização salva, mas o vínculo falhou'); (rv?.avisos || []).forEach((m) => toast(m, true)); }
+              }
+              toast(senha ? `Autorização registrada (${ls.length} procedimento${ls.length > 1 ? 's' : ''}).` : 'Registrada como pendente — lance a senha em Editar quando chegar.');
+            } else {
+              const antes = editando.rows, mantidos = new Set(ls.map((l) => l.row).filter(Boolean)), removidos = antes.filter((r) => !mantidos.has(r.id));
+              for (const r of removidos) if (atsDe(r.id).some((k) => k.status === 'atendido')) return toast(`O procedimento ${r.procedimentos?.codigo} já tem atendimento realizado: não dá para remover.`, true);
+              for (const l of ls.filter((x) => x.row)) { const r = antes.find((k) => k.id === l.row);
+                if (r.procedimento_id !== l.proc && atsDe(r.id).some((k) => k.status === 'atendido')) return toast(`O procedimento ${r.procedimentos?.codigo} já tem atendimento realizado: não dá para trocar.`, true); }
+              if (removidos.length && !(await confirmar(`Remover ${removidos.map((r) => r.procedimentos?.codigo).join(', ')} desta guia? Agendamentos ligados continuam na agenda, mas ficam SEM autorização.`, 'Remover'))) return;
+              for (const l of ls) {
+                if (l.row) { const r = antes.find((k) => k.id === l.row), qsIgual = r.qtd_solicitada == null || r.qtd_solicitada === r.qtd_autorizada;
+                  const { error: er } = await sb.from('autorizacoes').update({ procedimento_id: l.proc, ...comum, qtd_autorizada: l.qtd, qtd_solicitada: qsIgual ? l.qtd : r.qtd_solicitada }).eq('id', l.row);
+                  if (er) return falha(er, 'Salvar');
+                  if ((enc || null) !== (r.encaminhamento_id || null)) { const { data: rv, error: e2 } = await sb.rpc('vincular_encaminhamento', { p_autorizacao: l.row, p_encaminhamento: enc });
+                    if (e2) return falha(e2, 'Vincular encaminhamento'); (rv?.avisos || []).forEach((k) => toast(k, true)); }
+                } else {
+                  const { data: nova, error: er } = await sb.from('autorizacoes').insert({ clinica_id: cid, paciente_plano_id: plId, procedimento_id: l.proc, ...comum, qtd_autorizada: l.qtd, qtd_solicitada: l.qtd }).select('id').single();
+                  if (er) return falha(er, 'Adicionar procedimento');
+                  if (enc) { const { data: rv, error: e2 } = await sb.rpc('vincular_encaminhamento', { p_autorizacao: nova.id, p_encaminhamento: enc });
+                    if (e2) return falha(e2, 'Vincular encaminhamento'); (rv?.avisos || []).forEach((k) => toast(k, true)); }
+                }
+              }
+              for (const r of removidos) {
+                const { error: e1 } = await sb.from('atendimentos').update({ autorizacao_id: null }).eq('autorizacao_id', r.id); if (e1) return falha(e1);
+                const { error: er } = await sb.from('autorizacoes').delete().eq('id', r.id);
+                if (er) return falha(er, er.code === '23503' ? 'Este procedimento já tem guia gerada — cancele a guia antes' : 'Remover');
+              }
+              toast('Autorização atualizada.');
+            }
+            recarregar();
+          } finally { btn.disabled = false; }
         };
       }
 
@@ -597,11 +674,13 @@ export async function render(params) {
         }));
         q('[data-edaut]').forEach((b) => (b.onclick = () => editarAut(auts.find((k) => k.id === b.dataset.edaut))));
         q('[data-excaut]').forEach((b) => (b.onclick = async () => {
-          const lig = atsDe(b.dataset.excaut).filter((k) => k.status !== 'cancelado');
-          if (!(await confirmar(`Excluir esta autorização?${lig.length ? ` Os ${lig.length} agendamento(s) ligados continuam na agenda, mas ficam SEM autorização (convênio vai pedir de novo).` : ''}`, 'Excluir'))) return;
-          const { error: e1 } = await sb.from('atendimentos').update({ autorizacao_id: null }).eq('autorizacao_id', b.dataset.excaut);
+          const a0 = auts.find((k) => k.id === b.dataset.excaut), rows = auts.filter((k) => chaveGrupo(k) === chaveGrupo(a0)), ids = rows.map((k) => k.id);
+          if (rows.some((r) => atsDe(r.id).some((k) => k.status === 'atendido'))) return toast('Há atendimento realizado nesta autorização: não dá para excluir.', true);
+          const lig = rows.flatMap((r) => atsDe(r.id)).filter((k) => k.status !== 'cancelado');
+          if (!(await confirmar(`Excluir esta autorização${rows.length > 1 ? ` (${rows.length} procedimentos)` : ''}?${lig.length ? ` Os ${lig.length} agendamento(s) ligados continuam na agenda, mas ficam SEM autorização (convênio vai pedir de novo).` : ''}`, 'Excluir'))) return;
+          const { error: e1 } = await sb.from('atendimentos').update({ autorizacao_id: null }).in('autorizacao_id', ids);
           if (e1) return falha(e1);
-          const { error: er } = await sb.from('autorizacoes').delete().eq('id', b.dataset.excaut);
+          const { error: er } = await sb.from('autorizacoes').delete().in('id', ids);
           if (er) return falha(er, er.code === '23503' ? 'Esta autorização já tem guia gerada — cancele a guia antes' : 'Excluir');
           toast('Autorização excluída.'); recarregar();
         }));
@@ -620,48 +699,10 @@ export async function render(params) {
         }));
       }
 
-      // Editar a autorização inteira (lançar a senha que chegou, corrigir validade ou quantidade)
+      // Editar = abre o mesmo formulário na página, com todos os procedimentos da guia (mesmo nº de guia/senha)
       function editarAut(a) {
-        const dias = diasValidade(a.paciente_plano_id);
-        modal(`<h3>Editar autorização</h3><form class="grade-form" id="fa">
-          <label>Senha<input name="senha" value="${esc(a.senha)}" placeholder="vazio = pendente"></label>
-          <label>Nº guia operadora<input name="guia" value="${esc(a.numero_guia_operadora)}"></label>
-          <label>Data da autorização<input type="date" name="data" value="${esc(a.data_autorizacao || hojeIso())}"></label>
-          <label>Validade<input type="date" name="validade" value="${esc(a.validade)}"></label>
-          <label>Qtd. solicitada<input type="number" min="1" name="qs" value="${esc(a.qtd_solicitada ?? a.qtd_autorizada)}"></label>
-          <label>Qtd. autorizada<input type="number" min="1" name="qa" value="${esc(a.qtd_autorizada)}"></label>
-          <label>CID<input name="cid" value="${esc(a.cid)}"></label>
-          <label>Situação<select name="status">${['pendente', 'autorizada', 'negada', 'cancelada'].map((k) => `<option ${k === a.status ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
-          <label style="grid-column:1/-1">Encaminhamento (pedido médico)<select name="enc"><option value="">— sem encaminhamento —</option>${opcoesEnc(a.area, a.encaminhamento_id)}</select></label>
-          </form>${dias ? `<p class="muted">Este convênio dá ${dias} dias de validade: ao lançar a senha, a validade é sugerida.</p>` : ''}
-          <div class="linha-acoes">${atsDe(a.id).some((k) => k.status === 'atendido') ? '' : '<button class="btn escuro" id="exaut" style="margin-right:auto">Excluir autorização</button>'}
-            <button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="ok">Salvar</button></div>`, (m, fechar) => {
-          const fm = $('#fa', m);
-          $('#exaut', m)?.addEventListener('click', async () => {
-            const lig = atsDe(a.id).filter((k) => k.status !== 'cancelado');
-            if (!(await confirmar(`Excluir esta autorização?${lig.length ? ` Os ${lig.length} agendamento(s) ligados continuam na agenda, mas ficam SEM autorização.` : ''}`, 'Excluir'))) return;
-            const { error: e1 } = await sb.from('atendimentos').update({ autorizacao_id: null }).eq('autorizacao_id', a.id);
-            if (e1) return falha(e1);
-            const { error: er } = await sb.from('autorizacoes').delete().eq('id', a.id);
-            if (er) return falha(er, er.code === '23503' ? 'Esta autorização já tem guia gerada — cancele a guia antes' : 'Excluir');
-            toast('Autorização excluída.'); recarregar();
-          });
-          fm.senha.addEventListener('change', () => { if (fm.senha.value.trim()) { if (fm.status.value === 'pendente') fm.status.value = 'autorizada'; if (dias && !fm.validade.value) fm.validade.value = somaDias(fm.data.value || hojeIso(), dias); } });
-          $('#ok', m).onclick = async () => {
-            const f = Object.fromEntries(new FormData(fm)), senha = f.senha.trim() || null;
-            if (f.status === 'autorizada' && !senha && !particular(a)) return toast('Autorizada precisa de senha — ou deixe como pendente.', true);
-            if (!Number(f.qa)) return toast('Informe a quantidade autorizada.', true);
-            const { error: er } = await sb.from('autorizacoes').update({ senha, numero_guia_operadora: f.guia.trim() || null, data_autorizacao: f.data || null,
-              validade: f.validade || null, qtd_solicitada: f.qs ? Number(f.qs) : null, qtd_autorizada: Number(f.qa), cid: normCid(f.cid) || null, status: f.status }).eq('id', a.id);
-            if (er) return falha(er, 'Salvar');
-            if ((f.enc || null) !== (a.encaminhamento_id || null)) {
-              const { data: rv, error: e2 } = await sb.rpc('vincular_encaminhamento', { p_autorizacao: a.id, p_encaminhamento: f.enc || null });
-              if (e2) return falha(e2, 'Vincular encaminhamento');
-              (rv?.avisos || []).forEach((k) => toast(k, true));
-            }
-            fechar(); toast('Autorização atualizada.'); recarregar();
-          };
-        });
+        const rows = (auts || []).filter((k) => chaveGrupo(k) === chaveGrupo(a));
+        abrirForm(rows.length ? rows : [a]);
       }
     },
 

@@ -232,6 +232,11 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   Tela: cartões Pago / Aguardando / Descontado por glosa e chips de filtro. Só o repasse do próprio profissional (nunca o valor recebido pela clínica); "aguardando" não é erro (operadora pode não ter pago). Meses anteriores ao sistema não aparecem (ponte planilha + PDF da operadora = Lote 3).
   Teste: `rodar.mjs extrato --perfil profissional --fixtures ferramentas/teste-tela/fixtures-extrato.js --script ferramentas/teste-tela/passos-extrato.mjs`.
 
+- **Autorização com vários procedimentos (23/11/2026, `paciente.js`):** 1 guia/senha pode ter N códigos (ex.: consulta + bioimpedância). O banco segue com 1 linha de `autorizacoes` por procedimento;
+  as linhas da mesma guia compartilham nº da guia da operadora/senha (`chaveGrupo`) e já apareciam num bloco só. O formulário "+ Registrar autorização" tem linhas de procedimento (+ Adicionar) e
+  **Editar abre o mesmo formulário na própria página** (não mais modal) com todos os procedimentos da guia: troca código/qtd, adiciona ou remove linha (bloqueia se já houve atendimento realizado), CID e situação.
+  Excluir apaga a guia inteira (todas as linhas). Teste: `rodar.mjs paciente-<uuid>-autorizacoes --perfil gestor --fixtures ferramentas/teste-tela/fixtures-autorizacao-form.js --script ferramentas/teste-tela/passos-autorizacao-form.mjs --escritas`.
+
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).
