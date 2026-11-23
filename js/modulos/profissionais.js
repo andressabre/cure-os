@@ -20,10 +20,18 @@ export async function render() {
       <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(p.cor)}"></span> ${p.duracao_padrao_min} min</td><td>${p.notificacoes_ativas ? 'Ativas' : 'Desligadas'}</td>
       <td>${p.ativo ? '<span class="selo ok">Ativo</span>' : '<span class="selo outra">Inativo</span>'}</td>
       ${comNf ? `<td>${p.ativo ? (comNf.has(p.id) ? '<span class="selo ok">Recebida</span>' : '<span class="selo alerta">Pendente</span>') : ''}</td>` : ''}
-      <td>${podeGerir() ? `<a class="btn pequeno" href="#ficha-${p.id}-dados">Ficha</a> ` : ''}<button class="btn pequeno" data-ed="${p.id}">Editar</button> <button class="btn pequeno" data-cal="${p.id}">Calendário</button></td></tr>`).join('') || '<tr><td colspan="9" class="vazio">Nenhum profissional cadastrado.</td></tr>'}
+      <td>${podeGerir() ? `<a class="btn pequeno" href="#ficha-${p.id}-dados">Ficha</a> ` : ''}${podeGerir() ? '' : `<button class="btn pequeno" data-ed="${p.id}">Editar</button> `}<button class="btn pequeno" data-cal="${p.id}">Calendário</button></td></tr>`).join('') || '<tr><td colspan="9" class="vazio">Nenhum profissional cadastrado.</td></tr>'}
     </tbody></table></div>`;
 
-  const form = (p = { ativo: true, notificacoes_ativas: true }) => modal(`<h3>${p.id ? 'Editar' : 'Novo'} profissional</h3>
+  const form = (p) => abrirFormProfissional(p, render);
+
+  $('#novo')?.addEventListener('click', () => form());
+  $$('[data-ed]', c).forEach((b) => (b.onclick = () => form(ps.find((p) => p.id === b.dataset.ed))));
+  $$('[data-cal]', c).forEach((b) => (b.onclick = () => mostrarCalendario(ps.find((p) => p.id === b.dataset.cal))));
+}
+
+export function abrirFormProfissional(p = { ativo: true, notificacoes_ativas: true }, aoSalvar = () => {}) {
+  modal(`<h3>${p.id ? 'Editar' : 'Novo'} profissional</h3>
     <form class="grade-form" id="f">
       <label>Nome completo<input name="nome" required value="${esc(p.nome)}"></label>
       <label>CPF<input name="cpf" value="${esc(p.cpf)}"></label>
@@ -43,10 +51,6 @@ export async function render() {
     f.uf_conselho = (f.uf_conselho || '').toUpperCase() || null; f.duracao_padrao_min = Number(f.duracao_padrao_min) || 45;
     if (!f.nome) return toast('Informe o nome.', true);
     const q = p.id ? sb.from('profissionais').update(f).eq('id', p.id) : sb.from('profissionais').insert({ ...f, clinica_id: estado.clinica.id });
-    const { error: e } = await q; if (e) return falha(e); fechar(); toast('Salvo.'); render();
+    const { error: e } = await q; if (e) return falha(e); fechar(); toast('Salvo.'); aoSalvar();
   }));
-
-  $('#novo')?.addEventListener('click', () => form());
-  $$('[data-ed]', c).forEach((b) => (b.onclick = () => form(ps.find((p) => p.id === b.dataset.ed))));
-  $$('[data-cal]', c).forEach((b) => (b.onclick = () => mostrarCalendario(ps.find((p) => p.id === b.dataset.cal))));
 }

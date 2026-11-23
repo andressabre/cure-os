@@ -8,5 +8,5 @@
     banco: '000', agencia: '0001', conta: '12345-6', tipo_conta: 'corrente', pix_tipo: 'cpf', pix_chave: '00000000000' }];
   fx.tabelas.profissional_pagamento_solicitacoes = [{ id: 'sol-1', clinica_id: C, profissional_id: 'prof-1', mensagem: 'Troca de conta de teste', situacao: 'aberta',
     resposta: null, criado_em: new Date().toISOString(), resolvido_em: null }];
-  fx.tabelas.notas_profissional = [{ id: 'nf-1', clinica_id: C, profissional_id: 'prof-1', competencia: ym + '-01', numero: '123', valor: 1000, arquivo: `${C}/prof-1/${ym}/nf.pdf`, criado_em: new Date().toISOString() }];
+  fx.tabelas.notas_profissional = [{ id: 'nf-1', clinica_id: C, profissional_id: 'prof-1', competencia: ym + '-01', numero: '123', valor: 1000, chave_acesso: '12345678901234567890123456789012345678901234567890', data_emissao: ym + '-05', criado_em: new Date().toISOString() }];
 })();

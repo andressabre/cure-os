@@ -222,11 +222,12 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   com o nome da migração, em vez de erro. Devolve `true` quando o erro é tabela inexistente (`PGRST205`/`42P01`) e a tela deve parar; nos outros erros devolve `false`. Permite subir a tela
   antes de a gestora aprovar a migração.
 
-- **Ficha do profissional (db/065, 23/11/2026, `ficha-profissional.js`, rotas `#ficha-<id>[-aba]` gestão/financeiro e `#cadastro[-aba]` o próprio profissional):** abas Dados · Pagamento · Notas fiscais.
+- **Ficha do profissional (db/065 + 066, 23/11/2026, `ficha-profissional.js`, rotas `#ficha-<id>[-aba]` gestão/financeiro e `#cadastro[-aba]` o próprio profissional):** abas Dados · Notas fiscais.
+  **Dados** = caixas: Cadastro (botão Editar para gestão/financeiro, abre `abrirFormProfissional` exportado de `profissionais.js`), Dados de pagamento e Pedidos de troca. Na lista Profissionais, Editar só aparece para quem não vê a Ficha (recepção).
   `profissional_pagamento` (1 por profissional): leitura gestor/financeiro e o próprio; **só o gestor grava**; o profissional pede troca em `profissional_pagamento_solicitacoes` (gestor marca atendida/recusada).
-  `notas_profissional` + bucket privado `notas-prof` (`<clinica>/<profissional>/<AAAA-MM>/…`, 5 MB, pdf/jpg/png/xml; `pasta_nota_prof_ok`): gestor/financeiro e o próprio enviam e leem; recepção não vê.
-  NF do mês anterior sem anexo = só selo de alerta (Profissionais ganha a coluna "NF mês anterior" para a gestão; não bloqueia pagamento). Auditoria genérica nas 3 tabelas.
-  Teste: `rodar.mjs ficha-<id>-pagamento --perfil gestor --fixtures ferramentas/teste-tela/fixtures-ficha.js [--script ferramentas/teste-tela/passos-ficha.mjs]`.
+  `notas_profissional` **sem arquivo** (066 removeu o bucket `notas-prof`): guarda competência, nº, valor, data de emissão e `chave_acesso` (única por clínica); botão copia a chave e abre a consulta pública da NFS-e (nfse.gov.br/ConsultaPublica); nota de emissor municipal sem chave de 50 dígitos se consulta no site do município.
+  NF do mês anterior sem registro = só selo de alerta (Profissionais tem a coluna "NF mês anterior" para a gestão; não bloqueia pagamento). Auditoria genérica nas 3 tabelas.
+  Teste: `rodar.mjs ficha-<id>-dados --perfil gestor --fixtures ferramentas/teste-tela/fixtures-ficha.js [--script ferramentas/teste-tela/passos-ficha.mjs --escritas]`.
 
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
