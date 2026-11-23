@@ -538,22 +538,41 @@ export async function render(params) {
         const ehPart = () => /particular/i.test($('#pl').selectedOptions[0].textContent);
         const linhas = () => $$('.lp', f0);
         const atualizaX = () => { const u = linhas().length === 1; linhas().forEach((l) => (l.querySelector('.lp-x').hidden = u)); $('#add-proc').hidden = ehPart() && !editando; };
+        // Procedimento com busca: digite parte do código ou do nome e escolha na lista (datalist nativa, serve para milhares de códigos)
+        let procLista = [];
+        const rotuloProc = (id) => procLista.find((x) => x.id === id)?.label || '';
+        const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').trim();
+        const resolveProc = (d) => {
+          const bu = d.querySelector('.lp-busca'), hid = d.querySelector('.lp-proc'), v = norm(bu.value);
+          let ach = procLista.find((x) => norm(x.label) === v);
+          if (!ach && v) { const porCod = procLista.filter((x) => norm(x.codigo) === v); if (porCod.length === 1) ach = porCod[0]; }
+          if (!ach && v) { const parc = procLista.filter((x) => norm(x.label).includes(v)); if (parc.length === 1) ach = parc[0]; }
+          hid.value = ach?.id || ''; bu.classList.toggle('invalido', !!bu.value && !ach);
+          if (ach && bu.value !== ach.label) bu.value = ach.label;
+        };
         const novaLinha = (row) => {
           const d = document.createElement('div'); d.className = 'lp'; d.style.cssText = 'display:flex;gap:8px;align-items:center;margin:6px 0';
           d.dataset.row = row?.id || ''; d.dataset.qs = row?.qtd_solicitada ?? ''; d.dataset.qa = row?.qtd_autorizada ?? '';
-          d.innerHTML = `<select class="lp-proc" style="flex:1;min-width:0">${procHtml}</select><label class="muted" style="white-space:nowrap">Qtd. <input type="number" min="1" class="lp-qtd" style="width:70px" value="${row?.qtd_autorizada || (linhas().length ? 1 : 10)}"></label><button type="button" class="btn pequeno lp-x" title="Remover este procedimento">✕</button>`;
-          const sel = d.querySelector('.lp-proc');
-          if (row?.procedimento_id) { if (![...sel.options].some((o) => o.value === row.procedimento_id)) sel.insertAdjacentHTML('beforeend', `<option value="${row.procedimento_id}">${esc(row.procedimentos?.codigo)} · ${esc(row.procedimentos?.descricao)}</option>`); sel.value = row.procedimento_id; }
-          sel.onchange = sugereValor;
+          d.innerHTML = `<input class="lp-busca" list="dl-proc" placeholder="Digite o código ou o nome (ex.: bio, consulta, 4130)…" autocomplete="off" style="flex:1;min-width:0"><input type="hidden" class="lp-proc">
+            <label class="muted" style="white-space:nowrap">Qtd. <input type="number" min="1" class="lp-qtd" style="width:70px" value="${row?.qtd_autorizada || (linhas().length ? 1 : 10)}"></label><button type="button" class="btn pequeno lp-x" title="Remover este procedimento">✕</button>`;
+          if (row?.procedimento_id) {
+            if (!procLista.some((x) => x.id === row.procedimento_id)) procLista.push({ id: row.procedimento_id, codigo: row.procedimentos?.codigo || '', label: `${row.procedimentos?.codigo} · ${row.procedimentos?.descricao}` });
+            d.querySelector('.lp-proc').value = row.procedimento_id; d.querySelector('.lp-busca').value = rotuloProc(row.procedimento_id);
+          }
+          const bu = d.querySelector('.lp-busca');
+          bu.addEventListener('change', () => { resolveProc(d); sugereValor(); });
+          bu.addEventListener('input', () => { const v = norm(bu.value); if (procLista.some((x) => norm(x.label) === v)) { resolveProc(d); sugereValor(); } });
           d.querySelector('.lp-x').onclick = () => { d.remove(); atualizaX(); sugereValor(); };
-          $('#linhas-proc').append(d); atualizaX();
+          $('#linhas-proc').append(d); atualizaX(); if (!row) bu.focus();
         };
         const carregaProcs = async () => {
           const ct = $('#pl').selectedOptions[0].dataset.ct;
           const { data: itens } = await sb.from('contrato_tabela').select('procedimentos(id, codigo, descricao)').eq('contrato_id', ct).is('vigencia_fim', null);
-          procHtml = (itens || []).map((i) => `<option value="${i.procedimentos.id}">${esc(i.procedimentos.codigo)} · ${esc(i.procedimentos.descricao)}</option>`).join('');
-          linhas().forEach((l) => { const sel = l.querySelector('.lp-proc'), v = sel.value, extra = [...sel.options].find((o) => o.value === v && !procHtml.includes(`value="${v}"`));
-            sel.innerHTML = procHtml + (extra ? extra.outerHTML : ''); if (v) sel.value = v; });
+          const extras = linhas().map((l) => l.querySelector('.lp-proc').value).filter((id) => id && !(itens || []).some((i) => i.procedimentos.id === id)).map((id) => procLista.find((x) => x.id === id)).filter(Boolean);
+          procLista = [...(itens || []).map((i) => ({ id: i.procedimentos.id, codigo: i.procedimentos.codigo, label: `${i.procedimentos.codigo} · ${i.procedimentos.descricao}` })).sort((x, y) => x.codigo.localeCompare(y.codigo)), ...extras];
+          let dl = $('#dl-proc'); if (!dl) { dl = document.createElement('datalist'); dl.id = 'dl-proc'; f0.append(dl); }
+          dl.innerHTML = procLista.map((x) => `<option value="${esc(x.label)}"></option>`).join('');
+          linhas().forEach((l) => { const id = l.querySelector('.lp-proc').value; if (id) l.querySelector('.lp-busca').value = rotuloProc(id); });
         };
         const carregaEnc = (sel) => { $('#enc').innerHTML = '<option value="">— sem encaminhamento —</option>' + opcoesEnc($('#area').value, sel); };
         const sugereValor = async () => { const part = ehPart(); ['#lv-unit', '#lv-desc', '#lv-nota'].forEach((k) => ($(k).hidden = !part || !!editando)); atualizaX();
@@ -589,8 +608,8 @@ export async function render(params) {
           const f = Object.fromEntries(new FormData(f0)), senha = (f.senha || '').trim() || null;
           const plId = editando ? editando.rows[0].paciente_plano_id : f.paciente_plano_id;
           const part = editando ? particular(editando.rows[0]) : ehPart();
-          const ls = linhas().map((l) => ({ el: l, row: l.dataset.row, proc: l.querySelector('.lp-proc').value, qtd: Number(l.querySelector('.lp-qtd').value) }));
-          if (ls.some((l) => !l.proc)) return toast('Escolha o procedimento em todas as linhas.', true);
+          const ls = linhas().map((l) => { resolveProc(l); return ({ el: l, row: l.dataset.row, proc: l.querySelector('.lp-proc').value, qtd: Number(l.querySelector('.lp-qtd').value) }); });
+          if (ls.some((l) => !l.proc)) return toast('Escolha o procedimento da lista em todas as linhas (digite e selecione).', true);
           if (ls.some((l) => !(l.qtd > 0))) return toast('Informe a quantidade de cada procedimento.', true);
           if (new Set(ls.map((l) => l.proc)).size < ls.length) return toast('Há procedimento repetido: junte na mesma linha.', true);
           // Nutrição não tem senha: o nº da guia da operadora vale como identificador (db/068 copia para a senha)
