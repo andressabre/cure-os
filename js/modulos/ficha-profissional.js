@@ -57,21 +57,10 @@ async function abaDados(el, ctx) {
       ${linha('Situação', p.ativo ? 'Ativo' : 'Inativo')}</div>
      ${proprio ? '<p class="muted" style="margin:12px 0 0">Para corrigir algum dado do cadastro, fale com a gestão.</p>' : ''}`);
 
-  const pagForm = editaPagamento
-    ? `<form class="grade-form" id="f">
-        <label>Titular da conta<input name="titular" value="${esc(d.titular)}"></label>
-        <label>CPF/CNPJ do titular<input name="documento_titular" value="${esc(d.documento_titular)}"></label>
-        <label>Banco<input name="banco" value="${esc(d.banco)}" placeholder="Código ou nome"></label>
-        <label>Agência<input name="agencia" value="${esc(d.agencia)}"></label>
-        <label>Conta (com dígito)<input name="conta" value="${esc(d.conta)}"></label>
-        <label>Tipo de conta<select name="tipo_conta">${opcoes(TIPOS_CONTA, d.tipo_conta)}</select></label>
-        <label>Tipo da chave Pix<select name="pix_tipo">${opcoes(TIPOS_PIX, d.pix_tipo)}</select></label>
-        <label>Chave Pix<input name="pix_chave" value="${esc(d.pix_chave)}"></label></form>
-        <div class="linha-acoes"><button class="btn primario" id="salvar">Salvar dados de pagamento</button></div>`
-    : `<div class="grade-form">${linha('Titular', d.titular)}${linha('CPF/CNPJ do titular', d.documento_titular)}${linha('Banco', d.banco)}
+  const pagForm = `<div class="grade-form">${linha('Titular', d.titular)}${linha('CPF/CNPJ do titular', d.documento_titular)}${linha('Banco', d.banco)}
         ${linha('Agência', d.agencia)}${linha('Conta', d.conta)}${linha('Tipo de conta', TIPOS_CONTA[d.tipo_conta])}
         ${linha('Chave Pix', d.pix_chave ? `${TIPOS_PIX[d.pix_tipo] || 'Pix'}: ${d.pix_chave}` : '')}</div>`;
-  const pagamento = caixa('Dados de pagamento', proprio ? '<button class="btn pequeno" id="troca">Solicitar troca de conta</button>' : '',
+  const pagamento = caixa('Dados de pagamento', proprio ? '<button class="btn pequeno" id="troca">Solicitar troca de conta</button>' : (editaPagamento ? '<button class="btn pequeno" id="ed-pag">Editar</button>' : ''),
     `<p class="muted" style="margin-top:0">${proprio ? 'Conta onde a clínica deposita o seu repasse. Só a gestão altera; use “Solicitar troca de conta”.' : 'Conta onde a clínica paga o repasse deste profissional.'}</p>${pagForm}`);
 
   const pedidos = sol.length ? caixa('Pedidos de troca de conta', '', sol.map((x) => {
@@ -87,12 +76,23 @@ async function abaDados(el, ctx) {
     const { abrirFormProfissional } = await import('./profissionais.js');   // import tardio: profissionais.js também importa este módulo
     abrirFormProfissional(p, recarrega);
   });
-  $('#salvar', el)?.addEventListener('click', async () => {
-    const f = Object.fromEntries(new FormData($('#f', el)));
+  $('#ed-pag', el)?.addEventListener('click', () => modal(`<h3>Editar dados de pagamento</h3>
+    <form class="grade-form" id="f">
+      <label>Titular da conta<input name="titular" value="${esc(d.titular)}"></label>
+      <label>CPF/CNPJ do titular<input name="documento_titular" value="${esc(d.documento_titular)}"></label>
+      <label>Banco<input name="banco" value="${esc(d.banco)}" placeholder="Código ou nome"></label>
+      <label>Agência<input name="agencia" value="${esc(d.agencia)}"></label>
+      <label>Conta (com dígito)<input name="conta" value="${esc(d.conta)}"></label>
+      <label>Tipo de conta<select name="tipo_conta">${opcoes(TIPOS_CONTA, d.tipo_conta)}</select></label>
+      <label>Tipo da chave Pix<select name="pix_tipo">${opcoes(TIPOS_PIX, d.pix_tipo)}</select></label>
+      <label>Chave Pix<input name="pix_chave" value="${esc(d.pix_chave)}"></label></form>
+    <div class="linha-acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn primario" id="salvar">Salvar</button></div>`,
+  (m, fechar) => ($('#salvar', m).onclick = async () => {
+    const f = Object.fromEntries(new FormData($('#f', m)));
     for (const k of Object.keys(f)) f[k] = String(f[k]).trim() || null;
     const { error } = await sb.from('profissional_pagamento').upsert({ ...f, clinica_id: cid, profissional_id: p.id }, { onConflict: 'profissional_id' });
-    if (error) return falha(error, 'Pagamento'); toast('Dados de pagamento salvos.'); recarrega();
-  });
+    if (error) return falha(error, 'Pagamento'); fechar(); toast('Dados de pagamento salvos.'); recarrega();
+  })));
   $('#troca', el)?.addEventListener('click', () => modal(`<h3>Solicitar troca de conta</h3>
     <p class="muted">Descreva a nova conta ou chave Pix. A gestão confere e atualiza o cadastro. Não escreva senhas.</p>
     <label>Mensagem<textarea id="msg" rows="5" maxlength="1000" style="width:100%"></textarea></label>
