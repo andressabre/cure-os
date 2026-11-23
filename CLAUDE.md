@@ -170,7 +170,7 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 
 - **Gerar SADT (db/059, 16/11/2026, `sadt.js`):** botão "🖨 Gerar SADT" na autorização (gestão; só com nº da guia da operadora e contrato com `regras.autorizacao.modelo_sadt`).
   Preenche o modelo em branco da operadora (`modelos/sadt-<modelo>.pdf` + `.layout.json` com a geometria das caixas) com pdf-lib (jsdelivr), no navegador, e guarda o PDF
-  no paciente (slot `guia_arquivo` de todas as linhas da mesma guia). Campos 4–6 (data/senha/validade) ficam em branco como no portal; campo 7 = nº da guia da operadora;
+  no paciente (slot `guia_arquivo` de todas as linhas da mesma guia). Campos 4–6 (data da autorização, senha, validade da senha) saem preenchidos (23/11/2026); campo 7 = nº da guia da operadora;
   execução (36–57) e totais em branco. `autorizacoes.numero_guia_prestador` (campo 2) vem de `numero_guia_prestador_aut` (sequencial por contrato, máximo + 1).
   Registro ANS, código do prestador, CNES e nome do prestador vêm de `contratos.regras.autorizacao` (nunca no código). Novo modelo = PDF + layout + `modelo_sadt` no contrato.
   **Uma guia = um bloco (16/11/2026):** na ficha, autorizações do mesmo plano com o mesmo nº de guia da operadora (ou mesma senha) aparecem numa sanfona só, procedimentos lado a lado (`agrupa`/`catGrupo` em `paciente.js`); um único 🖨 Gerar SADT.
