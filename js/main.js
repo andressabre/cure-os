@@ -8,6 +8,7 @@ import * as profissionais from './modulos/profissionais.js';
 import * as repasse from './modulos/repasse.js';
 import * as acessos from './modulos/acessos.js';
 import * as extrato from './modulos/extrato.js';
+import * as conferencia from './modulos/conferencia.js';
 import * as estatisticas from './modulos/estatisticas.js';
 import * as pacientes from './modulos/pacientes.js';
 import * as agenda from './modulos/agenda.js';
@@ -47,6 +48,7 @@ const ROTAS = [
   { id: 'contrato', nome: 'Contrato', mod: contrato, perfis: ['gestor', 'financeiro'], oculto: true },
   { id: 'profissionais', nome: 'Profissionais', mod: profissionais, perfis: ['gestor', 'financeiro', 'recepcao'] },
   { id: 'ficha', nome: 'Ficha do profissional', mod: ficha, perfis: ['gestor', 'financeiro'], oculto: true },
+  { id: 'conferencia', nome: 'Conferência de pagamento', mod: conferencia, perfis: ['gestor', 'financeiro'] },
   { id: 'repasse', nome: 'Tabela de repasse', mod: repasse, perfis: ['gestor', 'financeiro'] },
   { id: 'cadastro', nome: 'Meu cadastro', mod: ficha, perfis: ['profissional'], precisaProf: true },
   { id: 'extrato', nome: 'Meu extrato', mod: extrato, perfis: ['profissional'] },
