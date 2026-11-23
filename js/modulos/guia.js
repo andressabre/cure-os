@@ -3,18 +3,6 @@
 import { sb, estado, $, $$, esc, brl, data, toast, falha, modal } from '../core.js';
 import { imprimirGuia } from './guia-impressa.js';
 
-// Sessão combinada (db/069): depois de fechar um procedimento, abre o fechamento do próximo da mesma sessão (cada um com a sua guia)
-async function proximoDoCombo(a) {
-  if (!a.combo_id) return null;
-  const { data: irm } = await sb.from('atendimentos').select('id, inicio, fim, status, paciente_id, paciente_plano_id, autorizacao_id, combo_id, pacientes(nome)')
-    .eq('combo_id', a.combo_id).neq('id', a.id).not('status', 'in', '(atendido,cancelado)').order('id').limit(1);
-  return irm?.[0] || null;
-}
-async function seguirCombo(a, aoConcluir) {
-  const prox = await proximoDoCombo(a);
-  if (prox) { toast('Sessão combinada: agora feche o próximo procedimento.'); fecharAtendimento(prox, aoConcluir); }
-}
-
 export async function fecharAtendimento(a, aoConcluir) {
   const { data: op, error } = await sb.rpc('opcoes_guia', { p_atendimento: a.id });
   if (error) return falha(error, 'Opções da guia');
@@ -29,7 +17,7 @@ export async function fecharAtendimento(a, aoConcluir) {
 
   const marcarSemGuia = async (fechar) => {
     const { error: e } = await sb.from('atendimentos').update({ status: 'atendido', atualizado_em: new Date().toISOString() }).eq('id', a.id);
-    if (e) return falha(e); fechar(); toast('Atendimento marcado como Atendido (sem guia).'); aoConcluir?.(); seguirCombo(a, aoConcluir);
+    if (e) return falha(e); fechar(); toast('Atendimento marcado como Atendido (sem guia).'); aoConcluir?.();
   };
 
   modal(`<h3>Fechar atendimento</h3>
@@ -166,7 +154,6 @@ export async function fecharAtendimento(a, aoConcluir) {
       aoConcluir?.();
       // Guia nova = folha nova para o paciente assinar (anexo 06)
       const novas = r.guias.filter((g) => g.nova);
-      if (a.combo_id && await proximoDoCombo(a)) { if (novas.length) toast('Guia criada: imprima pela ficha do paciente (Autorizações e guias) depois do último procedimento.'); return seguirCombo(a, aoConcluir); }
       if (novas.length) modal(`<h3>Guia para assinatura</h3><p>Imprimir a guia nº ${novas.map((g) => esc(g.numero)).join(', ')} para o paciente assinar?</p>
         <p class="muted">Depois de assinada, fotografe ou digitalize e anexe no lote (anexo 06).</p>
         <div class="linha-acoes"><button class="btn" data-fechar>Agora não</button>

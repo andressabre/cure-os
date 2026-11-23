@@ -244,13 +244,6 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 
 - **Nutrição sem senha (db/068, 23/11/2026):** autorização da área `nutricao` com senha vazia e nº da guia da operadora preenchido recebe `senha := nº da guia` (gatilho `antes_nutricao_guia_vale_senha`, roda antes da trava da 050). Outras áreas seguem exigindo senha. O formulário da ficha aceita nutrição só com o nº da guia.
 
-- **Sessão combinada (db/069, 23/11/2026, `agenda.js` + `guia.js`):** vários procedimentos no MESMO horário (consulta + bioimpedância; sessão + eletroterapia). Cada procedimento segue sendo 1 `atendimentos` com a própria autorização
-  (saldo, guia e repasse inalterados); os da mesma sessão compartilham `atendimentos.combo_id`. No modal de agendamento, ao escolher uma autorização, aparece "Agendar junto na mesma sessão" com as outras autorizações da MESMA senha/área e saldo
-  (não vale para `senha_por_sessao`; vale em série: 1 combo por data, saldo limitado ao menor). Grade: só o 1º do combo aparece (`lider`), com os procedimentos no texto; cartão rápido lista "Procedimentos"; lembretes saem 1 por sessão.
-  Gatilho `sincroniza_combo` (AFTER UPDATE, DEFINER) replica horário, profissional, sala, observação, lembrete e status entre os irmãos (menos 'atendido', que cada um fecha com a própria guia).
-  `fecharAtendimento` encadeia: ao fechar um, abre o fechamento do próximo da sessão (e adia o aviso de imprimir a guia). Mês e lista ainda mostram os atendimentos separados.
-  Teste: `rodar.mjs agenda --perfil gestor --fixtures ferramentas/teste-tela/fixtures-combo.js --script ferramentas/teste-tela/passos-combo.mjs --escritas`.
-
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).
