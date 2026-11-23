@@ -248,7 +248,9 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
   (saldo, guia e repasse inalterados); os da mesma sessão compartilham `atendimentos.combo_id`. No modal de agendamento, ao escolher uma autorização, aparece "Agendar junto na mesma sessão" com as outras autorizações da MESMA senha/área e saldo
   (não vale para `senha_por_sessao`; vale em série: 1 combo por data, saldo limitado ao menor). Grade: só o 1º do combo aparece (`lider`), com os procedimentos no texto; cartão rápido lista "Procedimentos"; lembretes saem 1 por sessão.
   Gatilho `sincroniza_combo` (AFTER UPDATE, DEFINER) replica horário, profissional, sala, observação, lembrete e status entre os irmãos (menos 'atendido', que cada um fecha com a própria guia).
-  `fecharAtendimento` encadeia: ao fechar um, abre o fechamento do próximo da sessão (e adia o aviso de imprimir a guia). Mês e lista ainda mostram os atendimentos separados.
+  **Faturamento (23/11/2026):** os procedimentos da sessão ficam com 1 min de diferença no início (extra k = +k min; o gatilho replica por deslocamento) para o XML não trazer dois códigos no mesmo horário.
+  `fecharAtendimento` já abre com TODOS os procedimentos pendentes da sessão marcados e grava numa guia só pela RPC `fechar_combo` (usa `guia_atendimento` com vários itens, marca os irmãos como atendidos e passa cada item ao atendimento do seu procedimento); um único aviso de impressão.
+  Guia impressa não mostra mais valor unitário/total da sessão. Mês e lista ainda mostram os atendimentos separados.
   Teste: `rodar.mjs agenda --perfil gestor --fixtures ferramentas/teste-tela/fixtures-combo.js --script ferramentas/teste-tela/passos-combo.mjs --escritas`.
 
 ## Segurança (db/025)

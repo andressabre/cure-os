@@ -24,6 +24,14 @@ export async function fecharAtendimento(a, aoConcluir) {
   const souProf = estado.perfil === 'profissional';
   let plano = op.planos.find((p) => p.id === a.paciente_plano_id) || op.planos.find((p) => p.principal) || op.planos[0] || null;
   let itens = [{ procedimento_id: '', quantidade: 1 }];
+  // Sessão combinada: os procedimentos pendentes da mesma sessão já vêm marcados e saem numa guia só
+  let comboAberto = false;
+  if (a.combo_id) {
+    const { data: irm } = await sb.from('atendimentos').select('id, autorizacao_id, autorizacoes(procedimento_id)').eq('combo_id', a.combo_id)
+      .not('status', 'in', '(atendido,cancelado)').order('inicio').order('id');
+    const procs = (irm || []).map((x) => x.autorizacoes?.procedimento_id).filter(Boolean);
+    if (procs.length > 1) { itens = [...new Set(procs)].map((procedimento_id) => ({ procedimento_id, quantidade: 1 })); comboAberto = true; }
+  }
   const extra = { solicitante_id: '', cid: '', indicacao_clinica: '', tipo_atendimento: '03' };
   let autAuto = false; // escolhe sozinho a autorização vigente na data do atendimento (uma vez por convênio)
 
@@ -135,7 +143,9 @@ export async function fecharAtendimento(a, aoConcluir) {
       }
     }
 
-    const chamar = (gravar) => sb.rpc('guia_atendimento', {
+    const chamar = (gravar) => sb.rpc(comboAberto && gravar ? 'fechar_combo' : 'guia_atendimento', comboAberto && gravar ? {
+      p_atendimento: a.id, p_plano: plano.id, p_autorizacao: $('#g-aut', corpo)?.value || null,
+      p_itens: itens.filter((it) => it.procedimento_id), p_dados: extra } : {
       p_atendimento: a.id, p_plano: plano.id, p_autorizacao: $('#g-aut', corpo)?.value || null,
       p_itens: itens.filter((it) => it.procedimento_id), p_gravar: gravar, p_dados: extra });
 
