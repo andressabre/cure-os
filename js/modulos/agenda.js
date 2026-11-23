@@ -140,7 +140,7 @@ export async function render() {
   // Sessão combinada (db/069): atendimentos do mesmo combo aparecem como UM bloco; a descrição dos procedimentos vem das autorizações
   const COMBO = {}, PROC = {};
   todos.filter((a) => a.combo_id && a.status !== 'cancelado').forEach((a) => (COMBO[a.combo_id] ||= []).push(a));
-  Object.values(COMBO).forEach((l) => l.sort((x, y) => x.inicio.localeCompare(y.inicio) || x.id.localeCompare(y.id)));
+  Object.values(COMBO).forEach((l) => l.sort((x, y) => x.id.localeCompare(y.id)));
   const idsAutCombo = [...new Set(Object.values(COMBO).filter((l) => l.length > 1).flat().map((a) => a.autorizacao_id).filter(Boolean))];
   if (idsAutCombo.length) { const { data: pa } = await sb.from('autorizacoes').select('id, procedimentos(descricao)').in('id', idsAutCombo);
     (pa || []).forEach((x) => (PROC[x.id] = x.procedimentos?.descricao || '')); }
@@ -276,11 +276,11 @@ export async function render() {
       const ini2 = new Date(`${dia}T${alvo.hh}:00`), fim2 = new Date(ini2.getTime() + dur * 6e4);
       if (+ini2 === +new Date(a.inicio) && prof === a.profissional_id) { $('b', el).innerHTML = tituloOrig; return render(); }
       // Conflitos: expediente/pausa, profissional ocupado e sala ocupada por outro profissional
-      const { data: ocup, error: eo } = await sb.from('atendimentos').select('id, inicio, fim, sala, profissional_id, combo_id').eq('clinica_id', estado.clinica.id)
+      const { data: ocup, error: eo } = await sb.from('atendimentos').select('id, inicio, fim, sala, profissional_id').eq('clinica_id', estado.clinica.id)
         .neq('status', 'cancelado').lt('inicio', fim2.toISOString()).gt('fim', ini2.toISOString())
         .or(`profissional_id.eq.${prof}${a.sala ? `,sala.eq."${a.sala.replace(/"/g, '')}"` : ''}`);
       if (eo) { falha(eo, 'Conflitos'); return cancelar(); }
-      const outros = (ocup || []).filter((x) => x.id !== a.id && !(a.combo_id && x.combo_id === a.combo_id)), mi = alvo.min;
+      const outros = (ocup || []).filter((x) => x.id !== a.id), mi = alvo.min;
       const motivos = [
         ...(pausasDoDia(dia).some((x) => mi < x.ate && mi + dur > x.de) || mi + dur > fimMin ? ['fora do expediente'] : []),
         ...(outros.some((x) => x.profissional_id === prof) ? ['profissional ocupado'] : []),
@@ -580,11 +580,11 @@ export async function render() {
         // Profissional não lê a agenda dos colegas: a ocupação de sala/horário vem de ocupacao_agenda (sem dados do paciente)
         const { data: ocup, error: eo } = souProf
           ? await sb.rpc('ocupacao_agenda', { p_clinica: estado.clinica.id, p_de: ocorr[0].ini.toISOString(), p_ate: ocorr.at(-1).fim.toISOString() })
-          : await sb.from('atendimentos').select('id, inicio, fim, sala, profissional_id, combo_id').eq('clinica_id', estado.clinica.id)
+          : await sb.from('atendimentos').select('id, inicio, fim, sala, profissional_id').eq('clinica_id', estado.clinica.id)
           .neq('status', 'cancelado').lt('inicio', ocorr.at(-1).fim.toISOString()).gt('fim', ocorr[0].ini.toISOString())
           .or(`profissional_id.eq.${f.profissional_id}${sala ? `,sala.eq."${sala.replace(/"/g, '')}"` : ''}`);
         if (eo) return falha(eo, 'Conflitos');
-        const outros = (ocup || []).filter((x) => x.id !== a?.id && !(a?.combo_id && x.combo_id === a.combo_id));
+        const outros = (ocup || []).filter((x) => x.id !== a?.id);
         const nomeP = (pid) => profs.find((x) => x.id === pid)?.nome || 'outro profissional';
         for (const o of ocorr) {
           const mi = o.ini.getHours() * 60 + o.ini.getMinutes();
@@ -635,8 +635,7 @@ export async function render() {
             const principal = { ...comum, ...(serie && porSessao && pl?.exige ? { autorizacao_id: autDe[i] } : {}) };
             if (!extras.length) return [principal];
             const combo = crypto.randomUUID();   // mesma sessão: 1 atendimento por procedimento, no mesmo horário
-            const desloca = (k) => ({ inicio: new Date(o.ini.getTime() + k * 6e4).toISOString(), fim: new Date(o.fim.getTime() + k * 6e4).toISOString() });   // faturamento: 1 min de diferença entre os procedimentos
-            return [{ ...principal, combo_id: combo }, ...extras.map((x, k) => ({ ...comum, ...desloca(k + 1), autorizacao_id: x.id, combo_id: combo }))];
+            return [{ ...principal, combo_id: combo }, ...extras.map((x) => ({ ...comum, autorizacao_id: x.id, combo_id: combo }))];
           }));
         if (e) return falha(e); fechar(); toast(extras.length ? `Sessão combinada agendada (${extras.length + 1} procedimentos no mesmo horário).` : serie ? `${criar.length} agendamentos criados.` : 'Agendamento salvo.'); vis.dia = f.dia;
         if (!a && novo.pre) toast('Agendado. A faixa continua para marcar outra sessão; use "Voltar à ficha" quando terminar.');

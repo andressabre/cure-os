@@ -78,7 +78,7 @@ export async function imprimirGuia(guiaId) {
 <table><tr><th>36 - Data</th><th>37 - Hora Ini.</th><th>38 - Hora Fim</th><th>39 - Tab.</th><th>40 - Código</th><th>41 - Descrição</th>
   <th class="num">42 - Qtde.</th><th>45 - Red./Acr.</th><th class="num">46 - Valor Unit. (R$)</th><th class="num">47 - Valor Total (R$)</th></tr>
   ${itens.map((i) => `<tr><td>${d(i.data)}</td><td>${esc(i.hora_inicio)}</td><td>${esc(i.hora_fim)}</td><td>${esc(i.tabela)}</td><td>${esc(i.codigo)}</td>
-    <td>${esc(i.descricao)}</td><td class="num">${esc(i.quantidade)}</td><td>1,00</td><td class="num"></td><td class="num"></td></tr>`).join('')}
+    <td>${esc(i.descricao)}</td><td class="num">${esc(i.quantidade)}</td><td>1,00</td><td class="num">${n2(i.valor_unitario)}</td><td class="num">${n2(i.valor)}</td></tr>`).join('')}
   ${'<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(Math.max(0, Math.min(linhas - itens.length, 6)))}</table>
 <div class="sec">Identificação do(s) Profissional(is) Executante(s)</div>
 <table><tr><th>50 - CPF</th><th>51 - Nome do Profissional</th><th>52 - Conselho</th><th>53 - Número</th><th>54 - UF</th><th>55 - CBO</th></tr>
@@ -87,7 +87,8 @@ export async function imprimirGuia(guiaId) {
 <table class="ass"><tr>${[0, 1].map(() => '<th style="width:4%">Nº</th><th style="width:12%">Data</th><th>Assinatura</th>').join('')}</tr>
   ${Array.from({ length: Math.ceil(linhas / 2) }, (_, k) => `<tr>${[k, k + Math.ceil(linhas / 2)].map((ix) => ix < linhas
     ? `<td>${ix + 1}</td><td>${d(datas[ix])}</td><td></td>` : '<td></td><td></td><td></td>').join('')}</tr>`).join('')}</table>
-<div class="l" style="margin-top:4px">${campo(58, 'Observação / Justificativa', '', 6)}</div>
+<div class="l" style="margin-top:4px">${campo(58, 'Observação / Justificativa', '', 6)}
+  ${g.mostra_valor ? campo(59, 'Total de Procedimentos (R$)', n2(total)) + campo(65, 'Total Geral (R$)', n2(total)) : ''}</div>
 <div class="rodape"><div>66 - Assinatura do Responsável pela Autorização</div><div>67 - Assinatura do Beneficiário ou Responsável</div>
   <div>68 - Assinatura do Contratado</div></div>
 <p class="aviso">Gerada pelo Cure OS a partir da guia ${esc(g.numero)} · ${esc(g.operadora)}. Depois de assinada, anexe a imagem/PDF na guia (anexo 06 – comprovante de comparecimento).</p>
