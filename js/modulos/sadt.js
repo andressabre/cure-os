@@ -49,7 +49,10 @@ export async function gerarSadt(a, ctx) {
     const C = layout.comb, L = layout.livre;
     livre(L.guia_prestador, num.data);
     comb(C.ans, dig(reg.registro_ans));
-    livre(L.guia_operadora, a.numero_guia_operadora);          // senha (campo 5) fica em branco, como no portal
+    livre(L.guia_operadora, a.numero_guia_operadora);
+    comb(C.dt_aut, ddmmaaaa(a.data_autorizacao));               // campos 4–6: data da autorização, senha e validade da senha
+    comb(C.senha, a.senha || '');
+    comb(C.val_senha, ddmmaaaa(a.validade));
     comb(C.carteira, dig(ctx.plano.carteirinha));
     comb(C.val_cart, ddmmaaaa(ctx.plano.validade));
     livre(L.nome, p.nome);
