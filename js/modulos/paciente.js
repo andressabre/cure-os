@@ -501,6 +501,7 @@ export async function render(params) {
         ${podeAut && (planos || []).length ? `<div id="nova-aut" class="caixa-form" hidden><h3 id="tit-aut" style="margin:0 0 10px">Registrar autorização</h3><form class="form-linha" id="f">
           <label class="larga">Convênio<select name="paciente_plano_id" id="pl">${planos.map((pl) => `<option value="${pl.id}" data-ct="${pl.contrato_id}">${esc(pl.contratos?.nome)}</option>`).join('')}</select></label>
           <label>Área<select name="area" id="area">${opcoesArea('fisioterapia')}</select></label>
+          ${gestao ? `<label>Profissional da guia<select name="profissional_id" id="prof-aut"></select></label>` : ''}
           <label class="larga" ${gestao ? '' : 'hidden'}>Encaminhamento<select name="encaminhamento_id" id="enc"></select></label>
           <div class="lp-caixa" style="grid-column:1/-1"><strong>Procedimentos desta guia</strong> <span class="muted">(vários códigos na mesma senha/guia)</span>
             <div id="linhas-proc"></div><button type="button" class="btn pequeno" id="add-proc">+ Adicionar procedimento</button></div>
@@ -584,6 +585,12 @@ export async function render(params) {
           if (!part || editando) return; const proc = $('.lp-proc', f0)?.value; const v = await valorTabela($('#pl').selectedOptions[0].dataset.ct, proc); f0.vunit.value = v != null ? v.toFixed(2) : ''; f0.vunit.dataset.tab = v ?? ''; };
 
         // Abre o MESMO formulário na própria página: vazio (registrar) ou preenchido com a guia (editar)
+        // Profissional responsável pela guia (além da área): sugere o único da área; na edição mantém o atual
+        const doArea = (ar) => (profsAll || []).filter((x) => areasDaEspecialidade(x.especialidade).includes(ar));
+        const montaProf = (atual) => { const sel = $('#prof-aut'); if (!sel) return;
+          const lista = doArea($('#area').value), usar = atual && (profsAll || []).some((x) => x.id === atual) ? atual : (lista.length === 1 ? lista[0].id : '');
+          sel.innerHTML = `<option value="">${lista.length ? '— escolha —' : '— nenhum na área —'}</option>` + (profsAll || []).map((x) => `<option value="${x.id}" ${x.id === usar ? 'selected' : ''}>${esc(x.nome)}${lista.includes(x) ? '' : ' (outra área)'}</option>`).join(''); };
+        $('#area')?.addEventListener('change', () => montaProf(null));
         abrirForm = async (rows) => {
           editando = rows ? { rows } : null; const a = rows?.[0];
           $('#tit-aut').textContent = rows ? 'Editar autorização' : 'Registrar autorização';
@@ -595,7 +602,7 @@ export async function render(params) {
             f0.senha.value = a.senha || ''; f0.guia.value = a.numero_guia_operadora || ''; f0.validade.value = a.validade || ''; f0.cid.value = a.cid || ''; f0.status.value = a.status;
             f0.area.value = a.area || f0.area.value;
           } else f0.paciente_plano_id.disabled = false;
-          await carregaProcs(); carregaEnc(a?.encaminhamento_id);
+          await carregaProcs(); carregaEnc(a?.encaminhamento_id); montaProf(a?.profissional_id);
           (rows || [null]).forEach((r) => novaLinha(r));
           const dv = a ? diasValidade(a.paciente_plano_id) : null;
           $('#dica-val').hidden = !dv; $('#dica-val').textContent = dv ? `Este convênio dá ${dv} dias de validade: ao lançar a senha, a validade é sugerida.` : '';
@@ -621,7 +628,8 @@ export async function render(params) {
           const idOk = senha || (f.area === 'nutricao' && (f.guia || '').trim());
           const status = editando ? f.status : (idOk || part ? 'autorizada' : 'pendente');
           if (status === 'autorizada' && !idOk && !part) return toast('Autorizada precisa de senha (ou, na nutrição, do nº da guia) — ou deixe como pendente.', true);
-          const comum = { numero_guia_operadora: (f.guia || '').trim() || null, senha, data_autorizacao: f.data || null, validade: f.validade || null, cid: normCid(f.cid) || null, area: f.area, status };
+          if (gestao && f.profissional_id === '' && doArea(f.area).length) return toast('Escolha o profissional responsável por esta guia.', true);
+          const comum = { ...(gestao ? { profissional_id: f.profissional_id || null } : {}), numero_guia_operadora: (f.guia || '').trim() || null, senha, data_autorizacao: f.data || null, validade: f.validade || null, cid: normCid(f.cid) || null, area: f.area, status };
           const enc = gestao ? (f.encaminhamento_id || null) : null;   // vínculo com encaminhamento: gestão/recepção
           const btn = $('#s'); btn.disabled = true;
           try {

@@ -245,7 +245,7 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 - **Nutrição sem senha (db/068, 23/11/2026):** autorização da área `nutricao` com senha vazia e nº da guia da operadora preenchido recebe `senha := nº da guia` (gatilho `antes_nutricao_guia_vale_senha`, roda antes da trava da 050). Outras áreas seguem exigindo senha. O formulário da ficha aceita nutrição só com o nº da guia.
 
 - **Profissional independente edita as próprias autorizações (db/071, 23/11/2026, `paciente.js`):** na aba Autorizações o profissional registra (grava `profissional_id` próprio), edita e exclui só as autorizações em seu nome e na sua área; encaminhamento continua com a gestão/recepção.
-  `autorizacao_travada(aut)` = guia em lote fechado/enviado/protocolado/retornado → profissional não edita (RLS UPDATE) e **ninguém exclui** (gatilho `antes_excluir_autorizacao`, que também barra atendimento realizado e solta agendamentos abertos). `autorizacoes_travadas(ids[])` deixa a tela esconder Editar/Excluir ("enviada ao plano").
+  `autorizacao_travada(aut)` = guia em lote fechado/enviado/protocolado/retornado → profissional não edita (RLS UPDATE) e **ninguém exclui** (gatilho `antes_excluir_autorizacao`, que também barra atendimento realizado e solta agendamentos abertos). Toda guia registrada pela gestão leva o **Profissional da guia** (campo do formulário; sugere o único da área; obrigatório se a área tem profissional) — só assim o profissional a enxerga como sua. `autorizacoes_travadas(ids[])` deixa a tela esconder Editar/Excluir ("enviada ao plano").
 
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
