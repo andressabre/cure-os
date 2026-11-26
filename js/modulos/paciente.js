@@ -3,7 +3,7 @@
 import { sb, estado, $, $$, esc, brl, data, tela, toast, falha, modal, confirmar, podeGerir, areasDaEspecialidade,
   foneFmt, foneDig, foneValido, mascaraFone, soNumeros, descricaoCid, normCid } from '../core.js';
 import { enviarArquivo, abrirArquivo, escolherArquivo, removerArquivo, ACEITA } from './documentos.js';
-import { imprimirGuia } from './guia-impressa.js';
+import { imprimirGuia, imprimirSadtAutorizacao } from './guia-impressa.js';
 import { gerarSadt, temModeloSadt } from './sadt.js';
 import { abaProntuario, abaAvaliacoes } from './prontuario.js';
 import { abaDocumentos } from './emissao.js';
@@ -426,6 +426,12 @@ export async function render(params) {
       const agrupa = (lista) => { const m = new Map(); lista.forEach((a) => { const k = chaveGrupo(a); if (!m.has(k)) m.set(k, []); m.get(k).push(a); }); return [...m.values()]; };
       const ORDCAT = ['abertas', 'pendentes', 'liberadas', 'realizadas', 'historico'];
       const catGrupo = (mem) => mem.map(categoria).sort((k, y) => ORDCAT.indexOf(k) - ORDCAT.indexOf(y))[0];
+      // Toda guia de convênio tem impressão SP/SADT. Gestão + contrato com modelo em PDF + nº da guia = modelo da operadora; demais = guia genérica.
+      const leContrato = ['gestor', 'financeiro'].includes(estado.perfilReal || estado.perfil);   // RLS: só eles leem contrato/operadora/CNPJ
+      const botSadt = (mem) => { const k = mem.find((x) => !particular(x) && !['negada', 'cancelada'].includes(x.status));
+        if (!k || !leContrato) return '';
+        const modelo = gestao && k.numero_guia_operadora && temModeloSadt((planos || []).find((pl) => pl.id === k.paciente_plano_id)?.contratos);
+        return `<button class="btn pequeno" ${modelo ? `data-sadt="${k.id}" title="Gerar a guia SP/SADT no modelo da operadora e salvar no paciente"` : `data-sadtgen="${k.id}" title="Abrir a guia SP/SADT para imprimir ou salvar em PDF"`}>🖨 Imprimir SADT</button>`; };
       const bloco = (mem, aberto) => { const a = mem[0], multi = mem.length > 1;
         const cont = (k) => { const u = usadas[k.id] || 0, lg = atsDe(k.id), q = k.qtd_autorizada || 0;
           const ag = lg.filter((x) => ['agendado', 'confirmado', 'presente'].includes(x.status)).length; return { k, u, lg, q, ag, livres: q - u - ag }; };
@@ -454,7 +460,7 @@ export async function render(params) {
                 : `<div class="aut-proc"><code>${esc(a.procedimentos?.codigo)}</code> ${esc(a.procedimentos?.descricao || '')}</div>`}
               <div class="aut-acoes">${arq ? `<button class="btn pequeno primario" data-guiaop="${esc(arq)}" title="Abrir/imprimir a guia autorizada pela operadora">📄 Guia da operadora</button>`
                 : gestao && a.senha ? `<button class="btn pequeno" data-anxguia="${a.id}" title="Anexar o PDF da guia emitida pelo portal">📎 Anexar guia</button>` : ''}
-              ${gestao && a.numero_guia_operadora && temModeloSadt((planos || []).find((pl) => pl.id === a.paciente_plano_id)?.contratos) ? `<button class="btn pequeno" data-sadt="${a.id}" title="Gerar a guia SP/SADT preenchida no modelo da operadora e salvar no paciente">🖨 Gerar SADT</button>` : ''}
+              ${botSadt(mem)}
               ${gestao || (souProf && mem.every((k) => k.profissional_id === estado.profissionalId) && !mem.some((k) => travadas.has(k.id)))
                 ? `<button class="btn pequeno" data-edaut="${a.id}">✎ Editar</button> <button class="btn pequeno" data-excaut="${a.id}" title="Excluir esta autorização">Excluir</button>`
                 : souProf && mem.some((k) => travadas.has(k.id)) ? '<span class="selo neutro" title="Já enviada ao plano de saúde: não pode ser editada nem excluída">enviada ao plano</span>' : ''}</div></div>
@@ -692,8 +698,10 @@ export async function render(params) {
           if (b.disabled) return; b.disabled = true; b.textContent = 'Gerando…';   // evita arquivo duplicado por clique repetido
           const a = auts.find((k) => k.id === b.dataset.sadt);
           const ok = await gerarSadt(a, { paciente: p, plano: (planos || []).find((pl) => pl.id === a.paciente_plano_id), auts });
-          if (ok) recarregar(); else { b.disabled = false; b.textContent = '🖨 Gerar SADT'; }
+          if (ok) recarregar(); else { b.disabled = false; b.textContent = '🖨 Imprimir SADT'; }
         }));
+        q('[data-sadtgen]').forEach((b) => (b.onclick = () => { const a = auts.find((k) => k.id === b.dataset.sadtgen);
+          imprimirSadtAutorizacao(a, { paciente: p, plano: (planos || []).find((pl) => pl.id === a.paciente_plano_id), auts }); }));
         q('[data-abrir-enc]').forEach((b) => (b.onclick = () => abrirArquivo(b.dataset.abrirEnc)));
         q('[data-anxguia]').forEach((b) => (b.onclick = async () => {
           const f = await escolherArquivo(); if (!f) return;

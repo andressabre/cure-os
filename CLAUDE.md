@@ -247,6 +247,11 @@ Sistema de gestão da Clínica Cure: agenda, pacientes, convênios, faturamento 
 - **Profissional independente edita as próprias autorizações (db/071, 23/11/2026, `paciente.js`):** na aba Autorizações o profissional registra (grava `profissional_id` próprio), edita e exclui só as autorizações em seu nome e na sua área; encaminhamento continua com a gestão/recepção.
   `autorizacao_travada(aut)` = guia em lote fechado/enviado/protocolado/retornado → profissional não edita (RLS UPDATE) e **ninguém exclui** (gatilho `antes_excluir_autorizacao`, que também barra atendimento realizado e solta agendamentos abertos). Toda guia registrada pela gestão leva o **Profissional da guia** (campo do formulário; sugere o único da área; obrigatório se a área tem profissional) — só assim o profissional a enxerga como sua. `autorizacoes_travadas(ids[])` deixa a tela esconder Editar/Excluir ("enviada ao plano").
 
+- **Imprimir SADT em toda guia de convênio (26/11/2026, `paciente.js` + `guia-impressa.js`):** botão único "🖨 Imprimir SADT" no bloco da autorização (menos Particular e negada/cancelada).
+  Gestão + contrato com `modelo_sadt` + nº da guia = PDF da operadora (`sadt.js`); demais casos = guia genérica HTML (`imprimirSadtAutorizacao`), sem valores. Sem logo, um quadro com o nome do plano ocupa o lugar (vale também para a guia do atendimento/lote).
+  A genérica lê contrato/operadora/CNPJ pela RLS, então só gestor e financeiro veem o botão; recepção/profissional dependem de uma função no banco (não criada).
+  **Pendência:** `guia_atendimento*` numera a guia de faturamento por conta própria (máximo + 1) sem reaproveitar `autorizacoes.numero_guia_prestador`: o campo 2 impresso pode divergir do XML.
+
 ## Segurança (db/025)
 - EXECUTE revogado de `anon`/`public` em todas as funções SECURITY DEFINER, exceto `verificar_documento`.
 - `calcular_repasse`, `situacao_guia_lote`, `contrato_exige_senha`: só chamadas internas (sem EXECUTE para `authenticated`).
